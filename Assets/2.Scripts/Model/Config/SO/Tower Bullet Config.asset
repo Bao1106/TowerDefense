@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ac431b83628a4b598ddc432d80c06497, type: 3}
+  m_Name: Tower Bullet Config
+  m_EditorClassIdentifier: 
+  bullets:
+  - type: 0
+    prefab: {fileID: 1833988619539146, guid: 9318a11cd670f3d4f924ff92fe7b0c77, type: 3}
+    cost: 10
+  - type: 1
+    prefab: {fileID: 1162392375372998, guid: 3e5b0980d9cc7a94bbb93263b9c6228d, type: 3}
+    cost: 15
+  - type: 2
+    prefab: {fileID: 1552339098034316, guid: c13874774436a6a4c85449cab6e14fa4, type: 3}
+    cost: 20
+  - type: 3
+    prefab: {fileID: 1552339098034316, guid: c13874774436a6a4c85449cab6e14fa4, type: 3}
+    cost: 30
+  - type: 4
+    prefab: {fileID: 1833988619539146, guid: 9318a11cd670f3d4f924ff92fe7b0c77, type: 3}
+    cost: 10

@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: bdcb2a14cd83ab94a8a1052919fd1604
+timeCreated: 1538683300
+licenseType: Store
+TextScriptImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 129844
+  packageName: Neon Folders
+  packageVersion: 1.0.3
+  assetPath: Assets/Plugins/NeonFolders/Demo/Animations/empty.txt
+  uploadId: 272883

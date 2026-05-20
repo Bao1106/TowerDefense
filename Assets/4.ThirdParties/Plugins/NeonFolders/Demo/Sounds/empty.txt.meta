@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 7ec2a0c17e0eebe4c8d5be1da462fc4e
+timeCreated: 1538683300
+licenseType: Store
+TextScriptImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 129844
+  packageName: Neon Folders
+  packageVersion: 1.0.3
+  assetPath: Assets/Plugins/NeonFolders/Demo/Sounds/empty.txt
+  uploadId: 272883

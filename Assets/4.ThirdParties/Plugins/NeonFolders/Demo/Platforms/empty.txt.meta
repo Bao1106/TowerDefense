@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 401964c5fea510d4689cea3d7928968d
+timeCreated: 1538683300
+licenseType: Store
+TextScriptImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 129844
+  packageName: Neon Folders
+  packageVersion: 1.0.3
+  assetPath: Assets/Plugins/NeonFolders/Demo/Platforms/empty.txt
+  uploadId: 272883

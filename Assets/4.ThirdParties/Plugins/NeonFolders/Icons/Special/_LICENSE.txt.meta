@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: e1e20bffcd0549d4a9fdcc86373abc9e
+timeCreated: 1538690573
+licenseType: Store
+TextScriptImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 129844
+  packageName: Neon Folders
+  packageVersion: 1.0.3
+  assetPath: Assets/Plugins/NeonFolders/Icons/Special/_LICENSE.txt
+  uploadId: 272883
