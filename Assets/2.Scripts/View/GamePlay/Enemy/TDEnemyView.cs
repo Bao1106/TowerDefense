@@ -8,6 +8,7 @@ public class TDEnemyView : MonoBehaviour
     private float m_MoveSpeed, m_EnemyHealth;
     private int m_CurrentPathIndex;
     private string m_EnemyKey;
+    private bool m_HasReachedEnd;
 
     public void Initialize(string key)
     {
@@ -24,7 +25,6 @@ public class TDEnemyView : MonoBehaviour
         
         m_PathsPosition = pathsPos;
         m_CurrentPathIndex = index;
-        transform.TransformDirection(m_PathsPosition[0]);
     }
 
     private void OnDestroy()
@@ -48,18 +48,25 @@ public class TDEnemyView : MonoBehaviour
 
     private void Update()
     {
-        if (m_PathsPosition == null) return;
-        
+        if (m_PathsPosition == null || m_PathsPosition.Count == 0 || m_HasReachedEnd) return;
+
         if (m_CurrentPathIndex < m_PathsPosition.Count)
         {
             Vector3 targetPosition = m_PathsPosition[m_CurrentPathIndex];
             transform.position = Vector3.MoveTowards(transform.position, targetPosition, m_MoveSpeed * Time.deltaTime);
-            //Missing rotate for enemy
+
+            Vector3 dir = targetPosition - transform.position;
+            if (dir.sqrMagnitude > 0.001f)
+                transform.rotation = Quaternion.LookRotation(dir);
 
             if (Vector3.Distance(transform.position, targetPosition) < 0.1f)
-            {
                 m_CurrentPathIndex++;
-            }
+        }
+        else
+        {
+            m_HasReachedEnd = true;
+            TDPlayerLifeControl.api.LoseLife();
+            Destroy(gameObject);
         }
     }
 }

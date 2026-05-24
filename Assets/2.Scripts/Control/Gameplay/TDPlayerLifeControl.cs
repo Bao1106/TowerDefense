@@ -1,0 +1,25 @@
+using System;
+
+public class TDPlayerLifeControl
+{
+    public static TDPlayerLifeControl api;
+
+    public int CurrentLives { get; private set; }
+
+    public Action<int> onLifeChanged;
+    public Action      onGameOver;
+
+    public void Initialize()
+    {
+        CurrentLives = TDConstant.CONFIG_PLAYER_STARTING_LIVES;
+        onLifeChanged?.Invoke(CurrentLives);
+    }
+
+    public void LoseLife()
+    {
+        CurrentLives--;
+        onLifeChanged?.Invoke(CurrentLives);
+        if (CurrentLives <= 0)
+            onGameOver?.Invoke();
+    }
+}

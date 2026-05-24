@@ -51,16 +51,11 @@ public class TDTowerMainControl
 
     public void OnPlaceTower(GameObject currentTower)
     {
-        if (currentTower != null)
-        {
-            if (Camera.main == null) return;
-                
-            var ray = Camera.main.ScreenPointToRay(Input.mousePosition);
-            if (Physics.Raycast(ray, out var hit))
-            {
-                TDPlaceTowerControl.api.CheckPlaceTower(hit.point, currentTower);
-            }
-        }
+        if (currentTower == null) return;
+
+        // Dùng transform.position của ghost tower (đã snap vào grid qua OnSelectTower)
+        // Không raycast lại từ Input.mousePosition để tránh sai khi bấm UI button (Confirm)
+        TDPlaceTowerControl.api.CheckPlaceTower(currentTower.transform.position, currentTower);
     }
     
     public void RotateTowerClockwise(GameObject currentTower, int currentRotationIndex)

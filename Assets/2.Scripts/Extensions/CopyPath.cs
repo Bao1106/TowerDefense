@@ -1,5 +1,4 @@
-﻿using System.Collections;
-using System.Collections.Generic;
+﻿#if UNITY_EDITOR
 using UnityEngine;
 using UnityEditor;
 
@@ -33,3 +32,4 @@ public static class CopyPath
         return Selection.gameObjects.Length == 1;
     }
 }
+#endif

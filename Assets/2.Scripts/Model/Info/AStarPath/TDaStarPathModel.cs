@@ -20,7 +20,7 @@ public class TDaStarPathModel
         Vector2 goalPos = goal.position;
         float dx = Mathf.Abs(startPos.x - goalPos.x);
         float dy = Mathf.Abs(startPos.y - goalPos.y);
-        return (Mathf.Max(dx, dy) + Random.Range(0f, 0.1f)) * (1 + Random.Range(0f, 0.1f));
+        return dx + dy;
     }
     
     public float GetMovementCost(IGridCellDTO from, IGridCellDTO to)

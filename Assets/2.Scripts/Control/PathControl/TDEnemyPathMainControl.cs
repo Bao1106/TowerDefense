@@ -1,6 +1,5 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 using TDEnums;
 using UnityEngine;
@@ -11,93 +10,136 @@ public class TDEnemyPathMainControl
     public static TDEnemyPathMainControl api;
 
     public Action<Vector2Int, Vector2Int> onGetEnemyPos;
+    public Action<List<List<IGridCellDTO>>> onGetAllPaths;
     public Action<List<TDEnemyView>> onGetEnemies;
-    
+    public Action<int> onWaveStart;
+
     public void InitEnemyPath(IGridDTO gridDTO, Vector2Int startPoint, Vector2Int endPoint)
     {
-        Vector3 startWorldPos = TDGridMainModel.api.GetNearestGridPosition(new Vector3(startPoint.x * TDGridMainModel.api.cellSize, 0, startPoint.y * TDGridMainModel.api.cellSize));
-        Vector3 endWorldPos = TDGridMainModel.api.GetNearestGridPosition(new Vector3(endPoint.x * TDGridMainModel.api.cellSize, 0, endPoint.y * TDGridMainModel.api.cellSize));
-        
-        startPoint = new Vector2Int(Mathf.RoundToInt(startWorldPos.x / TDGridMainModel.api.cellSize), Mathf.RoundToInt(startWorldPos.z / TDGridMainModel.api.cellSize));
-        endPoint = new Vector2Int(Mathf.RoundToInt(endWorldPos.x / TDGridMainModel.api.cellSize), Mathf.RoundToInt(endWorldPos.z / TDGridMainModel.api.cellSize));
-        
+        // startPoint/endPoint đã là GRID coords (từ TDConstant) — không cần round-trip qua world
+        // Old code convert (0,7) → world (0,0,14) MÀ QUÊN cộng offset → GetNearestGridPosition clamp sai → START dịch sang giữa grid
+        // Chỉ cần clamp vào bounds để defensive
+        startPoint.x = Mathf.Clamp(startPoint.x, 0, gridDTO.width  - 1);
+        startPoint.y = Mathf.Clamp(startPoint.y, 0, gridDTO.height - 1);
+        endPoint.x   = Mathf.Clamp(endPoint.x,   0, gridDTO.width  - 1);
+        endPoint.y   = Mathf.Clamp(endPoint.y,   0, gridDTO.height - 1);
+
         gridDTO.SetCell(startPoint.x, startPoint.y, new TDGridCellDTO(startPoint.x, startPoint.y, CellType.Start));
-        gridDTO.SetCell(endPoint.x, endPoint.y, new TDGridCellDTO(endPoint.x, endPoint.y, CellType.End));
-        
+        gridDTO.SetCell(endPoint.x,   endPoint.y,   new TDGridCellDTO(endPoint.x,   endPoint.y,   CellType.End));
+
         onGetEnemyPos?.Invoke(startPoint, endPoint);
     }
 
-    public void GenerateEnemyStartPath(IGridDTO gridDTO, Vector2Int startPoint)
+    // Gen random waypoints mỗi path trong Y-zone riêng → BuildDefinedPath vẽ straight segments
+    // → path shape random mỗi game, vẫn guarantee không chaos vì zone-separated
+    public void GenerateAllPaths(IGridDTO gridDTO, Vector2Int startPoint, Vector2Int endPoint)
     {
-        IGridCellDTO start = gridDTO.GetCell(startPoint.x, startPoint.y);
-        
-        Vector2Int firstWaypoint = TDConstant.CONFIG_ENEMY_WAYPOINTS.First();
-        IGridCellDTO waypointCellDto = gridDTO.GetCell(firstWaypoint.x, firstWaypoint.y);
-        TDaStarPathControl.api.SetIndex(Array.IndexOf(TDConstant.CONFIG_ENEMY_WAYPOINTS, firstWaypoint));
-        TDaStarPathControl.api.FindPath(gridDTO, start, waypointCellDto, false);
+        var allPaths = new List<List<IGridCellDTO>>();
+
+        for (int i = 0; i < TDConstant.CONFIG_PATH_Y_ZONES.Length; i++)
+        {
+            Vector2Int zone = TDConstant.CONFIG_PATH_Y_ZONES[i];
+
+            // 1. Sinh random waypoints trong zone Y=[zone.x..zone.y]
+            Vector2Int[] waypoints = TDPathGeneratorControl.api.GenerateRandomWaypoints(
+                startPoint, endPoint, zone.x, zone.y);
+
+            // 2. Vẽ straight segments giữa waypoints (không A*)
+            List<IGridCellDTO> path = TDaStarPathControl.api.BuildDefinedPath(
+                gridDTO, startPoint, endPoint, waypoints);
+
+            if (path != null && path.Count > 0)
+            {
+                allPaths.Add(path);
+                Debug.Log($"<color=cyan>GenerateAllPaths: Path {i} (zone Y={zone.x}..{zone.y}) → {waypoints.Length} waypoints, {path.Count} cells</color>");
+            }
+            else
+            {
+                Debug.Log($"<color=red>GenerateAllPaths: Path {i} failed to build</color>");
+            }
+        }
+
+        Debug.Log($"<color=cyan>GenerateAllPaths: built {allPaths.Count}/{TDConstant.CONFIG_PATH_Y_ZONES.Length} random paths</color>");
+        onGetAllPaths?.Invoke(allPaths);
     }
 
-    public void GenerateEnemyNextPath(IGridDTO gridDTO, IGridCellDTO current, Vector2Int endPoint, int currentWaypointID)
+    // Tính tập hợp các ô hợp lệ để đặt tower:
+    // valid = tất cả cells − pathCells − obstacleCells − start − end
+    // Kết quả là world positions (đã có offset) để view dùng trực tiếp
+    public void ComputeValidTowerCells(IGridDTO gridDTO, List<List<IGridCellDTO>> allPaths,
+        List<Vector2Int> obstacleCells, Vector2Int start, Vector2Int end)
     {
-        int length = TDConstant.CONFIG_ENEMY_WAYPOINTS.Length;
-        if (length - 1 == currentWaypointID)
+        var forbidden = new HashSet<Vector2Int> { start, end };
+        foreach (var path in allPaths)
+            foreach (var cell in path)
+                forbidden.Add(cell.position);
+        foreach (var obs in obstacleCells)
+            forbidden.Add(obs);
+
+        Vector3[,] grid = TDGridMainModel.api.GetGrid();
+        var validPositions = new List<Vector3>();
+        for (int x = 0; x < gridDTO.width; x++)
+            for (int y = 0; y < gridDTO.height; y++)
+                if (!forbidden.Contains(new Vector2Int(x, y)))
+                    validPositions.Add(grid[x, y]);
+
+        Debug.Log($"<color=cyan>ComputeValidTowerCells: {validPositions.Count} valid cells</color>");
+        onValidTowerCellsReady?.Invoke(validPositions);
+    }
+
+    public Action<List<Vector3>> onValidTowerCellsReady;
+
+    // Wave loop chính — mỗi wave pick random 1 corridor từ allPaths → spawn N enemies trên đó
+    // Maze cố định (allPaths gen 1 lần lúc start), variety đến từ wave-level corridor switching
+    public async void StartWaveLoop(TDEnemyView prefab, Transform spawnPos, List<List<IGridCellDTO>> allPaths)
+    {
+        if (allPaths == null || allPaths.Count == 0)
         {
-            IGridCellDTO end = gridDTO.GetCell(endPoint.x, endPoint.y);
-            TDaStarPathControl.api.FindPath(gridDTO, current, end, true);
+            Debug.LogError("<color=red>StartWaveLoop: no paths available</color>");
             return;
         }
-        
-        Vector2Int waypoint = TDConstant.CONFIG_ENEMY_WAYPOINTS[currentWaypointID + 1];
-        IGridCellDTO waypointCellDto = gridDTO.GetCell(waypoint.x, waypoint.y);
-        TDaStarPathControl.api.SetIndex(currentWaypointID + 1);
-        TDaStarPathControl.api.FindPath(gridDTO, current, waypointCellDto, false);
-    }
-    
-    public void VisualizeFinalPath(List<IGridCellDTO> lstCellFinal, TDEnemyPathView enemyPathView)
-    {
-        if (lstCellFinal is { Count: > 0 })
+
+        int maxWaves = TDConstant.CONFIG_MAX_WAVES > 0
+            ? TDConstant.CONFIG_MAX_WAVES
+            : int.MaxValue; // 0 = infinite (fallback)
+
+        for (int waveIdx = 0; waveIdx < maxWaves; waveIdx++)
         {
-            enemyPathView.VisualizePath(lstCellFinal);
+            // Pick random corridor cho wave này
+            int pathIdx = UnityEngine.Random.Range(0, allPaths.Count);
+            List<IGridCellDTO> wavePath = allPaths[pathIdx];
+
+            Debug.Log($"<color=green>Wave {waveIdx + 1}/{maxWaves} starting → corridor {pathIdx} ({wavePath.Count} cells)</color>");
+            onWaveStart?.Invoke(waveIdx);
+
+            await SpawnWave(prefab, spawnPos, wavePath, waveIdx);
+
+            // Wait giữa các waves
+            await Task.Delay(TDConstant.CONFIG_WAVE_INTERVAL_MS);
         }
-        else
-        {
-            Debug.Log("<color=red>Cannot find path</color>");
-        }
+
+        Debug.Log($"<color=green>All {maxWaves} waves completed!</color>");
     }
 
-    public void SpawnEnemies(TDEnemyView prefab, Transform spawnPos)
+    // Spawn N enemies stagger (1 enemy mỗi CONFIG_ENEMY_SPAWN_DELAY_MS) → assign path ngay khi spawn
+    private async Task SpawnWave(TDEnemyView prefab, Transform spawnPos, List<IGridCellDTO> path, int waveIdx)
     {
-        List<TDEnemyView> enemies = new List<TDEnemyView>();
+        List<TDEnemyView> waveEnemies = new List<TDEnemyView>();
+
         for (int i = 0; i < TDConstant.CONFIG_ENEMIES_NUMBER; i++)
         {
             TDEnemyView enemy = Object.Instantiate(prefab, spawnPos.position, Quaternion.identity);
-            string key = $"{i}-{enemy.gameObject.name}";
+            enemy.transform.localScale = Vector3.one * TDConstant.CONFIG_ENEMY_VISUAL_SCALE;
+            string key = $"w{waveIdx}-e{i}-{enemy.gameObject.name}";
             enemy.Initialize(key);
-            enemies.Add(enemy);
-        }
-        
-        onGetEnemies?.Invoke(enemies);
-    }
 
-    public async void SetEnemyPath(List<TDEnemyView> enemies, List<IGridCellDTO> paths)
-    {
-        await Task.Delay(TDConstant.CONFIG_ENEMY_SPAWN_INTERVAL * 1000);
-        foreach (TDEnemyView enemy in enemies)
-        {
-            if (paths is { Count: > 0 })
-            {
-                if (enemy != null)
-                {
-                    enemy.SetPath(paths);
-                }
-                else
-                {
-                    if(Application.isPlaying)
-                        Debug.Log("<color=red>EnemyController component not found on enemy prefab!</color>");
-                }
-            }
+            // Set path ngay khi enemy vừa spawn (không chờ batch xong rồi mới gán)
+            enemy.SetPath(path);
+            waveEnemies.Add(enemy);
 
-            await Task.Delay(TDConstant.CONFIG_ENEMY_SPAWN_INTERVAL * 1000);
+            await Task.Delay(TDConstant.CONFIG_ENEMY_SPAWN_DELAY_MS);
         }
+
+        onGetEnemies?.Invoke(waveEnemies);
     }
 }

@@ -31,10 +31,13 @@ public class TDControl
     private void InitOtherControl()
     {
         //Init main control
-        TDGameplayMainControl.api = new TDGameplayMainControl();
-        TDEnemyPathMainControl.api = new TDEnemyPathMainControl();
-        TDTowerMainControl.api = new TDTowerMainControl();
-        TDaStarPathControl.api = new TDaStarPathControl();
+        TDPlayerLifeControl.api       = new TDPlayerLifeControl();
+        TDGameplayMainControl.api     = new TDGameplayMainControl();
+        TDEnemyPathMainControl.api    = new TDEnemyPathMainControl();
+        TDTowerMainControl.api        = new TDTowerMainControl();
+        TDaStarPathControl.api        = new TDaStarPathControl();
+        TDObstacleControl.api         = new TDObstacleControl();
+        TDPathGeneratorControl.api    = new TDPathGeneratorControl();
         
         //Init sub control
         TDEnemyPathControl.api = new TDEnemyPathControl();

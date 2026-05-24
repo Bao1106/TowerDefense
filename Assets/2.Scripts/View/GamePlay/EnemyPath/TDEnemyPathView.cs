@@ -22,13 +22,23 @@ public class TDEnemyPathView : MonoBehaviour
 
     private void OnGetPaths(List<GameObject> paths)
     {
-        m_InstantiatedTiles = paths;
+        // AddRange thay vì = để accumulate tiles từ nhiều lần CreatePath
+        m_InstantiatedTiles.AddRange(paths);
     }
 
+    // Visualize 1 path duy nhất (clear trước)
     public void VisualizePath(List<IGridCellDTO> path)
     {
         ClearPreviousPath();
         TDEnemyPathControl.api.CreatePath(path, m_PathPrefab);
+    }
+
+    // Visualize tất cả paths cùng lúc (clear 1 lần, tạo tất cả)
+    public void VisualizeAllPaths(List<List<IGridCellDTO>> allPaths)
+    {
+        ClearPreviousPath();
+        foreach (var path in allPaths)
+            TDEnemyPathControl.api.CreatePath(path, m_PathPrefab);
     }
 
     private void ClearPreviousPath()
