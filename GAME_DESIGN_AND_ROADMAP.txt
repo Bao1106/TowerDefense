@@ -1,0 +1,700 @@
+================================================================================
+  TOWER DEFENSE — GAME DESIGN, TECHNICAL REFERENCE & DEVELOPMENT ROADMAP
+  Last updated: 2026-05-24  (session 5 update)
+================================================================================
+
+
+════════════════════════════════════════════════════════════════════════════════
+ 1. SCENE OVERVIEW — DTGamePlay.unity
+════════════════════════════════════════════════════════════════════════════════
+
+File: Assets/3.Scenes/DTGamePlay.unity
+
+── Camera ──────────────────────────────────────────────────────────────────────
+  GameObject         : Main Camera
+  Projection         : Orthographic  ← switched from Perspective (session 4)
+  orthographicSize   : 14
+  Position           : (23.3, 15, 2.02)
+  Rotation Euler     : X=30°, Y=0°, Z=0°   ← pitch 30°
+  Aspect target      : 16:9 (1920×1080)
+
+  Visible area on ground plane (Y=0):
+    Width  X : 2 × 14 × (16/9) ≈ 49.8 world units  → grid 42u fits with buffer
+    Depth  Z : camera sees Z ≈ 4..52 at ground
+    Camera center on ground: Z = 2.02 + 15/tan(30°) ≈ 28
+
+── Ground / Playable area ──────────────────────────────────────────────────────
+  GameMapVisualize
+    Type       : Unity Plane mesh (native 10×10)
+    Scale      : (4.2, 5, 2.4)  → 42u × 24u world
+    Position   : (23.3, 0, 28)
+    Bounds X   : [2.3, 44.3]
+    Bounds Z   : [16, 40]
+
+── Environment objects (ArkEnvironment children) ───────────────────────────────
+  CityGround   : large plaza floor (~100×72u) — NOT touched, base layer
+  Sky          : skybox — NOT touched
+  Buildings    : moved closer via EnvironmentContractor (factor 0.5 from grid center)
+  Cliffs       : moved closer via EnvironmentContractor
+  Mountains    : MtnL/MtnR pushed to Z=130, MtnC to Z=140 (far backdrop)
+  Pillars      : top-edge items (Z 35-65) pushed to Z=50-60 range
+  Vegetation   : tall trees (mesh > 1u) pushed to Z=50-60 (backdrop peek)
+  Pipes/Beams  : contracted by EnvironmentContractor
+
+── Spawn / PathView ────────────────────────────────────────────────────────────
+  PathView/CreatePoint  : pos (2, 0, 29)
+    → Just outside plane left edge (plane X starts at 2.3)
+    → Z=29 aligned with START row world Z = 6×2 + 17 = 29
+
+── Gates (Phase 4.5 — DONE) ────────────────────────────────────────────────────
+  GateStart  : spawned at world (3.3, 0, 29) = grid (0,6) on game start
+  GateEnd    : spawned at world (43.3, 0, 29) = grid (20,6) on game start
+  → Instantiated runtime bởi TDEnemyPathMainView.SpawnGates()
+
+
+════════════════════════════════════════════════════════════════════════════════
+ 2. GRID SYSTEM
+════════════════════════════════════════════════════════════════════════════════
+
+  CONFIG_GRID_CELL_SIZE = 2f                  (TDConstant.cs)
+  Plane bounds         = (42, 24) world units (scale 4.2×2.4 × Unity plane 10)
+  Grid width  = Floor(42 / 2f) = 21           (TDGridMainModel.cs runtime)
+  Grid height = Floor(24 / 2f) = 12           (TDGridMainModel.cs runtime)
+  Total cells = 252
+
+  Offset calculation (TDGridMainModel.cs):
+    offsetX = planePos.x - (mapSize.x/2) + (cellSize/2) = 23.3 - 21 + 1 = 3.3
+    offsetZ = planePos.z - (mapSize.z/2) + (cellSize/2) = 28   - 12 + 1 = 17
+
+  Cell (x,y) → world = (x*2 + 3.3,  0,  y*2 + 17)
+    Cell (0,  0)  → world (3.3,  0, 17)   ← bottom-left
+    Cell (20, 11) → world (43.3, 0, 39)   ← top-right
+    Cell (0,  6)  → world (3.3,  0, 29)   ← START / GateStart
+    Cell (20, 6)  → world (43.3, 0, 29)   ← END   / GateEnd
+
+
+════════════════════════════════════════════════════════════════════════════════
+ 3. CODE ARCHITECTURE
+════════════════════════════════════════════════════════════════════════════════
+
+  Pattern : MVC-like (Model / Control / View)
+  DI      : ServiceLocator + Injector (Assets/2.Scripts/Services/)
+  Events  : C# Action delegates
+
+  ── Model ───────────────────────────────────────────────────────────────────
+  TDConstant.cs              ← all config values (grid, path zones, wave timing, prefabs, lives)
+  TDGridMainModel.cs         ← world-space grid positions, snap, occupancy
+  TDGridDTO.cs               ← logical width×height IGridCellDTO[,] grid
+  TDGridCellDTO.cs           ← cell data: position(x,y), isWalkable, CellType
+  TDaStarPathModel.cs        ← heuristic (Manhattan: dx+dy), GetNeighbors
+  TDFlyweightBulletFactoryModel.cs ← tower cost/config data (Flyweight pattern)
+
+  Platform: Android Mobile (Legacy Input System — activeInputHandler=0)
+             → không dùng com.unity.inputsystem package
+             → dùng Input.GetMouseButtonDown + EventSystem.IsPointerOverGameObject(fingerId)
+
+  ── Control ─────────────────────────────────────────────────────────────────
+  TDGameplayMainControl.cs   ← thin orchestrator
+  TDPlayerLifeControl.cs     ← LoseLife(), onLifeChanged, onGameOver [Phase 4.5]
+  TDEnemyPathMainControl.cs  ← InitEnemyPath, GenerateAllPaths, ComputeValidTowerCells,
+                                StartWaveLoop, SpawnWave, onValidTowerCellsReady,
+                                onWaveStart events [onWaveStart added Phase 4.5]
+  TDaStarPathControl.cs      ← ComputePath (A*), BuildDefinedPath (straight segments)
+  TDPathGeneratorControl.cs  ← random waypoint generator per Y-zone
+  TDObstacleControl.cs       ← place obstacles on non-path cells with spacing
+  TDEnemyPathControl.cs      ← CreatePath() → instantiate Plane tiles on grid
+  TDEnemyControl.cs          ← convert IGridCellDTO path → Vector3 world positions
+  TDTowerMainControl.cs      ← select tower, rotate (E/Q), place
+  TDPlaceTowerControl.cs     ← raycast placement, occupancy check
+  TDTowerFactoryControl.cs   ← factory spawn + init
+  TDTowerBehaviorMainControl.cs  ← attack cooldown timer, onGetLastAttackTime event
+  TDTowerBehaviorSubControl.cs   ← spawn projectile + set velocity
+  TDUserInputControl.cs      ← mobile/desktop input event dispatching
+
+  ── View ────────────────────────────────────────────────────────────────────
+  TDGameplayMainView.cs      ← scene entry, init grid + life system, screen flash
+                               [Phase 4.5: Initialize life, subscribe onLifeChanged/onGameOver]
+  TDEnemyPathMainView.cs     ← path events + obstacle wiring + SpawnGates()
+                               [Phase 4.5: m_GateStartPrefab/EndPrefab, OnWaveStart]
+  TDEnemyPathView.cs         ← Plane tile pool
+  TDEnemyView.cs             ← enemy MonoBehaviour: move along path, reach-end → LoseLife
+                               [Phase 4.5: m_HasReachedEnd guard, Destroy on path end]
+  TDTowerMainView.cs         ← 5 tower holders, input handler, green highlight tiles
+  TDTowerWeaponView.cs       ← placed tower behavior
+  TDTowerHolderView.cs       ← HUD slot (button + cost)
+  TDEnemyDetector.cs         ← trigger → SetTarget
+  TDGateView.cs              ← GateStart MonoBehaviour: PlaySpawnEffect() per wave [Phase 4.5]
+  TDGateEndView.cs           ← GateEnd MonoBehaviour: trigger visual + life text [Phase 4.5]
+
+
+════════════════════════════════════════════════════════════════════════════════
+ 4. GAME INIT FLOW (Current Implementation)
+════════════════════════════════════════════════════════════════════════════════
+
+  ┌──── GAME START (1 lần) ──────────────────────────────────────────────┐
+  │                                                                       │
+  │  TDControl.InitOtherControl()                                         │
+  │    ├─ TDPlayerLifeControl.api = new TDPlayerLifeControl()  [4.5]     │
+  │    └─ ... (tất cả control khác)                                       │
+  │                                                                       │
+  │  TDGameplayMainView.Start()                                           │
+  │    ├─ CheckSceneLoaded()                                              │
+  │    ├─ TDPlayerLifeControl.api.Initialize()  → lives=20, fire event   │
+  │    ├─ Subscribe onLifeChanged → UpdateLifeText + FlashScreen          │
+  │    ├─ Subscribe onGameOver   → Log (TODO Phase 8: GameOver panel)     │
+  │    └─ InitGameplay()                                                  │
+  │         ├─ TDGridMainModel.Initialize(mapSize, planePos)              │
+  │         ├─ CreateGrid()  → grid 21×12                                 │
+  │         └─ TDGameplayMainControl.InitEnemyPath(view, gridDTO)        │
+  │                                                                       │
+  │  TDEnemyPathMainView.ImplementPath()  [async]                         │
+  │    ├─ await createGridCompletion                                      │
+  │    ├─ RegistryEvents()  (incl. onWaveStart → PlaySpawnEffect)         │
+  │    ├─ InitEnemyPath(start=0,6  end=20,6)                             │
+  │    ├─ SpawnGates()  [Phase 4.5]                                       │
+  │    │    ├─ Instantiate GateStart at grid[0,6] = (3.3, 0, 29)         │
+  │    │    └─ Instantiate GateEnd   at grid[20,6] = (43.3, 0, 29)       │
+  │    ├─ GenerateAllPaths(start, end) → 3 corridors                      │
+  │    └─ PlaceObstacles → ComputeValidTowerCells                         │
+  │                                                                       │
+  └───────────────────────────────────────────────────────────────────────┘
+
+  ┌──── PER WAVE (10 waves total) ───────────────────────────────────────┐
+  │                                                                       │
+  │  StartWaveLoop:                                                       │
+  │    for waveIdx in 0..CONFIG_MAX_WAVES (10):                           │
+  │      pathIdx = Random.Range(0, allPaths.Count)                        │
+  │      onWaveStart?.Invoke(waveIdx)  → GateView.PlaySpawnEffect() [4.5]│
+  │      await SpawnWave(prefab, spawn, wavePath, waveIdx)                │
+  │      await Task.Delay(CONFIG_WAVE_INTERVAL_MS = 10000)               │
+  │                                                                       │
+  │  SpawnWave:                                                           │
+  │    for i in 0..CONFIG_ENEMIES_NUMBER (5):                             │
+  │      enemy = Instantiate(prefab, spawnPos)                            │
+  │      enemy.transform.localScale = Vector3.one * 1.5f                 │
+  │      enemy.Initialize(key) → Subscribe onGetEnemyPathPos             │
+  │      enemy.SetPath(wavePath)                                          │
+  │      await Task.Delay(CONFIG_ENEMY_SPAWN_DELAY_MS = 2000)            │
+  │                                                                       │
+  └───────────────────────────────────────────────────────────────────────┘
+
+  ── Key design decisions (locked) ─────────────────────────────────────
+    - Maze cố định: 3 corridors gen 1 lần lúc start
+    - Enemy là WAYPOINT FOLLOWER (không A* runtime)
+    - Khi enemy hết path → LoseLife() + Destroy (TDEnemyView)
+    - GateEnd trigger chỉ play visual effect (safety net, không LoseLife lại)
+
+
+════════════════════════════════════════════════════════════════════════════════
+ 5. PATH GENERATION ALGORITHM (TDPathGeneratorControl)
+════════════════════════════════════════════════════════════════════════════════
+
+  Input  : start (Vector2Int), end (Vector2Int), yMin, yMax (zone bounds)
+  Output : Vector2Int[] waypoints, mỗi cặp liên tiếp cùng X HOẶC cùng Y
+
+  Algorithm:
+    1. Enter zone: enterY = Random(yMin, yMax)
+       if enterY != start.y → add (start.x, enterY)
+
+    2. Zigzag loop:
+       while (curX + minStep <= end.x - 1):
+         stepX = Random(minStep, maxStep); nextX = min(curX+stepX, end.x-1)
+         add (nextX, curY); curX = nextX
+         nextY = PickDifferentY(curY, yMin, yMax, minDelta)
+         add (curX, nextY); curY = nextY
+
+    3. Exit: if curX != end.x → add (end.x, curY)
+
+  Tunables:
+    CONFIG_PATH_MIN_STEP_X         = 2
+    CONFIG_PATH_MAX_STEP_X         = 5
+    CONFIG_PATH_MIN_VERTICAL_DELTA = 2
+
+
+════════════════════════════════════════════════════════════════════════════════
+ 6. BUILD DEFINED PATH ALGORITHM (TDaStarPathControl.BuildDefinedPath)
+════════════════════════════════════════════════════════════════════════════════
+
+  Input  : gridDTO, start, end, waypoints[]
+  Output : List<IGridCellDTO>
+
+  BuildDefinedPath:
+    path=[]; cur=start
+    foreach wp in waypoints: AppendStraightSegment(path, cur, wp); cur=wp
+    AppendStraightSegment(path, cur, end)
+    path.Add(cell(end))
+
+  AppendStraightSegment: move X first, then Y (Manhattan walk, no A*)
+
+
+════════════════════════════════════════════════════════════════════════════════
+ 7. TOWER SELECTION, HIGHLIGHT & PLACEMENT FLOW (Phase 4 — DONE)
+════════════════════════════════════════════════════════════════════════════════
+
+  ── 2-Phase Arknights Placement ────────────────────────────────────────────
+  Phase 1: Drag ngón tay đến cell → ghost snap, m_IsDirectionSelected=false
+  Phase 2: Swipe từ center vượt m_DirectionThreshold(1.0m) → direction chọn
+  Đổi sang cell mới → reset về Phase 1
+
+  MOBILE: TouchPhase.Ended + m_IsDirectionSelected=true → place
+  DESKTOP: LMB place (không cần direction), E/Q rotate, RMB cancel
+
+  Ghost scale: (1.0, 1.0, 1.0) — cellSize=2u
+
+  ComputeRotationIndex(delta):
+    |dx|≥|dz|: dx>0→90°(right), dx<0→270°(left)
+    |dz|>|dx|: dz>0→0°(fwd), dz<0→180°(back)
+
+  Bugs fixed A–I (xem Known Issues)
+
+
+════════════════════════════════════════════════════════════════════════════════
+ 8. GATE START / GATE END (Phase 4.5 — DONE)
+════════════════════════════════════════════════════════════════════════════════
+
+  ── Prefab Structure ─────────────────────────────────────────────────────────
+
+  GateStart.prefab  (Assets/1.Assets/Resources/Prefabs/GateStart.prefab)
+    ├─ ArchProp          SM_Gen_Env_Cliff_Arch_01 (scale 0.35) — Synty stone arch
+    ├─ GroundGlow        Quad horizontal, URP/Unlit transparent, cyan (#00BFFF 35%)
+    │                    size 3.5×3.5, y=0.05
+    ├─ DirectionArrow    Quad, green (#1AFF66 55%), size 1.8×0.7, rotated → +X direction
+    ├─ SpawnParticles    ParticleSystem — cyan burst 25p, plays per wave via PlaySpawnEffect()
+    └─ [TDGateView]      m_SpawnEffect → SpawnParticles ✓
+
+  GateEnd.prefab  (Assets/1.Assets/Resources/Prefabs/GateEnd.prefab)
+    ├─ HQProp            TowerRoofedKeep (scale 1.0) — Kenney fortified keep
+    ├─ GroundGlow        Quad horizontal, URP/Unlit transparent, red/orange (#FF4500 40%)
+    │                    size 3.5×3.5, y=0.05
+    ├─ [BoxCollider]     isTrigger=true, size (2,4,2), center (0,2,0)
+    │                    → OnTriggerEnter: plays HitParticles (visual only, no LoseLife)
+    ├─ HitParticles      ParticleSystem — red burst 20p khi enemy vật lý chạm trigger
+    ├─ CoreGlow          ParticleSystem — orange loop 8/s, continuous ambient glow
+    ├─ LifeText          TextMeshPro 3D, pos (0,4,−0.3), scale 0.45, "♥ 20" red bold
+    └─ [TDGateEndView]   m_HitEffect → HitParticles, m_LifeText → LifeText ✓
+
+  ── Life System Flow ─────────────────────────────────────────────────────────
+
+  TDPlayerLifeControl (singleton):
+    Initialize(): lives = CONFIG_PLAYER_STARTING_LIVES (20), fire onLifeChanged(20)
+    LoseLife():   lives--, fire onLifeChanged(lives), if lives<=0 fire onGameOver()
+
+  TDEnemyView.Update() — primary trigger:
+    if m_CurrentPathIndex >= m_PathsPosition.Count && !m_HasReachedEnd:
+      m_HasReachedEnd = true
+      TDPlayerLifeControl.api.LoseLife()
+      Destroy(gameObject)
+
+  Guard: m_PathsPosition.Count == 0 → skip (path chưa assign, tránh false trigger)
+
+  TDGameplayMainView subscribes:
+    onLifeChanged(lives) → m_LifeText.text = "♥ {lives}" + FlashScreen()
+    onGameOver()         → Debug.Log("GAME OVER")  [TODO Phase 8: GameOver panel]
+
+  TDGateEndView.OnTriggerEnter(col):
+    → TDEnemyView found → m_HitEffect.Play()  (visual only, no double LoseLife)
+
+  ── FlashScreen Coroutine ─────────────────────────────────────────────────
+    m_ScreenFlash.color = (1,0,0,0.35) → lerp alpha 0.35→0 over 0.35s → Color.clear
+    m_ScreenFlash: full-screen Image trong Canvas (alpha=0 default)
+
+  ── Inspector assignments (DONE) ─────────────────────────────────────────
+    ✅ TDEnemyPathMainView → m_GateStartPrefab = GateStart.prefab
+    ✅ TDEnemyPathMainView → m_GateEndPrefab   = GateEnd.prefab
+    ✅ TDGameplayMainView  → m_LifeText        = TextMeshProUGUI (HUD life display)
+    ✅ TDGameplayMainView  → m_ScreenFlash     = Image (full-screen overlay, alpha=0)
+
+
+════════════════════════════════════════════════════════════════════════════════
+ 9. OBSTACLE PLACEMENT (TDObstacleControl)
+════════════════════════════════════════════════════════════════════════════════
+
+  Tunables:
+    CONFIG_OBSTACLE_COUNT            = 12
+    CONFIG_OBSTACLE_EXCLUSION_RADIUS = 2
+    CONFIG_OBSTACLE_SPACING          = 3
+  Inspector: TDEnemyPathMainView.m_ObstaclePrefabs[5]
+
+
+════════════════════════════════════════════════════════════════════════════════
+ 10. WAVE SYSTEM
+════════════════════════════════════════════════════════════════════════════════
+
+  CONFIG_MAX_WAVES             = 10
+  CONFIG_ENEMIES_NUMBER        = 5
+  CONFIG_ENEMY_SPAWN_DELAY_MS  = 2000
+  CONFIG_WAVE_INTERVAL_MS      = 10000
+  Total: ~3.5 phút
+
+
+════════════════════════════════════════════════════════════════════════════════
+ 11. ENEMY MOVEMENT (TDEnemyView)
+════════════════════════════════════════════════════════════════════════════════
+
+  State fields:
+    m_PathsPosition   : List<Vector3>  (world positions của path)
+    m_CurrentPathIndex: int
+    m_HasReachedEnd   : bool           ← guard tránh LoseLife nhiều lần [4.5]
+    m_EnemyHealth     : CONFIG_ENEMY_HEALTH = 300f
+    m_MoveSpeed       : CONFIG_ENEMY_MOVE_SPEED = 3f
+
+  Update():
+    guard: m_PathsPosition==null || Count==0 || m_HasReachedEnd → return
+    if m_CurrentPathIndex < Count:
+      MoveTowards(target, speed*dt)
+      LookRotation(dir)
+      if dist < 0.1f: m_CurrentPathIndex++
+    else:
+      m_HasReachedEnd = true
+      TDPlayerLifeControl.api.LoseLife()
+      Destroy(gameObject)
+
+
+════════════════════════════════════════════════════════════════════════════════
+ 12. CONSTANTS REFERENCE (TDConstant.cs hiện tại)
+════════════════════════════════════════════════════════════════════════════════
+
+  ── Grid ─────────────────────────────────────────────────────────────────
+  CONFIG_GRID_CELL_SIZE          = 2f
+  CONFIG_PATH_MIN_GRID_Y         = 0
+  CONFIG_ENEMY_START_POINT       = (0,  6)  → world (3.3,  0, 29)
+  CONFIG_ENEMY_END_POINT         = (20, 6)  → world (43.3, 0, 29)
+
+  ── Path generation ──────────────────────────────────────────────────────
+  CONFIG_PATH_Y_ZONES            = [(7,11), (0,5), (2,9)]
+  CONFIG_PATH_MIN_STEP_X         = 2
+  CONFIG_PATH_MAX_STEP_X         = 5
+  CONFIG_PATH_MIN_VERTICAL_DELTA = 2
+
+  ── Obstacles ────────────────────────────────────────────────────────────
+  CONFIG_OBSTACLE_COUNT             = 12
+  CONFIG_OBSTACLE_EXCLUSION_RADIUS  = 2
+  CONFIG_OBSTACLE_SPACING           = 3
+
+  ── Wave system ──────────────────────────────────────────────────────────
+  CONFIG_MAX_WAVES                  = 10
+  CONFIG_ENEMIES_NUMBER             = 5
+  CONFIG_ENEMY_SPAWN_DELAY_MS       = 2000
+  CONFIG_WAVE_INTERVAL_MS           = 10000
+
+  ── Enemy ────────────────────────────────────────────────────────────────
+  CONFIG_ENEMY_MOVE_SPEED        = 3f
+  CONFIG_ENEMY_HEALTH            = 300f
+  CONFIG_ENEMY_VISUAL_SCALE      = 1.5f   (applied at spawn in SpawnWave)
+
+  ── Player / Gates [Phase 4.5] ───────────────────────────────────────────
+  CONFIG_PLAYER_STARTING_LIVES   = 20
+  PREFAB_GATE_START              = "GateStart"
+  PREFAB_GATE_END                = "GateEnd"
+
+  ── Tower ─────────────────────────────────────────────────────────────────
+  CONFIG_TOWER_ROTATIONS         = {0°, 90°, 180°, 270°}
+  CONFIG_TOWER (ScriptableObject) = "Tower Bullet Config"
+
+  ── Misc ─────────────────────────────────────────────────────────────────
+  CONFIG_PATH_OFFSET_Y           = 0.1f
+  CONFIG_NUM_PATHS               = 3   (legacy, use CONFIG_PATH_Y_ZONES.Length)
+
+  ── Win/Lose (Phase 8 — TODO) ────────────────────────────────────────────
+  CONFIG_PLAYER_STARTING_GOLD    = 100  ← TODO
+  CONFIG_ENEMY_REWARD_GOLD       = 10   ← TODO
+
+
+════════════════════════════════════════════════════════════════════════════════
+ 13. SCENE TUNING HISTORY
+════════════════════════════════════════════════════════════════════════════════
+
+  ── Camera evolution ───────────────────────────────────────────────────────
+  Session 2-3 (Perspective):
+    Start: pos (23.3,28,-0.79) pitch 60° FOV 55°
+    Step1: pos (23.3,22,3) FOV 42° → Step2: pitch 50° → Step3: 48° → Step4: FOV 48°
+
+  Session 4 (Orthographic):
+    Step5: Perspective→Ortho, orthoSize=20, pitch 48→35°
+    Step6: orthoSize=11 (too small) → grid resize 20×12→14×8, cellSize 2→3
+    Step7: orthoSize=12, pitch 35→30°, Y 22→15, Z→2
+    Step8: 14×8 cellSize=3 → 21×12 cellSize=2, orthoSize 12→14
+    FINAL: pos (23.3,15,2.02), pitch=30°, orthoSize=14
+
+  ── Plane evolution ────────────────────────────────────────────────────────
+  Session 2-3: (5,5,5)→(3,5,3)→(4,5,3)→(4,5,2.4) pos (23.3,0,28) → 40×24
+  Session 4: (6,5,3.6)→(4.2,5,2.4) → world 42×24, grid 21×12  (FINAL)
+
+  ── Tower ghost scale history ──────────────────────────────────────────────
+  0.5f → 1.5f (session 4) → 1.0f (session 4 final)
+
+  ── Enemy scale ────────────────────────────────────────────────────────────
+  CONFIG_ENEMY_VISUAL_SCALE: 2.5f (cellSize=3) → 1.5f (cellSize=2 final)
+
+
+════════════════════════════════════════════════════════════════════════════════
+ 14. DEVELOPMENT ROADMAP — UPDATED STATUS
+════════════════════════════════════════════════════════════════════════════════
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 0 — Cleanup & Grid Sync                          [✅ DONE]        ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+    ✅ CONFIG_GRID_CELL_SIZE = 2f synced
+    ✅ Grid runtime dynamic từ Plane bounds
+    ✅ Camera + plane + grid offset match
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 1 — Bug Fixes + A* Refactor                      [✅ DONE]        ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+    ✅ 5 bugs fixed (A* heuristic, ComputePath, spawn delay, LookRotation,
+       InitEnemyPath round-trip)
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 2 — Multi-path Foundation                        [✅ DONE]        ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+    ✅ Random waypoints per Y-zone, 3 corridors
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 3 — Wave System + Random Path per Wave           [✅ DONE]        ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+    ✅ 10 waves, random corridor per wave, 5 enemies stagger 2s
+    ⚠️  Chưa CancellationToken (async void leak nếu scene unload)
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 3.5 — Obstacles Decoration                       [✅ DONE]        ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+    ✅ 12 obstacles, tránh path/exclusion zone, 5 prefab variants
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 3.6 — Camera + Environment Tuning (Perspective)  [✅ DONE]        ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+    ✅ EnvironmentContractor, TopEdgePusher, PullBack
+    ✅ Mountains Z=130-140
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 3.7 — Camera Orthographic + Grid Resize          [✅ DONE]        ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+    ✅ Perspective → Orthographic, orthoSize=14
+    ✅ Pitch 48°→30°, Y=22→15
+    ✅ Grid 20×12 cellSize=2 → 21×12 cellSize=2, plane 42×24
+    ✅ Enemy scale 1.5, tower ghost scale 1.0, path tile scale dynamic 0.2
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 4 — Tower Highlight + Arknights Placement        [✅ DONE]        ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+    ✅ 2-phase placement: drag→cell (P1), swipe→direction (P2), lift=place
+    ✅ m_IsDirectionSelected + m_LastSnappedPos
+    ✅ Mobile: lift chỉ place khi direction đã chọn
+    ✅ Desktop: E/Q/LMB/RMB
+    ✅ ValidTowerCells highlight, obstacles SetOccupiedCell
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 4.5 — Gate Start / Gate End                      [✅ DONE]        ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+    ✅ TDPlayerLifeControl: LoseLife(), onLifeChanged, onGameOver
+    ✅ TDControl: TDPlayerLifeControl.api registered
+    ✅ TDEnemyView: m_HasReachedEnd guard + LoseLife + Destroy khi hết path
+    ✅ TDEnemyPathMainControl: onWaveStart event (fires trước mỗi wave)
+    ✅ TDEnemyPathMainView: SpawnGates() + OnWaveStart → PlaySpawnEffect
+    ✅ TDGameplayMainView: Initialize life, onLifeChanged→text+flash, onGameOver
+    ✅ TDGateView.cs: PlaySpawnEffect() trên GateStart
+    ✅ TDGateEndView.cs: trigger visual + life text update
+
+    ✅ GateStart.prefab:
+       SM_Gen_Env_Cliff_Arch_01 (scale 0.35) + cyan glow + green arrow
+       + SpawnParticles (cyan burst) + TDGateView (m_SpawnEffect assigned)
+
+    ✅ GateEnd.prefab:
+       TowerRoofedKeep (scale 1.0) + red/orange glow
+       + BoxCollider trigger (2,4,2) + HitParticles + CoreGlow (loop)
+       + LifeText TextMeshPro "♥ 20" + TDGateEndView (fields assigned)
+
+    ✅  Inspector assignments hoàn tất:
+       → TDEnemyPathMainView: m_GateStartPrefab, m_GateEndPrefab
+       → TDGameplayMainView:  m_LifeText (TextMeshProUGUI), m_ScreenFlash (Image)
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 5 — Multi-start / Màn 2                          [TODO]            ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+    CONFIG_START_POINTS = Vector2Int[] nhiều điểm spawn
+    Mỗi start → 1-2 paths riêng đến END
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 6 — Tower UI Integration                         [⚠️ PARTIAL]      ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+    ✅ 5 TowerHolder HUD slots, Arknights 2-phase placement
+    ✅ TDPlaceTowerControl, TDTowerWeaponView, TDEnemyDetector
+
+    ⚠️  CRITICAL BUG: TDTowerWeaponView.Init(key) không bao giờ được gọi
+        onCreateTowerSuccess fire nhưng không ai subscribe → m_TowerKey=null
+        → TDTowerWeaponView.Update() skip → tower KHÔNG attack
+
+    TODO:
+      → Fix Init(key) call chain (critical)
+      → CanvasScaler 1125×750 → 1920×1080
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 7 — Ammo + Combat                                [TODO]            ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+    AmmoCannonball/Arrow/Boulder/Bullet/Beam → pool + MoveTowards + TakeDamage
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 8 — Win/Lose Conditions + HUD                    [TODO]            ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+    Life=0 → GameOver screen (onGameOver stub đã có)
+    Waves complete + all enemies dead → Victory screen
+
+    HUD additions:
+      → "Wave 3/10" indicator
+      → Gold counter
+      → Next wave countdown timer
+      → Game speed toggle 1x/2x
+      → CONFIG_PLAYER_STARTING_GOLD=100, CONFIG_ENEMY_REWARD_GOLD=10
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 9 — Polish & Performance                         [TODO]            ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+    Polish: particles, VFX, sounds, camera shake on life lost
+    Performance: object pooling (tiles, ammo, enemies), GPU instancing
+
+
+════════════════════════════════════════════════════════════════════════════════
+ 15. KNOWN ISSUES & TECH DEBT
+════════════════════════════════════════════════════════════════════════════════
+
+  ⚠️  CRITICAL — Tower không attack
+      TDTowerWeaponView.Init(key) không được gọi → m_TowerKey=null → skip Update
+      Fix: subscriber gọi tower.Init(key) khi onCreateTowerSuccess
+
+  ⚠️  async void StartWaveLoop không có CancellationToken
+      Scene unload mid-game → exception. Fix: CTS + Cancel trong OnDestroy
+
+  ⚠️  TDGridMainModel singleton không reset khi reload scene
+      Fix: static Reset() hoặc new instance mỗi scene load
+
+  ✅  Phase 4.5 Inspector đã assign (session 5)
+      TDEnemyPathMainView: m_GateStartPrefab, m_GateEndPrefab
+      TDGameplayMainView:  m_LifeText, m_ScreenFlash
+
+  ✅  Obstacle cells gọi SetOccupiedCell  FIXED session 3
+  ✅  Mobile Rotate + Cancel button       FIXED session 3 (Arknights-style)
+  ✅  Build APK lỗi CS0246 MenuItem       FIXED session 3 (#if UNITY_EDITOR)
+  ✅  Ghost không place khi chưa chọn hướng FIXED session 4 (m_IsDirectionSelected)
+  ✅  Enemy false-trigger reach-end       FIXED session 5 (Count==0 guard)
+
+
+════════════════════════════════════════════════════════════════════════════════
+ 16. DEPENDENCY GRAPH (session 5)
+════════════════════════════════════════════════════════════════════════════════
+
+  ✅ Phase 0   (Grid sync)              ── DONE
+  ✅ Phase 1   (Bug fixes A*)           ── DONE
+  ✅ Phase 2   (Multi-path)             ── DONE
+  ✅ Phase 3   (Wave system)            ── DONE
+  ✅ Phase 3.5 (Obstacles)              ── DONE
+  ✅ Phase 3.6 (Camera/Env Perspective) ── DONE
+  ✅ Phase 3.7 (Camera Ortho + resize)  ── DONE
+  ✅ Phase 4   (Tower Arknights place)  ── DONE
+  ✅ Phase 4.5 (Gate Start/End + Life)  ── DONE (Inspector assign còn lại)
+     │
+  ⬜ Phase 5   (Multi-start)            ── cần Phase 3+4 DONE ✓
+     │
+  ⚠️  Phase 6  (Tower UI)               ── PARTIAL
+     │   Còn: fix Init() call chain (critical — tower không attack)
+     │
+  ⬜ Phase 7   (Ammo + Combat)          ── cần Phase 6 fix trước
+     │
+  ⬜ Phase 8   (Win/Lose + HUD)         ── cần Phase 4.5 ✓ + Phase 7
+     │   (onGameOver stub đã có, chỉ cần GameOver panel UI)
+     │
+  ⬜ Phase 9   (Polish + Perf)          ── final pass
+
+
+════════════════════════════════════════════════════════════════════════════════
+ 17. KEY FILES QUICK REFERENCE
+════════════════════════════════════════════════════════════════════════════════
+
+  ── Model / Config ──────────────────────────────────────────────────────────
+  Assets/2.Scripts/Model/Config/Constant/TDConstant.cs
+  Assets/2.Scripts/Model/Info/Grid/TDGridMainModel.cs
+  Assets/2.Scripts/Model/Info/Grid/TDGridDTO.cs
+  Assets/2.Scripts/Model/Info/AStarPath/TDaStarPathModel.cs
+
+  ── Control / Path ──────────────────────────────────────────────────────────
+  Assets/2.Scripts/Control/PathControl/TDaStarPathControl.cs
+  Assets/2.Scripts/Control/PathControl/TDPathGeneratorControl.cs
+  Assets/2.Scripts/Control/PathControl/TDObstacleControl.cs
+  Assets/2.Scripts/Control/PathControl/TDEnemyPathMainControl.cs
+  Assets/2.Scripts/Control/PathControl/TDEnemyPathControl.cs
+
+  ── Control / Gameplay ──────────────────────────────────────────────────────
+  Assets/2.Scripts/Control/Gameplay/TDGameplayMainControl.cs
+  Assets/2.Scripts/Control/Gameplay/TDPlayerLifeControl.cs      ← [Phase 4.5 NEW]
+  Assets/2.Scripts/Control/Enemy/TDEnemyControl.cs
+  Assets/2.Scripts/Control/Tower/TDTowerMainControl.cs
+  Assets/2.Scripts/Control/Tower/PlaceTower/TDPlaceTowerControl.cs
+  Assets/2.Scripts/Control/Tower/TowerFactory/TDTowerBehaviorMainControl.cs
+  Assets/2.Scripts/Control/Tower/TowerBehavior/TDTowerBehaviorSubControl.cs
+  Assets/2.Scripts/Control/TDControl.cs
+  Assets/2.Scripts/Control/InputHandler/TDUserInputControl.cs
+
+  ── View ────────────────────────────────────────────────────────────────────
+  Assets/2.Scripts/View/GamePlay/TDGameplayMainView.cs           ← [4.5: life+flash]
+  Assets/2.Scripts/View/GamePlay/EnemyPath/TDEnemyPathMainView.cs ← [4.5: SpawnGates]
+  Assets/2.Scripts/View/GamePlay/EnemyPath/TDEnemyPathView.cs
+  Assets/2.Scripts/View/GamePlay/Enemy/TDEnemyView.cs            ← [4.5: reach-end]
+  Assets/2.Scripts/View/GamePlay/Tower/TDTowerMainView.cs
+  Assets/2.Scripts/View/GamePlay/Tower/TDTowerWeaponView.cs
+  Assets/2.Scripts/View/GamePlay/Tower/TDTowerHolderView.cs
+  Assets/2.Scripts/View/GamePlay/Tower/TDEnemyDetector.cs
+  Assets/2.Scripts/View/GamePlay/Gate/TDGateView.cs              ← [Phase 4.5 NEW]
+  Assets/2.Scripts/View/GamePlay/Gate/TDGateEndView.cs           ← [Phase 4.5 NEW]
+
+  ── Scene ───────────────────────────────────────────────────────────────────
+  Assets/3.Scenes/DTGamePlay.unity
+    Camera: Ortho size=14, pos (23.3,15,2.02), pitch 30°
+    GameMapVisualize: scale (4.2,5,2.4), pos (23.3,0,28) → grid 21×12
+    PathView/CreatePoint: (2,0,29)
+
+  ── Prefabs ─────────────────────────────────────────────────────────────────
+  Assets/1.Assets/Resources/Prefabs/GateStart.prefab    ← [Phase 4.5 NEW]
+  Assets/1.Assets/Resources/Prefabs/GateEnd.prefab      ← [Phase 4.5 NEW]
+  Assets/1.Assets/Resources/Prefabs/FattyCannonG02.prefab
+  Assets/1.Assets/Resources/Prefabs/FattyCatapultG02.prefab
+  Assets/1.Assets/Resources/Prefabs/FattyMissileG02.prefab
+  Assets/1.Assets/Resources/Prefabs/FattyMissileG03.prefab
+  Assets/1.Assets/Resources/Prefabs/FattyMortarG02.prefab
+  Assets/1.Assets/Resources/Prefabs/Slime.prefab
+  Assets/1.Assets/Resources/Prefabs/Plane.prefab
+  Assets/1.Assets/Resources/Prefabs/KenneyTower/TowerRoofedKeep.prefab  ← used by GateEnd
+
+  ── Key Asset Paths ──────────────────────────────────────────────────────────
+  Arch prop : Assets/1.Assets/UnityStore Resources/Synty/PolygonGeneric/
+              Prefabs/Environment/SM_Gen_Env_Cliff_Arch_01.prefab   ← used by GateStart
+  HQ prop   : Assets/1.Assets/Resources/Prefabs/KenneyTower/TowerRoofedKeep.prefab
+
+
+================================================================================
+  END OF DOCUMENT
+================================================================================
