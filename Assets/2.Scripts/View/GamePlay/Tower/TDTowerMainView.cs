@@ -9,9 +9,9 @@ public class TDTowerMainView : MonoBehaviour
 {
     [SerializeField] private GameObject m_TowerHighlightPrefab;
 
-    // Ngưỡng (mét) từ cell center → ngón tay phải kéo xa hơn thì mới cập nhật hướng
-    // Tránh hướng "giật" khi ngón tay gần center
-    [SerializeField] private float m_DirectionThreshold = 1.0f;
+    // Tỉ lệ cellSize để trigger direction selection (35% = 0.7f khi cellSize=2)
+    // Phải < 50% để trigger TRƯỚC khi GetNearestGridPosition snap sang ô mới
+    private const float k_DirectionThresholdRatio = 0.35f;
 
     private readonly List<TDTowerHolderView> m_TowerHolders = new List<TDTowerHolderView>();
     private TDTowerHolderView m_TdTowerHolderView0, m_TdTowerHolderView1, m_TdTowerHolderView2, m_TdTowerHolderView3, m_TdTowerHolderView4;
@@ -51,34 +51,23 @@ public class TDTowerMainView : MonoBehaviour
         HandlePlacementInput();
     }
 
-    // Raycast → snap ghost đến ô grid gần nhất + auto-rotate theo hướng kéo (Arknights-style)
-    // Phase 1: ngón tay di chuyển đến cell → ghost snap theo
-    // Phase 2: ngón tay kéo ra khỏi center cell vượt threshold → chọn hướng, set m_IsDirectionSelected
-    // Đổi sang cell mới → reset m_IsDirectionSelected (buộc chọn hướng lại)
+    // MOBILE: Phase 1 ghost follows → Phase 2 ghost đóng băng khi ngón tay vào zone lân cận
+    //         threshold = 35% cellSize (< snap boundary 50%) → trigger trước khi snap đổi ô
+    //         direction giữ nguyên đến khi place hoặc cancel
+    // DESKTOP: ghost luôn follow chuột; direction cập nhật visual theo chuột (không đóng băng)
+    //          E/Q rotate thủ công; LMB đặt bất kỳ lúc nào
     private void UpdateGhostTransform()
     {
         Vector3 fingerWorld = GetFingerWorldPosition();
         if (fingerWorld == Vector3.negativeInfinity) return;
 
-        Vector3 snappedPos = TDGridMainModel.api.GetNearestGridPosition(fingerWorld);
-
-        // Phase 1 reset: di chuyển sang cell mới → hủy direction đã chọn
-        if (snappedPos != m_LastSnappedPos)
+#if UNITY_ANDROID && !UNITY_EDITOR
+        // ── Mobile ──────────────────────────────────────────────────────────
+        if (m_IsDirectionSelected)
         {
-            m_LastSnappedPos = snappedPos;
-            m_IsDirectionSelected = false;
-        }
-
-        m_CurrentTower.transform.position = snappedPos;
-
-        // Phase 2: ngón tay đủ xa center → xác định hướng
-        Vector3 delta = fingerWorld - snappedPos;
-        delta.y = 0f;
-
-        if (delta.sqrMagnitude > m_DirectionThreshold * m_DirectionThreshold)
-        {
-            m_IsDirectionSelected = true;
-
+            // Ghost đóng băng — chỉ cập nhật direction từ frozen cell center
+            Vector3 delta = fingerWorld - m_LastSnappedPos;
+            delta.y = 0f;
             int rotIndex = ComputeRotationIndex(delta);
             if (rotIndex != m_CurrentRotationIndex)
             {
@@ -86,7 +75,47 @@ public class TDTowerMainView : MonoBehaviour
                 m_CurrentTower.transform.rotation =
                     Quaternion.Euler(0f, TDConstant.CONFIG_TOWER_ROTATIONS[m_CurrentRotationIndex], 0f);
             }
+            return;
         }
+
+        Vector3 snappedPosMobile = TDGridMainModel.api.GetNearestGridPosition(fingerWorld);
+        if (snappedPosMobile != m_LastSnappedPos)
+            m_LastSnappedPos = snappedPosMobile;
+        m_CurrentTower.transform.position = m_LastSnappedPos;
+
+        Vector3 dirMobile = fingerWorld - m_LastSnappedPos;
+        dirMobile.y = 0f;
+        float thresholdMobile = TDGridMainModel.api.cellSize * k_DirectionThresholdRatio;
+        if (dirMobile.sqrMagnitude > thresholdMobile * thresholdMobile)
+        {
+            m_IsDirectionSelected = true;
+            m_CurrentRotationIndex = ComputeRotationIndex(dirMobile);
+            m_CurrentTower.transform.rotation =
+                Quaternion.Euler(0f, TDConstant.CONFIG_TOWER_ROTATIONS[m_CurrentRotationIndex], 0f);
+        }
+#else
+        // ── Desktop / Editor ─────────────────────────────────────────────────
+        // Ghost luôn follow chuột — không đóng băng
+        Vector3 snappedPos = TDGridMainModel.api.GetNearestGridPosition(fingerWorld);
+        if (snappedPos != m_LastSnappedPos)
+            m_LastSnappedPos = snappedPos;
+        m_CurrentTower.transform.position = m_LastSnappedPos;
+
+        // Direction luôn follow chuột — không cần threshold
+        // Chuột ở phía nào của cell center thì tower quay về phía đó
+        Vector3 dir = fingerWorld - m_LastSnappedPos;
+        dir.y = 0f;
+        if (dir.sqrMagnitude > 0.01f)
+        {
+            int rotIndex = ComputeRotationIndex(dir);
+            if (rotIndex != m_CurrentRotationIndex)
+            {
+                m_CurrentRotationIndex = rotIndex;
+                m_CurrentTower.transform.rotation =
+                    Quaternion.Euler(0f, TDConstant.CONFIG_TOWER_ROTATIONS[m_CurrentRotationIndex], 0f);
+            }
+        }
+#endif
     }
 
     private void HandlePlacementInput()

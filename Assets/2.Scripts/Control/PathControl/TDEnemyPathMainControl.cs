@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using TDEnums;
 using UnityEngine;
+using UnityEngine.Pool;
 using Object = UnityEngine.Object;
 
 public class TDEnemyPathMainControl
@@ -13,6 +15,45 @@ public class TDEnemyPathMainControl
     public Action<List<List<IGridCellDTO>>> onGetAllPaths;
     public Action<List<TDEnemyView>> onGetEnemies;
     public Action<int> onWaveStart;
+
+    // ── Enemy Object Pool ────────────────────────────────────────────────────
+    private IObjectPool<TDEnemyView> m_EnemyPool;
+
+    public void InitEnemyPool(TDEnemyView prefab, Transform parent, int defaultCapacity = 20, int maxSize = 50)
+    {
+        m_EnemyPool = new ObjectPool<TDEnemyView>(
+            createFunc:      () =>
+            {
+                var e = Object.Instantiate(prefab, parent);
+                e.transform.localScale = Vector3.one * TDConstant.CONFIG_ENEMY_VISUAL_SCALE;
+                return e;
+            },
+            actionOnGet:     e => e.gameObject.SetActive(true),
+            actionOnRelease: e => e.gameObject.SetActive(false),
+            actionOnDestroy: e => Object.Destroy(e.gameObject),
+            collectionCheck: true,
+            defaultCapacity: defaultCapacity,
+            maxSize:         maxSize
+        );
+    }
+
+    public void ReturnEnemy(TDEnemyView enemy)
+    {
+        m_EnemyPool?.Release(enemy);
+    }
+
+    // Delay nhận biết pause: dùng Time.deltaTime (= 0 khi timeScale=0) thay vì wall-clock
+    private static async Task PauseAwareDelay(int ms, CancellationToken ct)
+    {
+        float target = ms / 1000f;
+        float elapsed = 0f;
+        while (elapsed < target)
+        {
+            ct.ThrowIfCancellationRequested();
+            await Task.Yield();
+            elapsed += Time.deltaTime;
+        }
+    }
 
     public void InitEnemyPath(IGridDTO gridDTO, Vector2Int startPoint, Vector2Int endPoint)
     {
@@ -91,7 +132,9 @@ public class TDEnemyPathMainControl
 
     // Wave loop chính — mỗi wave pick random 1 corridor từ allPaths → spawn N enemies trên đó
     // Maze cố định (allPaths gen 1 lần lúc start), variety đến từ wave-level corridor switching
-    public async void StartWaveLoop(TDEnemyView prefab, Transform spawnPos, List<List<IGridCellDTO>> allPaths)
+    // CancellationToken để dừng sạch khi scene unload (tránh exception trên destroyed objects)
+    public async void StartWaveLoop(Transform spawnPos,
+        List<List<IGridCellDTO>> allPaths, CancellationToken ct)
     {
         if (allPaths == null || allPaths.Count == 0)
         {
@@ -101,43 +144,53 @@ public class TDEnemyPathMainControl
 
         int maxWaves = TDConstant.CONFIG_MAX_WAVES > 0
             ? TDConstant.CONFIG_MAX_WAVES
-            : int.MaxValue; // 0 = infinite (fallback)
+            : int.MaxValue;
 
-        for (int waveIdx = 0; waveIdx < maxWaves; waveIdx++)
+        try
         {
-            // Pick random corridor cho wave này
-            int pathIdx = UnityEngine.Random.Range(0, allPaths.Count);
-            List<IGridCellDTO> wavePath = allPaths[pathIdx];
+            for (int waveIdx = 0; waveIdx < maxWaves; waveIdx++)
+            {
+                ct.ThrowIfCancellationRequested();
 
-            Debug.Log($"<color=green>Wave {waveIdx + 1}/{maxWaves} starting → corridor {pathIdx} ({wavePath.Count} cells)</color>");
-            onWaveStart?.Invoke(waveIdx);
+                int pathIdx = UnityEngine.Random.Range(0, allPaths.Count);
+                List<IGridCellDTO> wavePath = allPaths[pathIdx];
 
-            await SpawnWave(prefab, spawnPos, wavePath, waveIdx);
+                Debug.Log($"<color=green>Wave {waveIdx + 1}/{maxWaves} starting → corridor {pathIdx} ({wavePath.Count} cells)</color>");
+                onWaveStart?.Invoke(waveIdx);
 
-            // Wait giữa các waves
-            await Task.Delay(TDConstant.CONFIG_WAVE_INTERVAL_MS);
+                await SpawnWave(spawnPos, wavePath, waveIdx, ct);
+
+                await PauseAwareDelay(TDConstant.CONFIG_WAVE_INTERVAL_MS, ct);
+            }
+
+            Debug.Log($"<color=green>All {maxWaves} waves completed!</color>");
         }
-
-        Debug.Log($"<color=green>All {maxWaves} waves completed!</color>");
+        catch (OperationCanceledException)
+        {
+            Debug.Log("<color=yellow>StartWaveLoop: cancelled (scene unloaded)</color>");
+        }
     }
 
     // Spawn N enemies stagger (1 enemy mỗi CONFIG_ENEMY_SPAWN_DELAY_MS) → assign path ngay khi spawn
-    private async Task SpawnWave(TDEnemyView prefab, Transform spawnPos, List<IGridCellDTO> path, int waveIdx)
+    private async Task SpawnWave(Transform spawnPos,
+        List<IGridCellDTO> path, int waveIdx, CancellationToken ct)
     {
         List<TDEnemyView> waveEnemies = new List<TDEnemyView>();
 
         for (int i = 0; i < TDConstant.CONFIG_ENEMIES_NUMBER; i++)
         {
-            TDEnemyView enemy = Object.Instantiate(prefab, spawnPos.position, Quaternion.identity);
-            enemy.transform.localScale = Vector3.one * TDConstant.CONFIG_ENEMY_VISUAL_SCALE;
-            string key = $"w{waveIdx}-e{i}-{enemy.gameObject.name}";
-            enemy.Initialize(key);
+            ct.ThrowIfCancellationRequested();
 
-            // Set path ngay khi enemy vừa spawn (không chờ batch xong rồi mới gán)
+            TDEnemyView enemy = m_EnemyPool.Get();
+            enemy.transform.position = spawnPos.position;
+            enemy.transform.rotation = Quaternion.identity;
+
+            string key = $"w{waveIdx}-e{i}-{enemy.gameObject.GetInstanceID()}";
+            enemy.Initialize(key);
             enemy.SetPath(path);
             waveEnemies.Add(enemy);
 
-            await Task.Delay(TDConstant.CONFIG_ENEMY_SPAWN_DELAY_MS);
+            await PauseAwareDelay(TDConstant.CONFIG_ENEMY_SPAWN_DELAY_MS, ct);
         }
 
         onGetEnemies?.Invoke(waveEnemies);

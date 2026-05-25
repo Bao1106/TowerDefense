@@ -1,6 +1,6 @@
 ================================================================================
   TOWER DEFENSE — GAME DESIGN, TECHNICAL REFERENCE & DEVELOPMENT ROADMAP
-  Last updated: 2026-05-24  (session 5 update)
+  Last updated: 2026-05-25  (session 10 update)
 ================================================================================
 
 
@@ -46,10 +46,11 @@ File: Assets/3.Scenes/DTGamePlay.unity
     → Just outside plane left edge (plane X starts at 2.3)
     → Z=29 aligned with START row world Z = 6×2 + 17 = 29
 
-── Gates (Phase 4.5 — DONE) ────────────────────────────────────────────────────
+── Gates (Phase 4.5 + 4.6 — DONE) ─────────────────────────────────────────────
   GateStart  : spawned at world (3.3, 0, 29) = grid (0,6) on game start
   GateEnd    : spawned at world (43.3, 0, 29) = grid (20,6) on game start
   → Instantiated runtime bởi TDEnemyPathMainView.SpawnGates()
+  → Visual: 3D wireframe box (Arknights-style), redesigned session 6 (Phase 4.6)
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -104,11 +105,12 @@ File: Assets/3.Scenes/DTGamePlay.unity
   TDObstacleControl.cs       ← place obstacles on non-path cells with spacing
   TDEnemyPathControl.cs      ← CreatePath() → instantiate Plane tiles on grid
   TDEnemyControl.cs          ← convert IGridCellDTO path → Vector3 world positions
+  TDEnemyRegistry.cs         ← centralized enemy list; Register/Unregister/GetAll [Phase 6.1 NEW]
   TDTowerMainControl.cs      ← select tower, rotate (E/Q), place
   TDPlaceTowerControl.cs     ← raycast placement, occupancy check
   TDTowerFactoryControl.cs   ← factory spawn + init
   TDTowerBehaviorMainControl.cs  ← attack cooldown timer, onGetLastAttackTime event
-  TDTowerBehaviorSubControl.cs   ← spawn projectile + set velocity
+  TDTowerBehaviorSubControl.cs   ← spawn bullet từ đúng pool theo type [Phase 6.1 refactor]
   TDUserInputControl.cs      ← mobile/desktop input event dispatching
 
   ── View ────────────────────────────────────────────────────────────────────
@@ -118,13 +120,14 @@ File: Assets/3.Scenes/DTGamePlay.unity
                                [Phase 4.5: m_GateStartPrefab/EndPrefab, OnWaveStart]
   TDEnemyPathView.cs         ← Plane tile pool
   TDEnemyView.cs             ← enemy MonoBehaviour: move along path, reach-end → LoseLife
-                               [Phase 4.5: m_HasReachedEnd guard, Destroy on path end]
+                               [Phase 4.5: m_HasReachedEnd guard]
+                               [Phase 6.1: PathProgress property, Register/Unregister registry]
   TDTowerMainView.cs         ← 5 tower holders, input handler, green highlight tiles
-  TDTowerWeaponView.cs       ← placed tower behavior
+  TDTowerWeaponView.cs       ← placed tower behavior: tick scan + priority targeting [Phase 6.1]
   TDTowerHolderView.cs       ← HUD slot (button + cost)
-  TDEnemyDetector.cs         ← trigger → SetTarget
   TDGateView.cs              ← GateStart MonoBehaviour: PlaySpawnEffect() per wave [Phase 4.5]
   TDGateEndView.cs           ← GateEnd MonoBehaviour: trigger visual + life text [Phase 4.5]
+  [DELETED] TDEnemyDetector.cs ← removed Phase 6.1 (replaced by Registry+tick scan)
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -249,29 +252,61 @@ File: Assets/3.Scenes/DTGamePlay.unity
 
 
 ════════════════════════════════════════════════════════════════════════════════
- 8. GATE START / GATE END (Phase 4.5 — DONE)
+ 8. GATE START / GATE END (Phase 4.5 + 4.6 — DONE)
 ════════════════════════════════════════════════════════════════════════════════
+
+  ── Visual Design (Phase 4.6 — Session 6) ────────────────────────────────────
+
+  Arknights-style 3D wireframe box visible from 30° orthographic camera.
+  Box dimensions: 2×2u footprint, 2.2u tall, raised +0.13u above ground
+  (path tiles sit at y=0.1 → box bottom ring at y=0.13+0.035=0.165 → clears tiles)
+
+  Box structure (12 edges + 5 face fills):
+    4 corner posts  : Post_FL / Post_FR / Post_BL / Post_BR
+                      size 0.07×2.20×0.07u, placed at (±hs, hh, ±hs)
+    4 bottom ring   : Bot_Front / Bot_Back / Bot_Left / Bot_Right
+                      horizontal bars at y = 0.035 + BOX_Y offset
+    4 top ring      : Top_Front / Top_Back / Top_Left / Top_Right
+                      horizontal bars at y = (2.20 - 0.035) + BOX_Y offset
+    5 face fills    : Face_Front/Back/Left/Right (side quads) + Face_Top (cap)
+                      transparent quads at 7% alpha sitting just outside edges
+
+  Materials (Assets/1.Assets/Resources/Materials/Gates/):
+    GS_Edge.mat  — URP/Unlit, Opaque,       red   (1.00, 0.10, 0.10, 0.90)
+    GS_Face.mat  — URP/Unlit, Transparent,  red   (1.00, 0.10, 0.10, 0.07)
+    GS_Glow.mat  — URP/Unlit, Transparent,  red   (1.00, 0.08, 0.08, 0.18)
+    GS_Arrow.mat — URP/Unlit, Transparent,  red   (1.00, 0.45, 0.45, 0.50)
+    GE_Edge.mat  — URP/Unlit, Opaque,       blue  (0.15, 0.65, 1.00, 0.90)
+    GE_Face.mat  — URP/Unlit, Transparent,  blue  (0.15, 0.65, 1.00, 0.07)
+    GE_Glow.mat  — URP/Unlit, Transparent,  blue  (0.15, 0.65, 1.00, 0.18)
+    NOTE: All materials have _EMISSION disabled + _EmissionColor=black.
+          Emission keyword overrides alpha in URP/Unlit → must keep off.
 
   ── Prefab Structure ─────────────────────────────────────────────────────────
 
   GateStart.prefab  (Assets/1.Assets/Resources/Prefabs/GateStart.prefab)
-    ├─ ArchProp          SM_Gen_Env_Cliff_Arch_01 (scale 0.35) — Synty stone arch
-    ├─ GroundGlow        Quad horizontal, URP/Unlit transparent, cyan (#00BFFF 35%)
-    │                    size 3.5×3.5, y=0.05
-    ├─ DirectionArrow    Quad, green (#1AFF66 55%), size 1.8×0.7, rotated → +X direction
-    ├─ SpawnParticles    ParticleSystem — cyan burst 25p, plays per wave via PlaySpawnEffect()
-    └─ [TDGateView]      m_SpawnEffect → SpawnParticles ✓
+    ├─ [TDGateView]      m_SpawnEffect → SpawnParticles ✓
+    ├─ GroundGlow        Quad flat y=0.01, 3.0×3.0, GS_Glow mat (red 18%)
+    ├─ Post_FL/FR/BL/BR  4 corner posts, GS_Edge mat (red opaque), raised +0.13u
+    ├─ Bot_Front/Back/Left/Right   bottom ring bars, GS_Edge mat, raised +0.13u
+    ├─ Top_Front/Back/Left/Right   top ring bars, GS_Edge mat, raised +0.13u
+    ├─ Face_Front/Back/Left/Right/Top   transparent face fills, GS_Face mat (7%)
+    ├─ Arrow             Quad flat on floor, GS_Arrow mat (red 50%)
+    └─ SpawnParticles    ParticleSystem — red burst 20p, plays per wave
 
   GateEnd.prefab  (Assets/1.Assets/Resources/Prefabs/GateEnd.prefab)
-    ├─ HQProp            TowerRoofedKeep (scale 1.0) — Kenney fortified keep
-    ├─ GroundGlow        Quad horizontal, URP/Unlit transparent, red/orange (#FF4500 40%)
-    │                    size 3.5×3.5, y=0.05
+    ├─ [TDGateEndView]   m_HitEffect → HitParticles, m_LifeText → LifeText ✓
     ├─ [BoxCollider]     isTrigger=true, size (2,4,2), center (0,2,0)
     │                    → OnTriggerEnter: plays HitParticles (visual only, no LoseLife)
-    ├─ HitParticles      ParticleSystem — red burst 20p khi enemy vật lý chạm trigger
-    ├─ CoreGlow          ParticleSystem — orange loop 8/s, continuous ambient glow
-    ├─ LifeText          TextMeshPro 3D, pos (0,4,−0.3), scale 0.45, "♥ 20" red bold
-    └─ [TDGateEndView]   m_HitEffect → HitParticles, m_LifeText → LifeText ✓
+    ├─ HQProp            TowerCrystals prefab, scale 0.75
+    ├─ GroundGlow        Quad flat y=0.01, GE_Glow mat (blue 18%)
+    ├─ Post_FL/FR/BL/BR  4 corner posts, GE_Edge mat (blue opaque), raised +0.13u
+    ├─ Bot_Front/Back/Left/Right   bottom ring bars, GE_Edge mat, raised +0.13u
+    ├─ Top_Front/Back/Left/Right   top ring bars, GE_Edge mat, raised +0.13u
+    ├─ Face_Front/Back/Left/Right/Top   transparent face fills, GE_Face mat (7%)
+    ├─ CoreGlow          ParticleSystem — blue loop, continuous ambient glow
+    ├─ HitParticles      ParticleSystem — blue burst 20p khi enemy chạm trigger
+    └─ LifeText          TextMeshPro 3D, tilted 55° to face camera, "♥ 20" above top ring
 
   ── Life System Flow ─────────────────────────────────────────────────────────
 
@@ -459,7 +494,7 @@ File: Assets/3.Scenes/DTGamePlay.unity
   ║  PHASE 3 — Wave System + Random Path per Wave           [✅ DONE]        ║
   ╚══════════════════════════════════════════════════════════════════════════╝
     ✅ 10 waves, random corridor per wave, 5 enemies stagger 2s
-    ⚠️  Chưa CancellationToken (async void leak nếu scene unload)
+    ✅ CancellationToken added (session 8) — không còn exception khi scene unload
 
   ─────────────────────────────────────────────────────────────────────────────
 
@@ -494,8 +529,30 @@ File: Assets/3.Scenes/DTGamePlay.unity
     ✅ 2-phase placement: drag→cell (P1), swipe→direction (P2), lift=place
     ✅ m_IsDirectionSelected + m_LastSnappedPos
     ✅ Mobile: lift chỉ place khi direction đã chọn
-    ✅ Desktop: E/Q/LMB/RMB
+    ✅ Desktop: LMB/RMB; direction auto-follow chuột
     ✅ ValidTowerCells highlight, obstacles SetOccupiedCell
+
+    ── Direction Selection (Session 8 rewrite) ──────────────────────────────
+    Platform-split logic trong UpdateGhostTransform():
+
+    MOBILE (#if UNITY_ANDROID && !UNITY_EDITOR):
+      Phase 1 — ghost follows ngón tay (snap to grid)
+      Phase 2 — ngón tay > 35% cellSize (0.7f) từ cell center:
+        → ghost ĐÓNG BĂNG tại ô hiện tại
+        → direction lock, tính từ frozen cell center (không phải snapped pos)
+        → direction update theo quadrant khi ngón tay tiếp tục di chuyển
+        → lift ngón tay → place (chỉ khi m_IsDirectionSelected=true)
+      Reset: place hoặc cancel
+
+    DESKTOP / EDITOR (#else):
+      Ghost luôn follow chuột tự do (không đóng băng)
+      Direction luôn follow chuột — cập nhật ngay khi sqrMagnitude > 0.01f
+      Không cần threshold — tower luôn quay về phía chuột đang ở
+      LMB đặt bất kỳ lúc nào, RMB cancel
+
+    Key fix: threshold cũ (1.0f = cellSize/2) = snap boundary → direction
+             không bao giờ lock được trên mobile (reset ngay khi threshold hit).
+             Mới: threshold=0.35f×cellSize=0.7f < snap boundary 1.0f → OK
 
   ─────────────────────────────────────────────────────────────────────────────
 
@@ -511,18 +568,54 @@ File: Assets/3.Scenes/DTGamePlay.unity
     ✅ TDGateView.cs: PlaySpawnEffect() trên GateStart
     ✅ TDGateEndView.cs: trigger visual + life text update
 
-    ✅ GateStart.prefab:
+    ✅ GateStart.prefab (Phase 4.5 original):
        SM_Gen_Env_Cliff_Arch_01 (scale 0.35) + cyan glow + green arrow
        + SpawnParticles (cyan burst) + TDGateView (m_SpawnEffect assigned)
+       → Redesigned in Phase 4.6 (see below)
 
-    ✅ GateEnd.prefab:
+    ✅ GateEnd.prefab (Phase 4.5 original):
        TowerRoofedKeep (scale 1.0) + red/orange glow
        + BoxCollider trigger (2,4,2) + HitParticles + CoreGlow (loop)
        + LifeText TextMeshPro "♥ 20" + TDGateEndView (fields assigned)
+       → Redesigned in Phase 4.6 (see below)
 
     ✅  Inspector assignments hoàn tất:
        → TDEnemyPathMainView: m_GateStartPrefab, m_GateEndPrefab
        → TDGameplayMainView:  m_LifeText (TextMeshProUGUI), m_ScreenFlash (Image)
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 4.6 — Gate Visual Redesign (Session 6)           [✅ DONE]        ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+    Goal: Arknights-style 3D wireframe box with visible depth from 30° ortho cam.
+    Previous design (Arch prop + flat glow quad) lacked 3D depth cues.
+
+    ✅ GateStart.prefab rebuilt — 3D wireframe box, red color scheme:
+       GroundGlow (flat quad) + 4 corner posts + 4 bottom ring bars
+       + 4 top ring bars + 5 transparent face fills + direction Arrow
+       + SpawnParticles (red burst) + TDGateView (m_SpawnEffect preserved)
+
+    ✅ GateEnd.prefab rebuilt — 3D wireframe box, blue color scheme:
+       HQProp (TowerCrystals) + GroundGlow + 12 edge bars + 5 face fills
+       + CoreGlow (loop) + HitParticles (burst) + LifeText (face-camera)
+       + BoxCollider trigger (2,4,2) + TDGateEndView (fields preserved)
+
+    ✅ 7 new URP/Unlit materials — Assets/1.Assets/Resources/Materials/Gates/
+       GS_Edge, GS_Face, GS_Glow, GS_Arrow (red)
+       GE_Edge, GE_Face, GE_Glow (blue)
+       All: _EMISSION disabled, _EmissionColor=black (emission breaks alpha in URP)
+
+    ✅ Box raised +0.13u above ground (path tiles at y=0.1 → no overlap)
+       GateRaiseBox.cs Editor script applied then self-deleted
+
+    ✅ Path tiles skip gate cells:
+       TDEnemyPathView.VisualizeAllPaths → path.GetRange(1, path.Count-2)
+       → cell index 0 (GateStart) and last (GateEnd) excluded from tile rendering
+
+    ✅ URP transparency rules documented:
+       • _EMISSION keyword completely overrides alpha — must disable on all mats
+       • Opaque materials (_Surface=0) ignore alpha — must use _Surface=1 (Transparent)
 
   ─────────────────────────────────────────────────────────────────────────────
 
@@ -538,15 +631,125 @@ File: Assets/3.Scenes/DTGamePlay.unity
   ║  PHASE 6 — Tower UI Integration                         [⚠️ PARTIAL]      ║
   ╚══════════════════════════════════════════════════════════════════════════╝
     ✅ 5 TowerHolder HUD slots, Arknights 2-phase placement
-    ✅ TDPlaceTowerControl, TDTowerWeaponView, TDEnemyDetector
+    ✅ TDPlaceTowerControl, TDTowerWeaponView
+    ✅ TDTowerFactoryView.OnCreateTowerSuccess → tower.Init(key) [đã fix]
+    ✅ CanvasScaler Reference Resolution: 1125×750 → 1920×1080  [Session 9]
+       + HUD tất cả elements scale ×1.5 để bù lại (xem Phase 6.3 bên dưới)
 
-    ⚠️  CRITICAL BUG: TDTowerWeaponView.Init(key) không bao giờ được gọi
-        onCreateTowerSuccess fire nhưng không ai subscribe → m_TowerKey=null
-        → TDTowerWeaponView.Update() skip → tower KHÔNG attack
+    ⚠️  TODO: PlacementPanel missing trong scene hierarchy (mobile Cancel button)
 
-    TODO:
-      → Fix Init(key) call chain (critical)
-      → CanvasScaler 1125×750 → 1920×1080
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 6.1 — Tower Attack System Redesign (Session 7)   [✅ DONE]        ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+    Goal: Fix bug pool sai type, thay trigger detection bằng Registry+tick scan.
+
+    ✅ Bug A fix — Bullet pool global state:
+       TDFlyweightBulletFactoryModel: xóa m_TowerType global, 1 pool lazy per TowerType
+       TDFlyweightTowerDataSettings:  xóa m_Prefab/SetPrefab, thêm GetPrefab(type) pure lookup
+       TDBulletsView:                 thêm OwnerType property để ReturnToPool đúng pool
+       TDTowerBehaviorSubControl:     xóa SetupSubControl(), Attack() dùng Spawn(type)
+       TDTowerFactoryView:            xóa SetupSubControl() call
+       TDTowerBehaviorModel:          xóa dead settings property
+       TowerData.prefab → bulletPrefab [FormerlySerializedAs]
+
+    ✅ Enemy Detection redesign — Registry + Tick-based (Hướng 3):
+       TDEnemyRegistry (NEW):  singleton List<TDEnemyView>, Register/Unregister/GetAll
+       TDEnemyView:            + PathProgress = currentIndex/totalCount (0→1)
+                                 Register(this) trong Initialize, Unregister trong OnDestroy
+       TDTowerWeaponView:      tick scan mỗi 0.2s từ Registry
+                                 pick enemy PathProgress cao nhất (gần GateEnd nhất)
+                                 IsInRange check mỗi frame → tự clear target khi out of range
+       ITowerRangeDTO:         + DetectionRadius property (implemented bởi cả 3 DTO)
+       TDEnemyDetector.cs:     DELETED — không còn cần trigger collider trên prefab
+
+    ✅ Lợi ích khi scale:
+       Wave nhiều enemy: O(n) registry iteration × 5 scan/s (không phụ thuộc framerate)
+       Tower mới: chỉ cần TowerType enum + SO entry + model data, không cần setup prefab trigger
+       Multi-tower correct: mỗi tower độc lập, pool không bao giờ cross-contaminate
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 6.2 — Tower Config SO Refactor (Session 8)       [✅ DONE]        ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+    Goal: Xóa hardcode damage/attackSpeed/range trong C# switch → đưa vào SO.
+          Thêm tower mới chỉ cần 1 enum line + 1 SO entry, không đụng code.
+
+    ✅ RangeType enum thêm vào Enums.cs: Area | HorizontalCone | VerticalCone
+
+    ✅ TowerData struct mở rộng (TDFlyweightTowerDataSettings.cs):
+       + damage       : float
+       + attackSpeed  : float
+       + rangeType    : RangeType
+       + rangeValue   : int
+       GetData(type) pure lookup; GetPrefab/GetCost delegate sang GetData
+
+    ✅ TDTowerBehaviorModel đọc từ SO (bỏ 3 switch hardcode):
+       GetDamage()      → Setting.GetData(type).damage
+       GetAttackSpeed() → Setting.GetData(type).attackSpeed
+       GetTowerRange()  → rangeType switch → new [Area/Horizontal/Vertical]RangeDTO(rangeValue)
+
+    ✅ SO Resources/Configs/Tower Bullet Config.asset filled:
+       Cannon:    damage=5,  speed=3, HorizontalCone(3)
+       Catapult:  damage=20, speed=1, VerticalCone(2)
+       MissileG02:damage=10, speed=1, HorizontalCone(5)
+       MissileG03:damage=20, speed=1, Area(6)
+       Mortar:    damage=15, speed=2, HorizontalCone(3)
+
+    ✅ SO duplicate xóa: Assets/2.Scripts/Model/Config/SO/Tower Bullet Config.asset
+       DTLoadFirst.unity GUID updated → trỏ đúng Resources/Configs/ file
+
+    ✅ TDVerticalRangeDTO fix (copy-paste bug từ session 7):
+       Cũ: forward cone dot > 0.9 (giống hệt HorizontalCone — sai)
+       Mới: Mathf.Abs(Dot(right, toEnemy)) > 0.7f
+       → Catapult tấn công theo trục NGANG (vuông góc forward) — bao phủ trái+phải
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 6.3 — HUD Scale Fix for 1920×1080 (Session 9)   [✅ DONE]        ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+    Goal: Sau khi đổi CanvasScaler từ 1125×750 → 1920×1080, HUD quá nhỏ.
+          Scale tất cả elements ×1.5 (= 1080/750) để khôi phục apparent size.
+
+    ── Vấn đề gốc ────────────────────────────────────────────────────────────
+    TowerMainView có HorizontalLayoutGroup (childControlWidth/Height=True).
+    → LayoutElement trên mỗi TowerHolder mới là nguồn kích thước thực tế,
+      không phải RectTransform.sizeDelta trực tiếp.
+    → Manual anchoredPosition set bị ignore hoàn toàn bởi HLG.
+
+    ── Thay đổi (×1.5 so với giá trị cũ) ────────────────────────────────────
+    TxtLifePoint (♥ 20):
+      sizeDelta       : (200, 50)  → (300, 75)
+      anchoredPosition: (0, -36)   → (0, -54)
+      fontSize        : 36         → 54
+
+    TowerMainView container:
+      sizeDelta       : (686, 162) → (1029, 243)
+      anchoredPosition: (20, 20)   → (30, 30)
+
+    TowerMainView / HorizontalLayoutGroup:
+      padding (L/R/T/B): 6        → 9
+      spacing           : 6       → 9
+
+    TowerHolder ×5 (via LayoutElement):
+      minWidth / preferredWidth  : 130 → 195
+      minHeight / preferredHeight: 150 → 225
+
+    TowerHolder inner children (×5, mỗi holder):
+      InnerBox  : sizeDelta (82, 90)  → (123, 135)  | pos (0, -8)   → (0, -12)
+      Tower     : sizeDelta (96, 96)  → (144, 144)  | pos (0,  4)   → (0,   6)
+      CostBg    : sizeDelta (72, 36)  → (108,  54)  | pos (-10, 10) → (-15, 15)
+      Cost (TMP): fontSize ×1.5
+
+    ── Ghi chú kỹ thuật ──────────────────────────────────────────────────────
+    - Với HLG childControlWidth/Height=True: phải set LayoutElement.preferredWidth/
+      minWidth (không set RectTransform.sizeDelta trực tiếp — bị override).
+    - Scale ratio 1.5 ≈ 1080/750 (height-based) vì CanvasScaler Match=Height (slider=1).
 
   ─────────────────────────────────────────────────────────────────────────────
 
@@ -572,30 +775,106 @@ File: Assets/3.Scenes/DTGamePlay.unity
 
   ─────────────────────────────────────────────────────────────────────────────
 
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 8.5 — Pause System + Enemy Object Pool (Session 10) [✅ DONE]     ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+
+  ── Pause System ─────────────────────────────────────────────────────────────
+    TDPauseControl.cs (NEW):
+      IsPaused: bool; Toggle(); Pause(); Resume(); onPauseChanged: Action<bool>
+      Pause()  → Time.timeScale = 0f → onPauseChanged(true)
+      Resume() → Time.timeScale = 1f → onPauseChanged(false)
+
+    PauseAwareDelay (trong TDEnemyPathMainControl):
+      Thay Task.Delay(ms, ct) bằng vòng lặp dùng Time.deltaTime accumulation
+      Time.deltaTime = 0 khi timeScale=0 → wave loop tự pause mà không cần
+      cancel/restart — wave timer và spawn delay đều dừng khi game pause
+
+    TDControl: TDPauseControl.api = new TDPauseControl() (đăng ký khi init)
+
+    TDGameplayMainView:
+      [SerializeField] m_PausePanel: GameObject
+      Subscribe onPauseChanged → SetActive(isPaused) trên m_PausePanel
+      OnPauseButtonClicked() / OnResumeButtonClicked() public methods
+
+    UI (Canvas/SafeArea — DTGamePlay.unity):
+      PauseButton: top-right 90×90, dark bg 75% alpha, text "II", anchor=(1,1)
+        onClick → TDPauseControl.api.Toggle()
+      PausePanel: full-screen dark overlay 65% alpha, SetActive(false) mặc định
+        TitleText: "PAUSED" fontSize=60 centered at (50%, 60%)
+        ResumeButton: 300×80 green, text "RESUME" centered at (50%, 45%)
+          onClick → TDPauseControl.api.Resume()
+
+  ── Enemy Object Pool ────────────────────────────────────────────────────────
+    Pattern: ObjectPool<TDEnemyView> — giống TDFlyweightBulletFactoryModel
+
+    TDEnemyPathMainControl:
+      InitEnemyPool(prefab, parent, capacity=20, maxSize=50)
+        createFunc: Instantiate + set localScale CONFIG_ENEMY_VISUAL_SCALE
+        actionOnGet: SetActive(true); actionOnRelease: SetActive(false)
+      ReturnEnemy(enemy): m_EnemyPool.Release(enemy)
+      SpawnWave: dùng m_EnemyPool.Get() thay Instantiate
+        → reset position/rotation trước khi Initialize(key)
+
+    TDEnemyPathMainView:
+      Initialize(): gọi TDEnemyPathMainControl.api.InitEnemyPool(m_Slime, transform)
+      OnGetAllPaths: StartWaveLoop(m_SpawnPos, ...) — bỏ param prefab
+
+    TDEnemyView:
+      m_HasBeenReturned: bool — guard tránh double-return
+      Initialize(key): reset tất cả state (health, pathIndex, hasReachedEnd, path)
+                        + subscribe event + register registry
+      ReturnToPool(): guard → unsubscribe → unregister → ReturnEnemy(this)
+      TakeDamage: gọi ReturnToPool() thay Destroy
+      Update (reach end): gọi ReturnToPool() thay Destroy
+      OnDestroy: chỉ cleanup nếu !m_HasBeenReturned (scene unload safety)
+
+  ── Ghi chú kỹ thuật ─────────────────────────────────────────────────────────
+    - Tower đặt lên path cells: giữ nguyên (sẽ dùng cho Operator mechanic như Arknights)
+    - PauseAwareDelay không dùng Task.Delay(real-time) mà dùng Task.Yield() loop
+      → tương thích với Unity main thread context, không cần lock hay semaphore
+    - Enemy pool collectionCheck=true → phát hiện double-release lúc dev
+    - StartWaveLoop signature đổi: bỏ TDEnemyView prefab param (pool tự quản lý)
+
+  ─────────────────────────────────────────────────────────────────────────────
+
   ╔══════════════════════════════════════════════════════════════════════════╗
   ║  PHASE 9 — Polish & Performance                         [TODO]            ║
   ╚══════════════════════════════════════════════════════════════════════════╝
     Polish: particles, VFX, sounds, camera shake on life lost
-    Performance: object pooling (tiles, ammo, enemies), GPU instancing
+    Performance: object pooling (tiles, ammo) — enemies DONE (Phase 8.5) ✓
 
 
 ════════════════════════════════════════════════════════════════════════════════
  15. KNOWN ISSUES & TECH DEBT
 ════════════════════════════════════════════════════════════════════════════════
 
-  ⚠️  CRITICAL — Tower không attack
-      TDTowerWeaponView.Init(key) không được gọi → m_TowerKey=null → skip Update
-      Fix: subscriber gọi tower.Init(key) khi onCreateTowerSuccess
+  ✅  Tower không attack                        FIXED session 7 (Phase 6.1)
+      TDTowerFactoryView.OnCreateTowerSuccess đã subscribe + gọi tower.Init(key)
+      Pool bug (global m_TowerType) đã fix — mỗi TowerType có pool riêng
 
-  ⚠️  async void StartWaveLoop không có CancellationToken
-      Scene unload mid-game → exception. Fix: CTS + Cancel trong OnDestroy
+  ✅  async void StartWaveLoop không có CancellationToken  FIXED session 8
+      TDEnemyPathMainControl.StartWaveLoop + SpawnWave nhận CancellationToken
+      TDEnemyPathMainView: m_WaveCts tạo khi start, Cancel+Dispose trong OnDestroy
+      Task.Delay dùng token → dừng sạch khi scene unload, không còn exception
 
-  ⚠️  TDGridMainModel singleton không reset khi reload scene
-      Fix: static Reset() hoặc new instance mỗi scene load
+  ✅  TDGridMainModel singleton không reset khi reload scene  FIXED session 8
+      Initialize(): ??= → = (luôn tạo instance mới, không giữ lại state cũ)
 
   ✅  Phase 4.5 Inspector đã assign (session 5)
       TDEnemyPathMainView: m_GateStartPrefab, m_GateEndPrefab
       TDGameplayMainView:  m_LifeText, m_ScreenFlash
+
+  ✅  Gate cells hiển thị path tile bên dưới   FIXED session 6 (Phase 4.6)
+      TDEnemyPathView.VisualizeAllPaths: path.GetRange(1, path.Count-2)
+
+  ✅  Gate box edges bị path tile che mất       FIXED session 6 (Phase 4.6)
+      Raise toàn bộ box parts +0.13u qua GateRaiseBox.cs Editor script
+
+  ✅  Gate alpha không hoạt động (URP/Unlit)    FIXED session 6 (Phase 4.6)
+      DisableKeyword("_EMISSION") + _EmissionColor=black + _Surface=1
 
   ✅  Obstacle cells gọi SetOccupiedCell  FIXED session 3
   ✅  Mobile Rotate + Cancel button       FIXED session 3 (Arknights-style)
@@ -603,9 +882,39 @@ File: Assets/3.Scenes/DTGamePlay.unity
   ✅  Ghost không place khi chưa chọn hướng FIXED session 4 (m_IsDirectionSelected)
   ✅  Enemy false-trigger reach-end       FIXED session 5 (Count==0 guard)
 
+  ✅  Gate cells không gọi SetOccupiedCell  FIXED session 8
+      TDEnemyPathMainView.SpawnGates(): SetOccupiedCell(startWorld) + SetOccupiedCell(endWorld)
+      → Player không còn đặt được tower lên ô GateStart/GateEnd
+
+  ✅  TDVerticalRangeDTO copy-paste từ TDHorizontalRangeDTO  FIXED session 8 (Phase 6.2)
+      Mới: Mathf.Abs(Dot(right, toEnemy)) > 0.7f → perpendicular band attack
+
+  ✅  TDFlyweightBulletFactoryModel global m_TowerType state  FIXED session 7 (Phase 6.1)
+  ✅  TDEnemyDetector SetTarget(null) mất target (Bug B)      FIXED session 7 (Phase 6.1)
+  ✅  DetectionArea child GO trên tower prefabs               FIXED (đã clean trước session 8)
+
+  ✅  Mobile direction selection không hoạt động             FIXED session 8
+      Bug: m_DirectionThreshold (1.0f) = cellSize/2 → snap cell cùng lúc threshold → direction reset ngay
+      Fix mobile: ghost đóng băng; delta từ frozen cell; threshold = cellSize×0.35f (< snap boundary)
+      Fix desktop: direction luôn follow chuột (no threshold, sqrMag>0.01f), ghost không đóng băng
+      Platform-split: #if UNITY_ANDROID && !UNITY_EDITOR trong UpdateGhostTransform()
+
+  ✅  CanvasScaler 1125×750 → 1920×1080 + HUD scale fix    FIXED session 9 (Phase 6.3)
+      TxtLifePoint, TowerMainView, TowerHolder ×5 và inner children scale ×1.5
+      HorizontalLayoutGroup padding/spacing 6→9; LayoutElement preferredW/H updated
+
+  ⚠️  PlacementPanel missing trong scene hierarchy
+      TDTowerMainView.InitPlacementPanel(): transform.Find(GAMEPLAY_PLACEMENT_PANEL) = null
+      → Mobile Cancel button không hiển thị (null-safe → không crash)
+      Fix: Thêm PlacementPanel GameObject vào scene DTGamePlay.unity
+
+  ✅  SO duplicate Tower Bullet Config                        FIXED session 8
+      Xóa Assets/2.Scripts/Model/Config/SO/Tower Bullet Config.asset
+      DTLoadFirst.unity GUID → trỏ đúng Resources/Configs/Tower Bullet Config.asset
+
 
 ════════════════════════════════════════════════════════════════════════════════
- 16. DEPENDENCY GRAPH (session 5)
+ 16. DEPENDENCY GRAPH (session 7)
 ════════════════════════════════════════════════════════════════════════════════
 
   ✅ Phase 0   (Grid sync)              ── DONE
@@ -616,17 +925,30 @@ File: Assets/3.Scenes/DTGamePlay.unity
   ✅ Phase 3.6 (Camera/Env Perspective) ── DONE
   ✅ Phase 3.7 (Camera Ortho + resize)  ── DONE
   ✅ Phase 4   (Tower Arknights place)  ── DONE
-  ✅ Phase 4.5 (Gate Start/End + Life)  ── DONE (Inspector assign còn lại)
+     │   Session 8: direction selection bug fixed (ghost freeze + threshold 35% cellSize)
+  ✅ Phase 4.5 (Gate Start/End + Life)  ── DONE
+     │   Session 8: gate cells SetOccupiedCell fixed
+  ✅ Phase 4.6 (Gate Visual Redesign)   ── DONE (session 6)
+  ✅ Phase 6.1 (Tower Attack Redesign)  ── DONE (session 7)
+     │   Pool per type, Registry+tick detection, PathProgress priority
+  ✅ Phase 6.2 (Tower Config SO Refactor) ── DONE (session 8)
+     │   damage/attackSpeed/rangeType/rangeValue → SO; bỏ hardcode switch
+     │   TDVerticalRangeDTO fixed; SO duplicate cleaned; wave CTS added
      │
   ⬜ Phase 5   (Multi-start)            ── cần Phase 3+4 DONE ✓
      │
   ⚠️  Phase 6  (Tower UI)               ── PARTIAL
-     │   Còn: fix Init() call chain (critical — tower không attack)
+     │   ✅ CanvasScaler 1920×1080 + HUD scale fix: DONE (Phase 6.3) ✓
+     │   Còn: PlacementPanel GO missing trong scene
+     │   Attack system: DONE (Phase 6.1) ✓
+     │   Config SO: DONE (Phase 6.2) ✓
      │
-  ⬜ Phase 7   (Ammo + Combat)          ── cần Phase 6 fix trước
+  ⬜ Phase 7   (Ammo + Combat)          ── cần Phase 6.1 DONE ✓
      │
   ⬜ Phase 8   (Win/Lose + HUD)         ── cần Phase 4.5 ✓ + Phase 7
      │   (onGameOver stub đã có, chỉ cần GameOver panel UI)
+     │
+  ✅ Phase 8.5 (Pause + Enemy Pool)     ── DONE (session 10)
      │
   ⬜ Phase 9   (Polish + Perf)          ── final pass
 
@@ -652,6 +974,8 @@ File: Assets/3.Scenes/DTGamePlay.unity
   Assets/2.Scripts/Control/Gameplay/TDGameplayMainControl.cs
   Assets/2.Scripts/Control/Gameplay/TDPlayerLifeControl.cs      ← [Phase 4.5 NEW]
   Assets/2.Scripts/Control/Enemy/TDEnemyControl.cs
+  Assets/2.Scripts/Control/Enemy/TDEnemyRegistry.cs             ← [Phase 6.1 NEW]
+  Assets/2.Scripts/Control/PathControl/TDEnemyPathMainControl.cs ← [Session 8: CancellationToken]
   Assets/2.Scripts/Control/Tower/TDTowerMainControl.cs
   Assets/2.Scripts/Control/Tower/PlaceTower/TDPlaceTowerControl.cs
   Assets/2.Scripts/Control/Tower/TowerFactory/TDTowerBehaviorMainControl.cs
@@ -663,11 +987,12 @@ File: Assets/3.Scenes/DTGamePlay.unity
   Assets/2.Scripts/View/GamePlay/TDGameplayMainView.cs           ← [4.5: life+flash]
   Assets/2.Scripts/View/GamePlay/EnemyPath/TDEnemyPathMainView.cs ← [4.5: SpawnGates]
   Assets/2.Scripts/View/GamePlay/EnemyPath/TDEnemyPathView.cs
-  Assets/2.Scripts/View/GamePlay/Enemy/TDEnemyView.cs            ← [4.5: reach-end]
+  Assets/2.Scripts/View/GamePlay/Enemy/TDEnemyView.cs            ← [4.5: reach-end, 6.1: PathProgress+Registry]
   Assets/2.Scripts/View/GamePlay/Tower/TDTowerMainView.cs
-  Assets/2.Scripts/View/GamePlay/Tower/TDTowerWeaponView.cs
+  Assets/2.Scripts/View/GamePlay/Tower/TDTowerWeaponView.cs      ← [6.1: tick scan + priority]
   Assets/2.Scripts/View/GamePlay/Tower/TDTowerHolderView.cs
-  Assets/2.Scripts/View/GamePlay/Tower/TDEnemyDetector.cs
+  Assets/2.Scripts/View/GamePlay/Tower/TDTowerFactoryView.cs     ← [6.1: removed SetupSubControl]
+  Assets/2.Scripts/View/GamePlay/Projectile/TDBulletsView.cs     ← [6.1: OwnerType property]
   Assets/2.Scripts/View/GamePlay/Gate/TDGateView.cs              ← [Phase 4.5 NEW]
   Assets/2.Scripts/View/GamePlay/Gate/TDGateEndView.cs           ← [Phase 4.5 NEW]
 
@@ -678,8 +1003,8 @@ File: Assets/3.Scenes/DTGamePlay.unity
     PathView/CreatePoint: (2,0,29)
 
   ── Prefabs ─────────────────────────────────────────────────────────────────
-  Assets/1.Assets/Resources/Prefabs/GateStart.prefab    ← [Phase 4.5 NEW]
-  Assets/1.Assets/Resources/Prefabs/GateEnd.prefab      ← [Phase 4.5 NEW]
+  Assets/1.Assets/Resources/Prefabs/GateStart.prefab    ← [Phase 4.5 NEW, 4.6 REDESIGN]
+  Assets/1.Assets/Resources/Prefabs/GateEnd.prefab      ← [Phase 4.5 NEW, 4.6 REDESIGN]
   Assets/1.Assets/Resources/Prefabs/FattyCannonG02.prefab
   Assets/1.Assets/Resources/Prefabs/FattyCatapultG02.prefab
   Assets/1.Assets/Resources/Prefabs/FattyMissileG02.prefab
@@ -687,12 +1012,98 @@ File: Assets/3.Scenes/DTGamePlay.unity
   Assets/1.Assets/Resources/Prefabs/FattyMortarG02.prefab
   Assets/1.Assets/Resources/Prefabs/Slime.prefab
   Assets/1.Assets/Resources/Prefabs/Plane.prefab
-  Assets/1.Assets/Resources/Prefabs/KenneyTower/TowerRoofedKeep.prefab  ← used by GateEnd
+
+  ── Materials (Gates) ────────────────────────────────────────────────────────
+  Assets/1.Assets/Resources/Materials/Gates/GS_Edge.mat   ← [Phase 4.6 NEW] GateStart edge
+  Assets/1.Assets/Resources/Materials/Gates/GS_Face.mat   ← [Phase 4.6 NEW] GateStart face
+  Assets/1.Assets/Resources/Materials/Gates/GS_Glow.mat   ← [Phase 4.6 NEW] GateStart glow
+  Assets/1.Assets/Resources/Materials/Gates/GS_Arrow.mat  ← [Phase 4.6 NEW] GateStart arrow
+  Assets/1.Assets/Resources/Materials/Gates/GE_Edge.mat   ← [Phase 4.6 NEW] GateEnd edge
+  Assets/1.Assets/Resources/Materials/Gates/GE_Face.mat   ← [Phase 4.6 NEW] GateEnd face
+  Assets/1.Assets/Resources/Materials/Gates/GE_Glow.mat   ← [Phase 4.6 NEW] GateEnd glow
+
+  ── Scripts modified (Session 6) ─────────────────────────────────────────────
+  Assets/2.Scripts/View/GamePlay/EnemyPath/TDEnemyPathView.cs
+    ← VisualizeAllPaths: skip gate cells (GetRange 1..count-2)
+
+  ── Scene modified (Session 9 — Phase 6.3 HUD Scale Fix) ────────────────────
+  Assets/3.Scenes/DTGamePlay.unity
+    Canvas / CanvasScaler: Reference Resolution 1125×750 → 1920×1080
+    Canvas/SafeArea/TxtLifePoint:
+      RectTransform sizeDelta (200,50)→(300,75); anchoredPos (0,-36)→(0,-54)
+      TextMeshProUGUI fontSize 36 → 54
+    Canvas/SafeArea/TowerMainView:
+      RectTransform sizeDelta (686,162)→(1029,243); anchoredPos (20,20)→(30,30)
+      HorizontalLayoutGroup padding 6→9, spacing 6→9
+    Canvas/SafeArea/TowerMainView/TowerHolder ×5:
+      LayoutElement minWidth/preferredWidth 130→195; minHeight/preferredHeight 150→225
+      InnerBox  sizeDelta (82,90)→(123,135); anchoredPos (0,-8)→(0,-12)
+      Tower     sizeDelta (96,96)→(144,144); anchoredPos (0,4)→(0,6)
+      CostBg    sizeDelta (72,36)→(108,54);  anchoredPos (-10,10)→(-15,15)
+      Cost TMP  fontSize ×1.5
+
+  ── Scripts modified (Session 8 — Phase 6.2 + Bug Fixes) ────────────────────
+  Assets/2.Scripts/Model/Config/Enum/Enums.cs
+    ← added RangeType enum: Area | HorizontalCone | VerticalCone
+  Assets/2.Scripts/Model/Config/TDFlyweightTowerDataSettings.cs
+    ← TowerData + damage/attackSpeed/rangeType/rangeValue fields
+    ← GetData(type) pure lookup; GetPrefab/GetCost delegate to GetData
+  Assets/2.Scripts/Model/Info/Tower Type/TDTowerBehaviorModel.cs
+    ← removed 3 hardcode switch; reads damage/speed/range from SO via Setting
+  Assets/2.Scripts/Model/Tower/TowerRange/TDVerticalRangeDTO.cs
+    ← fixed: perpendicular band Mathf.Abs(Dot(right,...)) > 0.7f (was copy of Horizontal)
+  Assets/2.Scripts/Model/Info/Grid/TDGridMainModel.cs
+    ← Initialize(): ??= → = (reset singleton on scene reload)
+  Assets/2.Scripts/View/GamePlay/Tower/TDTowerMainView.cs
+    ← removed [SerializeField] m_DirectionThreshold; added k_DirectionThresholdRatio=0.35f
+    ← UpdateGhostTransform(): platform-split via #if UNITY_ANDROID && !UNITY_EDITOR
+       Mobile: ghost freezes at 35% cellSize; delta from frozen cell; direction locks until place/cancel
+       Desktop: ghost always follows mouse; direction always updates (no threshold); no freeze
+  Assets/2.Scripts/View/GamePlay/EnemyPath/TDEnemyPathMainView.cs
+    ← SpawnGates(): SetOccupiedCell for both gate cells
+    ← added m_WaveCts (CancellationTokenSource); Cancel+Dispose in OnDestroy
+    ← StartWaveLoop call passes m_WaveCts.Token
+  Assets/2.Scripts/Control/PathControl/TDEnemyPathMainControl.cs
+    ← StartWaveLoop + SpawnWave accept CancellationToken
+    ← Task.Delay uses token; try/catch OperationCanceledException
+  Assets/3.Scenes/DTLoadFirst.unity
+    ← RepResourceObject.objects GUID updated → Resources/Configs/Tower Bullet Config.asset
+  [DELETED] Assets/2.Scripts/Model/Config/SO/Tower Bullet Config.asset
+    ← SO duplicate removed (was stale, data=0 for new fields)
+  Assets/1.Assets/Resources/Configs/Tower Bullet Config.asset
+    ← filled: damage/attackSpeed/rangeType/rangeValue cho 5 tower types
+
+  ── Scripts modified (Session 7 — Phase 6.1) ─────────────────────────────────
+  Assets/2.Scripts/Model/Config/TDFlyweightTowerDataSettings.cs
+    ← removed m_Prefab/SetPrefab/pool callbacks; added GetPrefab(type) pure lookup
+    ← TowerData.prefab renamed to bulletPrefab [FormerlySerializedAs]
+  Assets/2.Scripts/Model/Info/Flyweight/TDFlyweightBulletFactoryModel.cs
+    ← stateless pool: removed m_TowerType; Spawn(TowerType), GetPoolFor(TowerType) lazy
+  Assets/2.Scripts/View/GamePlay/Projectile/TDBulletsView.cs
+    ← added OwnerType property (set by Spawn, used by ReturnToPool)
+  Assets/2.Scripts/Control/Tower/TowerBehavior/TDTowerBehaviorSubControl.cs
+    ← removed SetupSubControl(); Attack() dùng Spawn(type) trực tiếp
+  Assets/2.Scripts/View/GamePlay/Tower/TDTowerFactoryView.cs
+    ← removed SetupSubControl() call
+  Assets/2.Scripts/Model/Info/Tower Type/TDTowerBehaviorModel.cs
+    ← removed dead settings property
+  Assets/2.Scripts/Model/Tower/Interfaces/ITowerRangeDTO.cs
+    ← added DetectionRadius property
+  Assets/2.Scripts/Model/Tower/TowerRange/TDHorizontalRangeDTO.cs
+  Assets/2.Scripts/Model/Tower/TowerRange/TDAreaRangeDTO.cs
+  Assets/2.Scripts/Model/Tower/TowerRange/TDVerticalRangeDTO.cs
+    ← implement DetectionRadius => m_Range
+  Assets/2.Scripts/View/GamePlay/Enemy/TDEnemyView.cs
+    ← added PathProgress property; Register/Unregister TDEnemyRegistry
+  Assets/2.Scripts/View/GamePlay/Tower/TDTowerWeaponView.cs
+    ← replaced trigger/SetTarget with tick scan (0.2s) + PathProgress priority
+    ← removed SetTarget() public method
+  Assets/2.Scripts/Control/TDControl.cs
+    ← added TDEnemyRegistry.api = new TDEnemyRegistry()
+  [DELETED] Assets/2.Scripts/View/GamePlay/Tower/TDEnemyDetector.cs
 
   ── Key Asset Paths ──────────────────────────────────────────────────────────
-  Arch prop : Assets/1.Assets/UnityStore Resources/Synty/PolygonGeneric/
-              Prefabs/Environment/SM_Gen_Env_Cliff_Arch_01.prefab   ← used by GateStart
-  HQ prop   : Assets/1.Assets/Resources/Prefabs/KenneyTower/TowerRoofedKeep.prefab
+  HQ prop (GateEnd) : Assets/1.Assets/Resources/Prefabs/KenneyTower/ (TowerCrystals)
 
 
 ================================================================================

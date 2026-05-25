@@ -5,26 +5,20 @@ public class TDTowerBehaviorSubControl
 {
     public static TDTowerBehaviorSubControl api;
 
-    public void SetupSubControl(TowerType type)
-    {
-        TDTowerBehaviorModel.api.settings = TDFlyweightBulletFactoryModel.api.Setting;
-        TDTowerBehaviorModel.api.settings.SetPrefab(type);
-        TDFlyweightBulletFactoryModel.api.SetTowerType(type);
-    }
-    
+    // SetupSubControl removed — không còn global state cần setup trước khi bắn
+    // Pool được tạo lazy trong TDFlyweightBulletFactoryModel.GetPoolFor(type) khi bắn lần đầu
+
     public void Attack(Transform target, Transform spawnProjectile, TowerType type)
     {
-        TDBulletsView projectile = TDFlyweightBulletFactoryModel.Spawn(TDTowerBehaviorModel.api.settings);
-        if (projectile != null)
-        {
-            projectile.transform.position = spawnProjectile.position;
-            projectile.Damage = TDTowerBehaviorModel.api.GetDamage(type);
-                
-            Rigidbody rb = projectile.GetComponent<Rigidbody>();
-            if (rb != null)
-            {
-                rb.velocity = (target.position - projectile.transform.position).normalized * 20f;
-            }
-        }
+        // Spawn đúng bullet type — stateless, không phụ thuộc bất kỳ global field nào
+        TDBulletsView bullet = TDFlyweightBulletFactoryModel.Spawn(type);
+        if (bullet == null) return;
+
+        bullet.transform.position = spawnProjectile.position;
+        bullet.Damage = TDTowerBehaviorModel.api.GetDamage(type);
+
+        Rigidbody rb = bullet.GetComponent<Rigidbody>();
+        if (rb != null)
+            rb.velocity = (target.position - bullet.transform.position).normalized * 20f;
     }
 }

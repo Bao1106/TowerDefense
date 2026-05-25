@@ -1,14 +1,16 @@
-﻿using UnityEngine;
+﻿using TDEnums;
+using UnityEngine;
 
 public class TDBulletsView : MonoBehaviour
 {
-    public float Damage { get; set; }
-        
+    // Set bởi TDFlyweightBulletFactoryModel.Spawn() — dùng bởi ReturnToPool để trả đúng pool
+    public TowerType OwnerType { get; set; }
+    public float     Damage    { get; set; }
+
     private void OnTriggerEnter(Collider other)
     {
         if (other.TryGetComponent(out TDEnemyView enemy))
         {
-            //var enemyController = other.gameObject.GetComponent<TDEnemyView>();
             enemy.TakeDamage(Damage);
             TDFlyweightBulletFactoryModel.ReturnToPool(this);
         }

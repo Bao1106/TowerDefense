@@ -6,7 +6,7 @@ public class TDGridMainModel : IGridMainModel
 
     public static void Initialize(Vector3 mapSize, Vector3 planePosition)
     {
-        api ??= new TDGridMainModel(mapSize, planePosition);
+        api = new TDGridMainModel(mapSize, planePosition);
     }
 
     private TDGridMainModel(Vector3 mapSize, Vector3 planePosition)

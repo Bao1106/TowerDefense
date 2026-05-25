@@ -22,4 +22,11 @@
         MissileG03,
         Mortar
     }
+
+    public enum RangeType
+    {
+        Area,
+        HorizontalCone,
+        VerticalCone
+    }
 }

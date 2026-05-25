@@ -1,31 +1,23 @@
-﻿using System;
-using TDEnums;
-using UnityEngine;
+﻿using UnityEngine;
 using Random = UnityEngine.Random;
 
 public class TDTowerFactoryView : MonoBehaviour
+{
+    private void Start()
     {
-        private void Start()
-        {
-            RegistryTowerFactoryEvents();
-        }
-
-        private void RegistryTowerFactoryEvents()
-        {
-            TDTowerFactoryControl.api.onCreateTowerSuccess += OnCreateTowerSuccess;
-        }
-
-        private void OnDestroy()
-        {
-            TDTowerFactoryControl.api.onCreateTowerSuccess -= OnCreateTowerSuccess;
-        }
-
-        private void OnCreateTowerSuccess(TDTowerWeaponView tower)
-        {
-            float randomID = Random.Range(1000, 9999);
-            string key = $"{randomID} - {tower.gameObject.name}";
-            TDTowerBehaviorSubControl.api.SetupSubControl(tower.towerType);
-            
-            tower.Init(key);
-        }
+        TDTowerFactoryControl.api.onCreateTowerSuccess += OnCreateTowerSuccess;
     }
+
+    private void OnDestroy()
+    {
+        TDTowerFactoryControl.api.onCreateTowerSuccess -= OnCreateTowerSuccess;
+    }
+
+    private void OnCreateTowerSuccess(TDTowerWeaponView tower)
+    {
+        // SetupSubControl removed — không còn global state cần setup
+        // Pool tạo lazy trong TDFlyweightBulletFactoryModel khi tower bắn lần đầu
+        string key = $"{Random.Range(1000, 9999)} - {tower.gameObject.name}";
+        tower.Init(key);
+    }
+}

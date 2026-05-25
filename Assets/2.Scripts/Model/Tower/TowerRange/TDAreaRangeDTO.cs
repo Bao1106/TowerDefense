@@ -8,7 +8,9 @@ public class TDAreaRangeDTO : ITowerRangeDTO
     {
         m_Range = getRange;
     }
-        
+
+    public float DetectionRadius => m_Range;
+
     public bool IsInRange(Vector3 towerPosition, Vector3 enemyPosition, Quaternion towerRotation)
     {
         float distance = Vector3.Distance(towerPosition, enemyPosition);

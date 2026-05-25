@@ -8,7 +8,9 @@ public class TDHorizontalRangeDTO : ITowerRangeDTO
     {
         m_Range = getRange;
     }
-        
+
+    public float DetectionRadius => m_Range;
+
     public bool IsInRange(Vector3 towerPosition, Vector3 enemyPosition, Quaternion towerRotation)
     {
         Vector3 forward = towerRotation * Vector3.forward;

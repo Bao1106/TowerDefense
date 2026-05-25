@@ -7,36 +7,31 @@ using UnityEngine.Serialization;
 [Serializable]
 public class TowerData
 {
-    public TowerType type;
-    public GameObject prefab;
-    public int cost;
+    public TowerType  type;
+    [FormerlySerializedAs("prefab")]
+    public GameObject bulletPrefab;
+    public int        cost;
+    public float      damage;
+    public float      attackSpeed;
+    public RangeType  rangeType;
+    public int        rangeValue;
 }
-    
+
 [CreateAssetMenu(menuName = "Game Configs/Tower Bullet Config", fileName = "Tower Bullet Config", order = 1)]
 public class TDFlyweightTowerDataSettings : ScriptableObject
 {
     [FormerlySerializedAs("bullets")]
     [SerializeField] private List<TowerData> towers;
 
-    private GameObject m_Prefab;
-        
-    public void SetPrefab(TowerType type)
+    public TowerData GetData(TowerType type)
     {
-        m_Prefab = towers.Find(_ => _.type == type)?.prefab;
+        var data = towers.Find(t => t.type == type);
+        if (data == null)
+            Debug.LogError($"[TDFlyweightTowerDataSettings] No data found for TowerType.{type}");
+        return data;
     }
 
-    public int GetCost(TowerType type)
-    {
-        return towers.Find(_ => _.type == type).cost;
-    }
-        
-    public TDBulletsView Create()
-    {
-        TDBulletsView bullet = Instantiate(m_Prefab).GetComponent<TDBulletsView>();
-        return bullet;
-    }
-        
-    public void OnGet(TDBulletsView b) => b.gameObject.SetActive(true);
-    public void OnRelease(TDBulletsView b) => b.gameObject.SetActive(false);
-    public void OnDestroyObject(TDBulletsView b) => Destroy(b.gameObject);
+    public GameObject GetPrefab(TowerType type) => GetData(type)?.bulletPrefab;
+
+    public int GetCost(TowerType type) => GetData(type)?.cost ?? 0;
 }

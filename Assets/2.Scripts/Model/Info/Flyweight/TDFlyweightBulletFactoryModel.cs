@@ -1,60 +1,75 @@
 ﻿using System.Collections.Generic;
 using TDEnums;
+using UnityEngine;
 using UnityEngine.Pool;
+using Object = UnityEngine.Object;
 
 public class TDFlyweightBulletFactoryModel
 {
     private static TDFlyweightBulletFactoryModel m_api;
     public static TDFlyweightBulletFactoryModel api
-    {
-        get
-        {
-            return m_api ??= new TDFlyweightBulletFactoryModel();
-        }
-    }
-    
+        => m_api ??= new TDFlyweightBulletFactoryModel();
+
     private TDFlyweightTowerDataSettings m_Setting;
     private readonly bool m_CollectionCheck = true;
-    private readonly int m_MaxCapacity = 100;
-    private int m_DefaultCapacity;
-        
-    private readonly Dictionary<TowerType, IObjectPool<TDBulletsView>> m_Pools = new Dictionary<TowerType, IObjectPool<TDBulletsView>>();
-    private TowerType m_TowerType;
+    private readonly int  m_DefaultCapacity = 10;
+    private readonly int  m_MaxCapacity     = 100;
+
+    // 1 pool per TowerType — lazy-created khi bắn lần đầu
+    // Không có global m_TowerType state — pool lookup hoàn toàn stateless
+    private readonly Dictionary<TowerType, IObjectPool<TDBulletsView>> m_Pools
+        = new Dictionary<TowerType, IObjectPool<TDBulletsView>>();
 
     public TDFlyweightTowerDataSettings Setting
-    {
-        get
-        {
-            if (m_Setting != null)
-                return m_Setting;
-                    
-            return m_Setting = RepResourceObject.GetResource<TDFlyweightTowerDataSettings>(TDConstant.CONFIG_TOWER);
-        }
-    }
-        
-    public void SetTowerType(TowerType type) => m_TowerType = type;
-        
-    public static TDBulletsView Spawn(TDFlyweightTowerDataSettings s)
-        => api.GetPoolFor(s).Get();
+        => m_Setting ??= RepResourceObject.GetResource<TDFlyweightTowerDataSettings>(TDConstant.CONFIG_TOWER);
 
-    public static void ReturnToPool(TDBulletsView s)
-        => api.GetPoolFor(api.m_Setting)?.Release(s);
-        
-    private IObjectPool<TDBulletsView> GetPoolFor(TDFlyweightTowerDataSettings settings)
+    // ── Public API ────────────────────────────────────────────────────────────
+
+    // Spawn bullet đúng type, ghi OwnerType để ReturnToPool biết trả về pool nào
+    public static TDBulletsView Spawn(TowerType type)
     {
-        if (m_Pools.TryGetValue(m_TowerType, out var pool)) 
+        var pool = api.GetPoolFor(type);
+        if (pool == null) return null;
+
+        TDBulletsView bullet = pool.Get();
+        bullet.OwnerType = type;
+        return bullet;
+    }
+
+    // Return về đúng pool dựa vào OwnerType đã ghi lúc Spawn
+    public static void ReturnToPool(TDBulletsView bullet)
+    {
+        if (bullet == null) return;
+        api.GetPoolFor(bullet.OwnerType)?.Release(bullet);
+    }
+
+    // ── Internal ──────────────────────────────────────────────────────────────
+
+    // Lazy-create pool cho type — closure captures đúng prefab, không bị cross-contaminate
+    private IObjectPool<TDBulletsView> GetPoolFor(TowerType type)
+    {
+        if (m_Pools.TryGetValue(type, out var pool))
             return pool;
 
+        GameObject prefab = Setting.GetPrefab(type);
+        if (prefab == null)
+        {
+            Debug.LogError($"[TDFlyweightBulletFactoryModel] Cannot create pool: no prefab for TowerType.{type}");
+            return null;
+        }
+
+        // Closure capture 'prefab' tại thời điểm tạo pool → đúng prefab cho type này mãi mãi
         pool = new ObjectPool<TDBulletsView>(
-            settings.Create,
-            settings.OnGet,
-            settings.OnRelease,
-            settings.OnDestroyObject,
-            m_CollectionCheck,
-            m_DefaultCapacity,
-            m_MaxCapacity);
-        m_Pools.Add(m_TowerType, pool);
-            
+            createFunc:      () => Object.Instantiate(prefab).GetComponent<TDBulletsView>(),
+            actionOnGet:     b  => b.gameObject.SetActive(true),
+            actionOnRelease: b  => b.gameObject.SetActive(false),
+            actionOnDestroy: b  => Object.Destroy(b.gameObject),
+            collectionCheck: m_CollectionCheck,
+            defaultCapacity: m_DefaultCapacity,
+            maxSize:         m_MaxCapacity
+        );
+
+        m_Pools.Add(type, pool);
         return pool;
     }
 }

@@ -34,11 +34,21 @@ public class TDEnemyPathView : MonoBehaviour
     }
 
     // Visualize tất cả paths cùng lúc (clear 1 lần, tạo tất cả)
+    // Bỏ qua cell đầu (GateStart) và cell cuối (GateEnd) — 2 ô đó có gate prefab,
+    // không cần path tile phủ bên dưới.
     public void VisualizeAllPaths(List<List<IGridCellDTO>> allPaths)
     {
         ClearPreviousPath();
         foreach (var path in allPaths)
-            TDEnemyPathControl.api.CreatePath(path, m_PathPrefab);
+        {
+            if (path.Count <= 2)
+            {
+                TDEnemyPathControl.api.CreatePath(path, m_PathPrefab);
+                continue;
+            }
+            var trimmed = path.GetRange(1, path.Count - 2);
+            TDEnemyPathControl.api.CreatePath(trimmed, m_PathPrefab);
+        }
     }
 
     private void ClearPreviousPath()

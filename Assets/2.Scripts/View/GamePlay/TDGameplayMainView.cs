@@ -8,6 +8,7 @@ public class TDGameplayMainView : MonoBehaviour
 {
     [SerializeField] private TextMeshProUGUI m_LifeText;
     [SerializeField] private Image           m_ScreenFlash;
+    [SerializeField] private GameObject      m_PausePanel;
 
     private TDEnemyPathMainView m_TDEnemyPathMainView;
     private GameObject m_MapVisualize;
@@ -20,6 +21,9 @@ public class TDGameplayMainView : MonoBehaviour
         TDPlayerLifeControl.api.onLifeChanged += OnLifeChanged;
         TDPlayerLifeControl.api.onGameOver    += OnGameOver;
 
+        TDPauseControl.api.onPauseChanged += OnPauseChanged;
+        if (m_PausePanel != null) m_PausePanel.SetActive(false);
+
         InitGameplay();
     }
 
@@ -27,6 +31,22 @@ public class TDGameplayMainView : MonoBehaviour
     {
         TDPlayerLifeControl.api.onLifeChanged -= OnLifeChanged;
         TDPlayerLifeControl.api.onGameOver    -= OnGameOver;
+        TDPauseControl.api.onPauseChanged     -= OnPauseChanged;
+    }
+
+    private void OnPauseChanged(bool isPaused)
+    {
+        if (m_PausePanel != null) m_PausePanel.SetActive(isPaused);
+    }
+
+    public void OnPauseButtonClicked()
+    {
+        TDPauseControl.api.Toggle();
+    }
+
+    public void OnResumeButtonClicked()
+    {
+        TDPauseControl.api.Resume();
     }
 
     private void OnLifeChanged(int lives)

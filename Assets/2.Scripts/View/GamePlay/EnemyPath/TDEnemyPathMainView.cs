@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading;
 using Services.DependencyInjection;
 using UnityEngine;
 using Object = UnityEngine.Object;
@@ -13,6 +14,7 @@ public class TDEnemyPathMainView : MonoBehaviour
     private Vector2Int m_StartPoint, m_EndPoint;
     private Transform m_SpawnPos;
     private TDGateView m_GateStartView;
+    private CancellationTokenSource m_WaveCts;
 
     private List<List<IGridCellDTO>> m_AllPaths = new List<List<IGridCellDTO>>();
     private List<TDEnemyView> m_EnemiesView = new List<TDEnemyView>();
@@ -30,6 +32,7 @@ public class TDEnemyPathMainView : MonoBehaviour
         m_Slime         = RepResourceObject.GetResource<GameObject>(TDConstant.PREFAB_SLIME).GetComponent<TDEnemyView>();
 
         m_GridDTO = initGridDTO;
+        TDEnemyPathMainControl.api.InitEnemyPool(m_Slime, transform);
         ImplementPath();
     }
 
@@ -65,6 +68,7 @@ public class TDEnemyPathMainView : MonoBehaviour
             Vector3 startWorld = grid[m_StartPoint.x, m_StartPoint.y];
             var go = Object.Instantiate(m_GateStartPrefab, startWorld, Quaternion.identity, transform);
             m_GateStartView = go.GetComponent<TDGateView>();
+            TDGridMainModel.api.SetOccupiedCell(startWorld);
         }
         else
             Debug.LogWarning("<color=orange>TDEnemyPathMainView: m_GateStartPrefab not assigned</color>");
@@ -73,6 +77,7 @@ public class TDEnemyPathMainView : MonoBehaviour
         {
             Vector3 endWorld = grid[m_EndPoint.x, m_EndPoint.y];
             Object.Instantiate(m_GateEndPrefab, endWorld, Quaternion.identity, transform);
+            TDGridMainModel.api.SetOccupiedCell(endWorld);
         }
         else
             Debug.LogWarning("<color=orange>TDEnemyPathMainView: m_GateEndPrefab not assigned</color>");
@@ -89,6 +94,9 @@ public class TDEnemyPathMainView : MonoBehaviour
 
     private void OnDestroy()
     {
+        m_WaveCts?.Cancel();
+        m_WaveCts?.Dispose();
+
         TDEnemyPathMainControl.api.onGetEnemyPos    -= OnGetEnemyPos;
         TDEnemyPathMainControl.api.onGetAllPaths    -= OnGetAllPaths;
         TDEnemyPathMainControl.api.onGetEnemies     -= OnGetEnemies;
@@ -141,7 +149,8 @@ public class TDEnemyPathMainView : MonoBehaviour
         m_EnemyPathView.VisualizeAllPaths(m_AllPaths);
 
         // Start wave loop — mỗi wave random pick 1 corridor từ m_AllPaths
-        TDEnemyPathMainControl.api.StartWaveLoop(m_Slime, m_SpawnPos, m_AllPaths);
+        m_WaveCts = new CancellationTokenSource();
+        TDEnemyPathMainControl.api.StartWaveLoop(m_SpawnPos, m_AllPaths, m_WaveCts.Token);
     }
 
     private void OnGetEnemyPos(Vector2Int startPoint, Vector2Int endPoint)

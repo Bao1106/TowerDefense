@@ -8,12 +8,16 @@ public class TDVerticalRangeDTO : ITowerRangeDTO
     {
         m_Range = getRange;
     }
-        
+
+    public float DetectionRadius => m_Range;
+
     public bool IsInRange(Vector3 towerPosition, Vector3 enemyPosition, Quaternion towerRotation)
     {
-        Vector3 forward = towerRotation * Vector3.forward;
+        // Tấn công theo trục NGANG (vuông góc với hướng nhìn) — bao phủ cả trái lẫn phải
+        // Catapult đặt ở cạnh đường → bắn ngang qua địch đang đi thẳng
+        Vector3 right   = towerRotation * Vector3.right;
         Vector3 toEnemy = enemyPosition - towerPosition;
-        float distance = Vector3.Distance(towerPosition, enemyPosition);
-        return Vector3.Dot(forward, toEnemy.normalized) > 0.9f && distance <= m_Range;
+        float distance  = Vector3.Distance(towerPosition, enemyPosition);
+        return Mathf.Abs(Vector3.Dot(right, toEnemy.normalized)) > 0.7f && distance <= m_Range;
     }
 }
