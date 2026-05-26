@@ -18,33 +18,59 @@ MonoBehaviour:
     cost: 5
     damage: 5
     attackSpeed: 3
-    rangeType: 1
-    rangeValue: 3
+    rangeOffsets:
+    - {x: 1, y: 0}
+    - {x: 2, y: 0}
+    - {x: 3, y: 0}
   - type: 1
     bulletPrefab: {fileID: 1833988619539146, guid: 9318a11cd670f3d4f924ff92fe7b0c77, type: 3}
     cost: 10
     damage: 20
     attackSpeed: 1
-    rangeType: 2
-    rangeValue: 2
+    rangeOffsets:
+    - {x: 1, y: -1}
+    - {x: 1, y: 0}
+    - {x: 1, y: 1}
+    - {x: 2, y: -1}
+    - {x: 2, y: 0}
+    - {x: 2, y: 1}
   - type: 2
     bulletPrefab: {fileID: 1552339098034316, guid: c13874774436a6a4c85449cab6e14fa4, type: 3}
     cost: 15
     damage: 10
     attackSpeed: 1
-    rangeType: 1
-    rangeValue: 5
+    rangeOffsets:
+    - {x: 1, y: 0}
+    - {x: 2, y: 0}
+    - {x: 3, y: 0}
+    - {x: 4, y: 0}
   - type: 3
     bulletPrefab: {fileID: 1162392375372998, guid: 3e5b0980d9cc7a94bbb93263b9c6228d, type: 3}
     cost: 15
     damage: 20
     attackSpeed: 1
-    rangeType: 0
-    rangeValue: 6
+    rangeOffsets:
+    - {x: 1, y: -1}
+    - {x: 1, y: 0}
+    - {x: 1, y: 1}
+    - {x: 2, y: -2}
+    - {x: 2, y: -1}
+    - {x: 2, y: 0}
+    - {x: 2, y: 1}
+    - {x: 2, y: 2}
+    - {x: 3, y: -1}
+    - {x: 3, y: 0}
+    - {x: 3, y: 1}
   - type: 4
     bulletPrefab: {fileID: 1162392375372998, guid: 3e5b0980d9cc7a94bbb93263b9c6228d, type: 3}
     cost: 20
     damage: 15
     attackSpeed: 2
-    rangeType: 1
-    rangeValue: 3
+    rangeOffsets:
+    - {x: 2, y: -1}
+    - {x: 2, y: 0}
+    - {x: 2, y: 1}
+    - {x: 3, y: -1}
+    - {x: 3, y: 0}
+    - {x: 3, y: 1}
+    - {x: 4, y: 0}

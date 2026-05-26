@@ -9,4 +9,8 @@ public interface IGridMainModel
     int width { get; }
     int height { get; }
     float cellSize { get; }
+
+    Vector3 CellToWorld(Vector2Int cell);
+    Vector2Int WorldToCell(Vector3 worldPosition);
+    bool IsInBounds(Vector2Int cell);
 }

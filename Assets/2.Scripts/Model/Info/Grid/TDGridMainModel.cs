@@ -82,23 +82,28 @@ public class TDGridMainModel : IGridMainModel
     {
         int x = Mathf.RoundToInt((position.x - m_OffsetX) / cellSize);
         int z = Mathf.RoundToInt((position.z - m_OffsetZ) / cellSize);
-        
+
         if (x < 0 || x >= width || z < 0 || z >= height)
-        {
             return false;
-        }
-        
+
         if (m_OccupiedCell[x, z])
-        {
             return false;
-        }
-        
-        /*if (grid[x, z].IsPath)
-        {
-            return false;
-        }
-        */
 
         return true;
-    } 
+    }
+
+    public Vector3 CellToWorld(Vector2Int cell)
+        => m_Grid[cell.x, cell.y];
+
+    public Vector2Int WorldToCell(Vector3 worldPosition)
+    {
+        int x = Mathf.RoundToInt((worldPosition.x - m_OffsetX) / cellSize);
+        int z = Mathf.RoundToInt((worldPosition.z - m_OffsetZ) / cellSize);
+        return new Vector2Int(
+            Mathf.Clamp(x, 0, width - 1),
+            Mathf.Clamp(z, 0, height - 1));
+    }
+
+    public bool IsInBounds(Vector2Int cell)
+        => cell.x >= 0 && cell.x < width && cell.y >= 0 && cell.y < height;
 }

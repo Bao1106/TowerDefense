@@ -1,6 +1,6 @@
 ================================================================================
   TOWER DEFENSE — GAME DESIGN, TECHNICAL REFERENCE & DEVELOPMENT ROADMAP
-  Last updated: 2026-05-25  (session 10 update)
+  Last updated: 2026-05-26  (session 11 — Phase 10 Offset Refactor + Codebase Logic Sync)
 ================================================================================
 
 
@@ -83,12 +83,18 @@ File: Assets/3.Scenes/DTGamePlay.unity
   Events  : C# Action delegates
 
   ── Model ───────────────────────────────────────────────────────────────────
-  TDConstant.cs              ← all config values (grid, path zones, wave timing, prefabs, lives)
-  TDGridMainModel.cs         ← world-space grid positions, snap, occupancy
-  TDGridDTO.cs               ← logical width×height IGridCellDTO[,] grid
-  TDGridCellDTO.cs           ← cell data: position(x,y), isWalkable, CellType
-  TDaStarPathModel.cs        ← heuristic (Manhattan: dx+dy), GetNeighbors
-  TDFlyweightBulletFactoryModel.cs ← tower cost/config data (Flyweight pattern)
+  TDConstant.cs                    ← all config values (grid, path zones, wave timing, prefabs, lives)
+  TDGridMainModel.cs               ← world-space grid positions, snap, occupancy
+                                      + CellToWorld / WorldToCell / IsInBounds [Phase 10]
+  TDGridDTO.cs                     ← logical width×height IGridCellDTO[,] grid
+  TDGridCellDTO.cs                 ← cell data: position(x,y), isWalkable, CellType
+  TDaStarPathModel.cs              ← heuristic (Manhattan: dx+dy), GetNeighbors
+  TDFlyweightBulletFactoryModel.cs ← lazy pool per TowerType (Flyweight), bullet Spawn/Return
+  TDFlyweightTowerDataSettings.cs  ← ScriptableObject; TowerData: bulletPrefab, cost, damage,
+                                      attackSpeed, rangeOffsets (Vector2Int[]) [Phase 6.2 + 10]
+  TDTowerBehaviorModel.cs          ← reads damage/attackSpeed/range dari SO; GetTowerRange → TDOffsetRangeDTO
+  TDRangeDTO.cs                    ← abstract base; virtual GetCellsInRange (bounding-box) [Phase 10 NEW]
+  TDOffsetRangeDTO.cs              ← Arknights-style explicit cell offsets, O(n), 4-dir auto-rotate [Phase 10 NEW]
 
   Platform: Android Mobile (Legacy Input System — activeInputHandler=0)
              → không dùng com.unity.inputsystem package
@@ -96,10 +102,12 @@ File: Assets/3.Scenes/DTGamePlay.unity
 
   ── Control ─────────────────────────────────────────────────────────────────
   TDGameplayMainControl.cs   ← thin orchestrator
+  TDPauseControl.cs          ← Toggle/Pause/Resume + Time.timeScale; onPauseChanged [Phase 8.5 NEW]
   TDPlayerLifeControl.cs     ← LoseLife(), onLifeChanged, onGameOver [Phase 4.5]
   TDEnemyPathMainControl.cs  ← InitEnemyPath, GenerateAllPaths, ComputeValidTowerCells,
+                                InitEnemyPool (ObjectPool), ReturnEnemy, PauseAwareDelay,
                                 StartWaveLoop, SpawnWave, onValidTowerCellsReady,
-                                onWaveStart events [onWaveStart added Phase 4.5]
+                                onWaveStart events [Phase 4.5 + 8.5]
   TDaStarPathControl.cs      ← ComputePath (A*), BuildDefinedPath (straight segments)
   TDPathGeneratorControl.cs  ← random waypoint generator per Y-zone
   TDObstacleControl.cs       ← place obstacles on non-path cells with spacing
@@ -123,7 +131,9 @@ File: Assets/3.Scenes/DTGamePlay.unity
                                [Phase 4.5: m_HasReachedEnd guard]
                                [Phase 6.1: PathProgress property, Register/Unregister registry]
   TDTowerMainView.cs         ← 5 tower holders, input handler, green highlight tiles
-  TDTowerWeaponView.cs       ← placed tower behavior: tick scan + priority targeting [Phase 6.1]
+  TDTowerWeaponView.cs       ← placed tower behavior: tick scan (0.2s) + PathProgress priority
+                               IsInRange per frame (clears target if out of range) [Phase 6.1]
+                               Range nguồn từ TDOffsetRangeDTO [Phase 10]
   TDTowerHolderView.cs       ← HUD slot (button + cost)
   TDGateView.cs              ← GateStart MonoBehaviour: PlaySpawnEffect() per wave [Phase 4.5]
   TDGateEndView.cs           ← GateEnd MonoBehaviour: trigger visual + life text [Phase 4.5]
@@ -150,6 +160,10 @@ File: Assets/3.Scenes/DTGamePlay.unity
   │         ├─ CreateGrid()  → grid 21×12                                 │
   │         └─ TDGameplayMainControl.InitEnemyPath(view, gridDTO)        │
   │                                                                       │
+  │  TDEnemyPathMainView.Initialize()                                     │
+  │    └─ TDEnemyPathMainControl.api.InitEnemyPool(m_Slime, transform)   │
+  │         ObjectPool cap=20 maxSize=50; createFunc: Instantiate+scale   │
+  │                                                                       │
   │  TDEnemyPathMainView.ImplementPath()  [async]                         │
   │    ├─ await createGridCompletion                                      │
   │    ├─ RegistryEvents()  (incl. onWaveStart → PlaySpawnEffect)         │
@@ -168,23 +182,26 @@ File: Assets/3.Scenes/DTGamePlay.unity
   │    for waveIdx in 0..CONFIG_MAX_WAVES (10):                           │
   │      pathIdx = Random.Range(0, allPaths.Count)                        │
   │      onWaveStart?.Invoke(waveIdx)  → GateView.PlaySpawnEffect() [4.5]│
-  │      await SpawnWave(prefab, spawn, wavePath, waveIdx)                │
-  │      await Task.Delay(CONFIG_WAVE_INTERVAL_MS = 10000)               │
+  │      await SpawnWave(spawn, wavePath, waveIdx, ct)                    │
+  │      await PauseAwareDelay(CONFIG_WAVE_INTERVAL_MS=10000, ct) [8.5]  │
   │                                                                       │
   │  SpawnWave:                                                           │
   │    for i in 0..CONFIG_ENEMIES_NUMBER (5):                             │
-  │      enemy = Instantiate(prefab, spawnPos)                            │
-  │      enemy.transform.localScale = Vector3.one * 1.5f                 │
-  │      enemy.Initialize(key) → Subscribe onGetEnemyPathPos             │
+  │      enemy = m_EnemyPool.Get()   ← Object Pool [Phase 8.5]           │
+  │      enemy.position = spawnPos; rotation = identity                   │
+  │      key = "w{waveIdx}-e{i}-{instanceId}"                            │
+  │      enemy.Initialize(key) → reset state + Subscribe + Register      │
   │      enemy.SetPath(wavePath)                                          │
-  │      await Task.Delay(CONFIG_ENEMY_SPAWN_DELAY_MS = 2000)            │
+  │      await PauseAwareDelay(CONFIG_ENEMY_SPAWN_DELAY_MS=2000, ct)     │
   │                                                                       │
   └───────────────────────────────────────────────────────────────────────┘
 
   ── Key design decisions (locked) ─────────────────────────────────────
     - Maze cố định: 3 corridors gen 1 lần lúc start
     - Enemy là WAYPOINT FOLLOWER (không A* runtime)
-    - Khi enemy hết path → LoseLife() + Destroy (TDEnemyView)
+    - Khi enemy hết path → LoseLife() + ReturnToPool() (không Destroy) [Phase 8.5]
+    - Khi enemy chết (TakeDamage ≤ 0) → ReturnToPool() (không Destroy) [Phase 8.5]
+    - PauseAwareDelay: Task.Yield() loop cộng Time.deltaTime → tự pause khi timeScale=0 [Phase 8.5]
     - GateEnd trigger chỉ play visual effect (safety net, không LoseLife lại)
 
 
@@ -236,8 +253,9 @@ File: Assets/3.Scenes/DTGamePlay.unity
 
   ── 2-Phase Arknights Placement ────────────────────────────────────────────
   Phase 1: Drag ngón tay đến cell → ghost snap, m_IsDirectionSelected=false
-  Phase 2: Swipe từ center vượt m_DirectionThreshold(1.0m) → direction chọn
-  Đổi sang cell mới → reset về Phase 1
+  Phase 2: Swipe từ cell center vượt k_DirectionThresholdRatio×cellSize (0.35×2=0.7u) → direction chọn
+           Ghost đóng băng tại ô hiện tại; direction tính từ frozen cell center
+  Đổi sang cell mới → reset về Phase 1 (chỉ áp dụng trên mobile)
 
   MOBILE: TouchPhase.Ended + m_IsDirectionSelected=true → place
   DESKTOP: LMB place (không cần direction), E/Q rotate, RMB cancel
@@ -367,11 +385,21 @@ File: Assets/3.Scenes/DTGamePlay.unity
 ════════════════════════════════════════════════════════════════════════════════
 
   State fields:
-    m_PathsPosition   : List<Vector3>  (world positions của path)
-    m_CurrentPathIndex: int
-    m_HasReachedEnd   : bool           ← guard tránh LoseLife nhiều lần [4.5]
-    m_EnemyHealth     : CONFIG_ENEMY_HEALTH = 300f
-    m_MoveSpeed       : CONFIG_ENEMY_MOVE_SPEED = 3f
+    m_PathsPosition    : List<Vector3>  (world positions của path)
+    m_CurrentPathIndex : int
+    m_HasReachedEnd    : bool           ← guard tránh LoseLife nhiều lần [4.5]
+    m_HasBeenReturned  : bool           ← guard tránh double ReturnToPool [8.5]
+    m_EnemyHealth      : CONFIG_ENEMY_HEALTH = 300f
+    m_MoveSpeed        : CONFIG_ENEMY_MOVE_SPEED = 3f
+    m_EnemyKey         : string         ← unique "w{wave}-e{i}-{instanceId}"
+
+  PathProgress: m_CurrentPathIndex / m_PathsPosition.Count (0→1)
+    → Tower dùng để ưu tiên enemy gần GateEnd nhất
+
+  Initialize(key): reset tất cả state, Subscribe onGetEnemyPathPos, Registry.Register
+  ReturnToPool():  guard m_HasBeenReturned → Unsubscribe → Unregister → Pool.Release [8.5]
+  TakeDamage(dmg): health -= dmg; health ≤ 0 → ReturnToPool() [không Destroy]
+  OnDestroy():     chỉ cleanup nếu !m_HasBeenReturned (scene unload safety)
 
   Update():
     guard: m_PathsPosition==null || Count==0 || m_HasReachedEnd → return
@@ -382,7 +410,7 @@ File: Assets/3.Scenes/DTGamePlay.unity
     else:
       m_HasReachedEnd = true
       TDPlayerLifeControl.api.LoseLife()
-      Destroy(gameObject)
+      ReturnToPool()   ← [Phase 8.5: không Destroy — pool release]
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -678,25 +706,28 @@ File: Assets/3.Scenes/DTGamePlay.unity
           Thêm tower mới chỉ cần 1 enum line + 1 SO entry, không đụng code.
 
     ✅ RangeType enum thêm vào Enums.cs: Area | HorizontalCone | VerticalCone
+       ⚠️ REMOVED session 11 (Phase 10) — replaced bởi rangeOffsets approach
 
-    ✅ TowerData struct mở rộng (TDFlyweightTowerDataSettings.cs):
+    ✅ TowerData struct (TDFlyweightTowerDataSettings.cs) — session 8:
        + damage       : float
        + attackSpeed  : float
-       + rangeType    : RangeType
-       + rangeValue   : int
+       + rangeType    : RangeType  ← REMOVED session 11
+       + rangeValue   : int        ← REMOVED session 11
+       → session 11: REPLACED bởi rangeOffsets : Vector2Int[]
        GetData(type) pure lookup; GetPrefab/GetCost delegate sang GetData
 
     ✅ TDTowerBehaviorModel đọc từ SO (bỏ 3 switch hardcode):
        GetDamage()      → Setting.GetData(type).damage
        GetAttackSpeed() → Setting.GetData(type).attackSpeed
-       GetTowerRange()  → rangeType switch → new [Area/Horizontal/Vertical]RangeDTO(rangeValue)
+       GetTowerRange()  [session 8]  → rangeType switch → new [Area/Horizontal/Vertical]RangeDTO(rangeValue)
+       GetTowerRange()  [session 11] → new TDOffsetRangeDTO(data?.rangeOffsets)  ← 1 dòng
 
-    ✅ SO Resources/Configs/Tower Bullet Config.asset filled:
-       Cannon:    damage=5,  speed=3, HorizontalCone(3)
-       Catapult:  damage=20, speed=1, VerticalCone(2)
-       MissileG02:damage=10, speed=1, HorizontalCone(5)
-       MissileG03:damage=20, speed=1, Area(6)
-       Mortar:    damage=15, speed=2, HorizontalCone(3)
+    ✅ SO Resources/Configs/Tower Bullet Config.asset filled (session 8 values, session 11 updated):
+       Cannon:    damage=5,  speed=3 | rangeOffsets: (1,0)(2,0)(3,0)
+       Catapult:  damage=20, speed=1 | rangeOffsets: (1,-1)(1,0)(1,1)(2,-1)(2,0)(2,1)
+       MissileG02:damage=10, speed=1 | rangeOffsets: (1,0)(2,0)(3,0)(4,0)
+       MissileG03:damage=20, speed=1 | rangeOffsets: (1,-1..1)(2,-2..2)(3,-1..1) — 11 cells
+       Mortar:    damage=15, speed=2 | rangeOffsets: (2,-1..1)(3,-1..1)(4,0) — 7 cells
 
     ✅ SO duplicate xóa: Assets/2.Scripts/Model/Config/SO/Tower Bullet Config.asset
        DTLoadFirst.unity GUID updated → trỏ đúng Resources/Configs/ file
@@ -754,9 +785,88 @@ File: Assets/3.Scenes/DTGamePlay.unity
   ─────────────────────────────────────────────────────────────────────────────
 
   ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 10 — Grid-cell Range + Offset Refactor (Session 11) [✅ DONE]    ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+
+  ── Part A: Grid Cell Helpers ────────────────────────────────────────────────
+    ✅ IGridMainModel + TDGridMainModel: 3 method mới
+       CellToWorld(Vector2Int)  → m_Grid[cell.x, cell.y]
+       WorldToCell(Vector3)     → RoundToInt((world - offset) / cellSize), clamped
+       IsInBounds(Vector2Int)   → bounds check không clamp
+
+    ✅ ITowerRangeDTO: thêm GetCellsInRange(Vector2Int, Quaternion) → List<Vector2Int>
+
+    ✅ TDRangeDTO.cs (abstract base class):
+       GetCellsInRange virtual — default impl dùng bounding box scan + IsInRange
+       searchRadius = CeilToInt(DetectionRadius / cellSize)
+
+  ── Part B: Offset-based Range (Arknights style) ─────────────────────────────
+    Lý do: geometric DTOs (dot product / radius) không mô tả được range pattern
+    phức tạp như Arknights. Thay bằng explicit cell offsets.
+
+    ✅ TDOffsetRangeDTO.cs (NEW):
+       Constructor: TDOffsetRangeDTO(Vector2Int[] offsets)
+       Offsets định nghĩa khi tower facing +X (Y=90°) — x=forward, y=right-of-facing
+       DetectionRadius: max(offset.magnitude) × cellSize (cached)
+       IsInRange: WorldToCell(enemy) → check cell trong rotated offsets — O(n), no alloc
+       GetCellsInRange: rotate offsets → filter IsInBounds → return list
+       RotateOffset: 4 hướng cardinal:
+         Y=  0° (facing +Z): (dx,dy) → ( dy,  dx)
+         Y= 90° (facing +X): (dx,dy) → ( dx,  dy)  ← definition space
+         Y=180° (facing -Z): (dx,dy) → (-dy, -dx)
+         Y=270° (facing -X): (dx,dy) → (-dx, -dy)
+
+    ✅ TDRangeDTO.GetCellsInRange → virtual (để TDOffsetRangeDTO override hiệu quả hơn)
+
+    ✅ TDFlyweightTowerDataSettings — TowerData:
+       XÓA: RangeType rangeType, int rangeValue
+       THÊM: Vector2Int[] rangeOffsets
+
+    ✅ TDTowerBehaviorModel.GetTowerRange():
+       return new TDOffsetRangeDTO(data?.rangeOffsets)  ← 1 dòng, không switch
+
+    ✅ Enums.cs: XÓA RangeType enum (Area/HorizontalCone/VerticalCone)
+
+    ✅ DELETED: TDAreaRangeDTO.cs, TDHorizontalRangeDTO.cs, TDVerticalRangeDTO.cs
+
+  ── Part C: SO Range Patterns ────────────────────────────────────────────────
+    rangeOffsets set trong Tower Bullet Config.asset (offset = cells, facing +X):
+
+    Cannon    (3 ô thẳng):      (1,0)(2,0)(3,0)
+    Catapult  (2×3 wide area):  (1,-1)(1,0)(1,1)(2,-1)(2,0)(2,1)
+    MissileG02 (4 ô thẳng):    (1,0)(2,0)(3,0)(4,0)
+    MissileG03 (diamond area):  (1,-1)(1,0)(1,1)
+                                (2,-2)(2,-1)(2,0)(2,1)(2,2)
+                                (3,-1)(3,0)(3,1)
+    Mortar    (skip 1, area):   (2,-1)(2,0)(2,1)(3,-1)(3,0)(3,1)(4,0)
+
+    → Thêm tower mới: chỉ cần 1 enum line + 1 SO entry + vẽ offsets trong Inspector
+
+  ── Part D: Custom Inspector Grid Editor ─────────────────────────────────────
+    ✅ TowerDataDrawer.cs (Assets/2.Scripts/Editor/) — CustomPropertyDrawer cho TowerData
+       Hiển thị lưới 8×9 click-to-toggle trong Inspector (x: -1→6, y: -4→4)
+       Tower (0,0) = màu xanh dương, không toggle
+       Ô active = màu xanh lá, ô inactive = tối với tọa độ nhỏ làm reference
+       Click ô → toggle rangeOffsets array tự động — không cần edit số tay
+
+  ── Pattern usage (Phase 7 area damage) ──────────────────────────────────────
+    var towerCell = TDGridMainModel.api.WorldToCell(bulletHitPos);
+    var cells = towerRange.GetCellsInRange(towerCell, towerRotation);
+    // → TakeDamage tất cả enemy có enemyCell nằm trong cells list
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
   ║  PHASE 7 — Ammo + Combat                                [TODO]            ║
   ╚══════════════════════════════════════════════════════════════════════════╝
-    AmmoCannonball/Arrow/Boulder/Bullet/Beam → pool + MoveTowards + TakeDamage
+
+  Core combat pipeline đã có sẵn từ Phase 6.1 (pool + spawn + TakeDamage).
+  Việc còn lại của Phase 7:
+    1. Area damage cho MissileG03 — nổ damage tất cả enemy trong range pattern
+       (cần Phase 10 xong trước để dùng grid-cell range, tránh viết lại 2 lần)
+    2. Wiring đúng ammo prefab per tower type trong SO Inspector
+       KenneyAmmo: AmmoArrow / AmmoBoulder / AmmoBullet / AmmoBeam
+    3. Bullet timeout / max distance — bullet bay ra ngoài map không return pool
 
   ─────────────────────────────────────────────────────────────────────────────
 
@@ -931,9 +1041,10 @@ File: Assets/3.Scenes/DTGamePlay.unity
   ✅ Phase 4.6 (Gate Visual Redesign)   ── DONE (session 6)
   ✅ Phase 6.1 (Tower Attack Redesign)  ── DONE (session 7)
      │   Pool per type, Registry+tick detection, PathProgress priority
-  ✅ Phase 6.2 (Tower Config SO Refactor) ── DONE (session 8)
-     │   damage/attackSpeed/rangeType/rangeValue → SO; bỏ hardcode switch
+  ✅ Phase 6.2 (Tower Config SO Refactor) ── DONE (session 8, updated session 11)
+     │   damage/attackSpeed → SO; bỏ hardcode switch
      │   TDVerticalRangeDTO fixed; SO duplicate cleaned; wave CTS added
+     │   ⚠️  Session 11: rangeType/rangeValue REMOVED → replaced by rangeOffsets (Vector2Int[])
      │
   ⬜ Phase 5   (Multi-start)            ── cần Phase 3+4 DONE ✓
      │
@@ -943,7 +1054,20 @@ File: Assets/3.Scenes/DTGamePlay.unity
      │   Attack system: DONE (Phase 6.1) ✓
      │   Config SO: DONE (Phase 6.2) ✓
      │
-  ⬜ Phase 7   (Ammo + Combat)          ── cần Phase 6.1 DONE ✓
+  ✅ Phase 10  (Grid-cell Range Refactor) ── DONE (session 11)
+     │   Part 1: CellToWorld / WorldToCell / IsInBounds added to TDGridMainModel
+     │   Part 2: TDOffsetRangeDTO (Arknights-style explicit cell offsets, auto-rotate 4 dirs)
+     │           TDAreaRangeDTO / TDHorizontalRangeDTO / TDVerticalRangeDTO → DELETED
+     │           RangeType enum → DELETED; TDRangeDTO abstract base (virtual GetCellsInRange)
+     │   Part 3: SO rangeOffsets configured for all 5 tower types
+     │   Part 4: TowerDataDrawer custom Inspector — click-to-toggle 8×9 grid (Editor only)
+     │
+  ⬜ Phase 7   (Ammo + Combat)          ── cần Phase 10 DONE ✓ — sẵn sàng
+     │   Core pipeline đã có (6.1). Còn: area damage, ammo wiring, bullet timeout
+     │
+  ⬜ Phase 11  (Multi-Enemy Type)       ── có thể song song với Phase 7
+     │   Normal / Fast / Tank / Boss + WaveConfig 10 waves
+     │   Scope: ~2.5 giờ (xem Section 18 — Phase 11 detail)
      │
   ⬜ Phase 8   (Win/Lose + HUD)         ── cần Phase 4.5 ✓ + Phase 7
      │   (onGameOver stub đã có, chỉ cần GameOver panel UI)
@@ -951,6 +1075,16 @@ File: Assets/3.Scenes/DTGamePlay.unity
   ✅ Phase 8.5 (Pause + Enemy Pool)     ── DONE (session 10)
      │
   ⬜ Phase 9   (Polish + Perf)          ── final pass
+
+  ── Thứ tự implement đề xuất (cập nhật session 11) ──────────────────────
+  ✅ Phase 10 DONE → Phase 7 → Phase 11 → Phase 8 → Phase 9
+                               (song song)
+
+  Lý do thứ tự:
+    Phase 10 trước Phase 7  : area damage cần grid-cell range → tránh viết lại (DONE)
+    Phase 11 song song P7   : multi-enemy độc lập với combat ammo logic
+    Phase 8 sau Phase 7     : Win/Lose cần combat hoàn chỉnh để test đúng
+    Phase 9 cuối            : polish sau khi core gameplay stable
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -962,6 +1096,13 @@ File: Assets/3.Scenes/DTGamePlay.unity
   Assets/2.Scripts/Model/Info/Grid/TDGridMainModel.cs
   Assets/2.Scripts/Model/Info/Grid/TDGridDTO.cs
   Assets/2.Scripts/Model/Info/AStarPath/TDaStarPathModel.cs
+
+  ── Tower Range (Session 11) ─────────────────────────────────────────────────
+  Assets/2.Scripts/Model/Tower/Interfaces/ITowerRangeDTO.cs     ← interface (DetectionRadius, IsInRange, GetCellsInRange)
+  Assets/2.Scripts/Model/Tower/TowerRange/TDRangeDTO.cs         ← [NEW s11] abstract base; virtual GetCellsInRange (bounding-box scan)
+  Assets/2.Scripts/Model/Tower/TowerRange/TDOffsetRangeDTO.cs   ← [NEW s11] Arknights-style; O(n) GetCellsInRange; 4-dir auto-rotate
+  Assets/2.Scripts/Editor/TowerDataDrawer.cs                    ← [NEW s11] CustomPropertyDrawer click-to-toggle 8×9 grid (Editor only)
+  Assets/1.Assets/Resources/Configs/Tower Bullet Config.asset   ← rangeOffsets: Cannon/Catapult/MissileG02/MissileG03/Mortar
 
   ── Control / Path ──────────────────────────────────────────────────────────
   Assets/2.Scripts/Control/PathControl/TDaStarPathControl.cs
@@ -1045,9 +1186,11 @@ File: Assets/3.Scenes/DTGamePlay.unity
   ── Scripts modified (Session 8 — Phase 6.2 + Bug Fixes) ────────────────────
   Assets/2.Scripts/Model/Config/Enum/Enums.cs
     ← added RangeType enum: Area | HorizontalCone | VerticalCone
+      ⚠️ REMOVED in session 11 (replaced by offset-based approach)
   Assets/2.Scripts/Model/Config/TDFlyweightTowerDataSettings.cs
     ← TowerData + damage/attackSpeed/rangeType/rangeValue fields
     ← GetData(type) pure lookup; GetPrefab/GetCost delegate to GetData
+      ⚠️ Session 11: rangeType/rangeValue REMOVED; rangeOffsets (Vector2Int[]) ADDED
   Assets/2.Scripts/Model/Info/Tower Type/TDTowerBehaviorModel.cs
     ← removed 3 hardcode switch; reads damage/speed/range from SO via Setting
   Assets/2.Scripts/Model/Tower/TowerRange/TDVerticalRangeDTO.cs
@@ -1072,6 +1215,7 @@ File: Assets/3.Scenes/DTGamePlay.unity
     ← SO duplicate removed (was stale, data=0 for new fields)
   Assets/1.Assets/Resources/Configs/Tower Bullet Config.asset
     ← filled: damage/attackSpeed/rangeType/rangeValue cho 5 tower types
+      ⚠️ Session 11: rangeType/rangeValue replaced by rangeOffsets (Vector2Int[])
 
   ── Scripts modified (Session 7 — Phase 6.1) ─────────────────────────────────
   Assets/2.Scripts/Model/Config/TDFlyweightTowerDataSettings.cs
@@ -1104,6 +1248,43 @@ File: Assets/3.Scenes/DTGamePlay.unity
 
   ── Key Asset Paths ──────────────────────────────────────────────────────────
   HQ prop (GateEnd) : Assets/1.Assets/Resources/Prefabs/KenneyTower/ (TowerCrystals)
+
+  ── Scripts modified (Session 11 — Phase 10 Grid-cell Range Refactor) ────────
+  Assets/2.Scripts/Model/Info/Grid/Interfaces/IGridMainModel.cs
+    ← added 3 methods: CellToWorld(Vector2Int), WorldToCell(Vector3), IsInBounds(Vector2Int)
+  Assets/2.Scripts/Model/Info/Grid/TDGridMainModel.cs
+    ← implemented CellToWorld (m_Grid[x,y]), WorldToCell (RoundToInt+Clamp), IsInBounds
+  Assets/2.Scripts/Model/Tower/Interfaces/ITowerRangeDTO.cs
+    ← added: List<Vector2Int> GetCellsInRange(Vector2Int towerCell, Quaternion towerRotation)
+  Assets/2.Scripts/Model/Tower/TowerRange/TDRangeDTO.cs           [NEW]
+    ← abstract base class implementing ITowerRangeDTO
+    ← virtual GetCellsInRange: bounding-box scan via IsInRange (O(r²))
+  Assets/2.Scripts/Model/Tower/TowerRange/TDOffsetRangeDTO.cs     [NEW]
+    ← Arknights-style explicit cell offsets; overrides GetCellsInRange O(n)
+    ← RotateOffset: Y=0→(dy,dx), Y=90→(dx,dy), Y=180→(-dy,-dx), Y=270→(-dx,-dy)
+    ← DetectionRadius = max(offset.magnitude) * cellSize
+  Assets/2.Scripts/Model/Config/TDFlyweightTowerDataSettings.cs
+    ← TowerData: REMOVED rangeType (RangeType) + rangeValue (int)
+    ← TowerData: ADDED rangeOffsets (Vector2Int[])
+  Assets/2.Scripts/Model/Info/Tower Type/TDTowerBehaviorModel.cs
+    ← GetTowerRange: simplified to new TDOffsetRangeDTO(data?.rangeOffsets)
+  Assets/2.Scripts/Model/Config/Enum/Enums.cs
+    ← REMOVED RangeType enum (Area | HorizontalCone | VerticalCone)
+      (was added session 8; superseded by offset approach)
+  Assets/2.Scripts/Editor/TowerDataDrawer.cs                      [NEW]
+    ← CustomPropertyDrawer for TowerData; grid x[-1..6] y[-4..4], CELL=20f
+    ← click-to-toggle cells; tower at (0,0)=blue/non-toggle; green=active; dark=inactive
+    ← 7px coordinate labels on inactive cells for reference
+  Assets/1.Assets/Resources/Configs/Tower Bullet Config.asset
+    ← rangeOffsets populated for all 5 towers:
+       Cannon:    (1,0)(2,0)(3,0)
+       Catapult:  (1,-1)(1,0)(1,1)(2,-1)(2,0)(2,1)
+       MissileG02:(1,0)(2,0)(3,0)(4,0)
+       MissileG03:(1,-1)(1,0)(1,1)(2,-2)(2,-1)(2,0)(2,1)(2,2)(3,-1)(3,0)(3,1)
+       Mortar:    (2,-1)(2,0)(2,1)(3,-1)(3,0)(3,1)(4,0)
+  [DELETED] Assets/2.Scripts/Model/Tower/TowerRange/TDAreaRangeDTO.cs
+  [DELETED] Assets/2.Scripts/Model/Tower/TowerRange/TDHorizontalRangeDTO.cs
+  [DELETED] Assets/2.Scripts/Model/Tower/TowerRange/TDVerticalRangeDTO.cs
 
 
 ================================================================================

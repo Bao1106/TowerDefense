@@ -23,10 +23,4 @@
         Mortar
     }
 
-    public enum RangeType
-    {
-        Area,
-        HorizontalCone,
-        VerticalCone
-    }
 }

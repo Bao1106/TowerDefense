@@ -11,10 +11,9 @@ public class TowerData
     [FormerlySerializedAs("prefab")]
     public GameObject bulletPrefab;
     public int        cost;
-    public float      damage;
-    public float      attackSpeed;
-    public RangeType  rangeType;
-    public int        rangeValue;
+    public float       damage;
+    public float       attackSpeed;
+    public Vector2Int[] rangeOffsets;
 }
 
 [CreateAssetMenu(menuName = "Game Configs/Tower Bullet Config", fileName = "Tower Bullet Config", order = 1)]

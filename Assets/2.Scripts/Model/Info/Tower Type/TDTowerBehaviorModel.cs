@@ -18,14 +18,6 @@ public class TDTowerBehaviorModel : IWeaponBehaviorDTO
     public ITowerRangeDTO GetTowerRange(TowerType type)
     {
         var data = Setting.GetData(type);
-        if (data == null) return new TDAreaRangeDTO(0);
-
-        return data.rangeType switch
-        {
-            RangeType.Area           => new TDAreaRangeDTO(data.rangeValue),
-            RangeType.HorizontalCone => new TDHorizontalRangeDTO(data.rangeValue),
-            RangeType.VerticalCone   => new TDVerticalRangeDTO(data.rangeValue),
-            _                        => new TDAreaRangeDTO(data.rangeValue)
-        };
+        return new TDOffsetRangeDTO(data?.rangeOffsets);
     }
 }
