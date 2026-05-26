@@ -1,29 +1,39 @@
-﻿using TDEnums;
+using System.Collections.Generic;
+using TDEnums;
 using UnityEngine;
 
 public class TDTowerWeaponView : MonoBehaviour
 {
     [SerializeField] private TowerType type;
 
-    private ITowerRangeDTO m_TowerRangeDTO;
-    private Quaternion     m_OriQuaternion;
-    private Transform      m_Target, m_PosSpawnBullet;
-    private float          m_LastAttackTime;
-    private string         m_TowerKey;
+    private ITowerRangeDTO      m_TowerRangeDTO;
+    private Quaternion          m_OriQuaternion;
+    private Transform           m_PosSpawnBullet;
+    private float               m_LastAttackTime;
+    private string              m_TowerKey;
+    private int                 m_MaxTargets;
 
-    // Tick-based scan — tìm target mới 5 lần/giây thay vì mỗi frame
-    // Không cần TDEnemyDetector hay DetectionArea child GO trên prefab
+    // Tick-based scan — tìm targets 5 lần/giây
     private float          m_LastScanTime = -999f;
     private const float    k_ScanInterval = 0.2f;
+
+    // Danh sách target hiện tại (1 với Single/AOE, tối đa maxTargets với Multiple)
+    private readonly List<TDEnemyView> m_Targets         = new List<TDEnemyView>();
+    private readonly List<TDEnemyView> m_CandidateBuffer = new List<TDEnemyView>();
 
     public TowerType towerType => type;
 
     public void Init(string key)
     {
-        m_TowerKey       = key;
-        m_TowerRangeDTO  = TDTowerBehaviorModel.api.GetTowerRange(towerType);
-        m_OriQuaternion  = transform.rotation;
+        m_TowerKey      = key;
+        m_TowerRangeDTO = TDTowerBehaviorModel.api.GetTowerRange(towerType);
+        m_OriQuaternion = transform.rotation;
         m_PosSpawnBullet = transform.Find(TDConstant.GAMEPLAY_TOWER_BULLET_SPAWN);
+
+        var attackType = TDTowerBehaviorModel.api.GetAttackType(towerType);
+        m_MaxTargets   = attackType == AttackType.Multiple
+            ? TDTowerBehaviorModel.api.GetMaxTargets(towerType)
+            : 1;
 
         TDTowerBehaviorMainControl.api.onGetLastAttackTime += OnGetLastAttackTime;
     }
@@ -43,27 +53,26 @@ public class TDTowerWeaponView : MonoBehaviour
     {
         if (string.IsNullOrEmpty(m_TowerKey)) return;
 
-        // Tick scan: tìm/cập nhật target mỗi k_ScanInterval giây
         if (Time.time - m_LastScanTime >= k_ScanInterval)
         {
             m_LastScanTime = Time.time;
-            ScanForTarget();
+            ScanForTargets();
         }
 
-        // Attack loop: mỗi frame nếu target còn hợp lệ
-        if (m_Target != null)
+        // Validate targets mỗi frame: xóa null hoặc ra ngoài range giữa 2 lần scan
+        for (int i = m_Targets.Count - 1; i >= 0; i--)
         {
-            // Validate mỗi frame: target có thể ra khỏi range giữa 2 lần scan
-            if (!m_TowerRangeDTO.IsInRange(transform.position, m_Target.position, m_OriQuaternion))
-            {
-                m_Target = null;
-                ResetRotation();
-                return;
-            }
+            var t = m_Targets[i];
+            if (t == null || !m_TowerRangeDTO.IsInRange(transform.position, t.transform.position, m_OriQuaternion))
+                m_Targets.RemoveAt(i);
+        }
 
-            RotateTowardsTarget();
-            TDTowerBehaviorMainControl.api.AttackTarget(
-                m_LastAttackTime, m_Target, m_PosSpawnBullet, m_TowerKey, towerType);
+        if (m_Targets.Count > 0)
+        {
+            RotateTowardsPrimary();
+            TDTowerBehaviorMainControl.api.AttackTargets(
+                m_LastAttackTime, m_Targets, m_PosSpawnBullet,
+                m_TowerKey, towerType, m_TowerRangeDTO, m_OriQuaternion);
         }
         else
         {
@@ -71,37 +80,31 @@ public class TDTowerWeaponView : MonoBehaviour
         }
     }
 
-    // Chọn enemy gần GateEnd nhất (PathProgress cao nhất) trong range
-    // Scale tốt với nhiều enemy: O(n) iteration, không dùng Physics
-    private void ScanForTarget()
+    // Sort theo PathProgress giảm dần → pick top m_MaxTargets trong range
+    private void ScanForTargets()
     {
-        var  enemies     = TDEnemyRegistry.api.GetAll();
-        TDEnemyView best = null;
-        float bestProgress = -1f;
+        m_Targets.Clear();
+        m_CandidateBuffer.Clear();
 
+        var enemies = TDEnemyRegistry.api.GetAll();
         for (int i = 0; i < enemies.Count; i++)
         {
-            TDEnemyView enemy = enemies[i];
-
-            // Guard: enemy có thể bị Destroy nhưng chưa kịp Unregister (same frame)
+            var enemy = enemies[i];
             if (enemy == null) continue;
-
-            if (!m_TowerRangeDTO.IsInRange(transform.position, enemy.transform.position, m_OriQuaternion))
-                continue;
-
-            if (enemy.PathProgress > bestProgress)
-            {
-                bestProgress = enemy.PathProgress;
-                best         = enemy;
-            }
+            if (!m_TowerRangeDTO.IsInRange(transform.position, enemy.transform.position, m_OriQuaternion)) continue;
+            m_CandidateBuffer.Add(enemy);
         }
 
-        m_Target = best != null ? best.transform : null;
+        // Insertion sort nhỏ — enemy count tối đa ~50, không cần LINQ
+        m_CandidateBuffer.Sort((a, b) => b.PathProgress.CompareTo(a.PathProgress));
+
+        for (int i = 0; i < m_CandidateBuffer.Count && m_Targets.Count < m_MaxTargets; i++)
+            m_Targets.Add(m_CandidateBuffer[i]);
     }
 
-    private void RotateTowardsTarget()
+    private void RotateTowardsPrimary()
     {
-        Vector3 dir = m_Target.position - transform.position;
+        Vector3 dir = m_Targets[0].transform.position - transform.position;
         transform.rotation = Quaternion.Slerp(
             transform.rotation, Quaternion.LookRotation(dir), Time.deltaTime * 5f);
     }

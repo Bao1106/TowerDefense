@@ -18,6 +18,8 @@ MonoBehaviour:
     cost: 5
     damage: 5
     attackSpeed: 3
+    attackType: 0
+    maxTargets: 0
     rangeOffsets:
     - {x: 1, y: 0}
     - {x: 2, y: 0}
@@ -27,6 +29,8 @@ MonoBehaviour:
     cost: 10
     damage: 20
     attackSpeed: 1
+    attackType: 1
+    maxTargets: 2
     rangeOffsets:
     - {x: 1, y: -1}
     - {x: 1, y: 0}
@@ -39,9 +43,13 @@ MonoBehaviour:
     cost: 15
     damage: 10
     attackSpeed: 1
+    attackType: 1
+    maxTargets: 3
     rangeOffsets:
     - {x: 1, y: 0}
+    - {x: 2, y: -1}
     - {x: 2, y: 0}
+    - {x: 2, y: 1}
     - {x: 3, y: 0}
     - {x: 4, y: 0}
   - type: 3
@@ -49,6 +57,8 @@ MonoBehaviour:
     cost: 15
     damage: 20
     attackSpeed: 1
+    attackType: 2
+    maxTargets: 0
     rangeOffsets:
     - {x: 1, y: -1}
     - {x: 1, y: 0}
@@ -66,6 +76,8 @@ MonoBehaviour:
     cost: 20
     damage: 15
     attackSpeed: 2
+    attackType: 0
+    maxTargets: 0
     rangeOffsets:
     - {x: 2, y: -1}
     - {x: 2, y: 0}

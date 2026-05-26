@@ -4,10 +4,12 @@ using Services.DependencyInjection;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using Object = UnityEngine.Object;
 
 public class TDTowerMainView : MonoBehaviour
 {
     [SerializeField] private GameObject m_TowerHighlightPrefab;
+    [SerializeField] private GameObject m_RangeHighlightPrefab;
 
     // Tỉ lệ cellSize để trigger direction selection (35% = 0.7f khi cellSize=2)
     // Phải < 50% để trigger TRƯỚC khi GetNearestGridPosition snap sang ô mới
@@ -16,9 +18,13 @@ public class TDTowerMainView : MonoBehaviour
     private readonly List<TDTowerHolderView> m_TowerHolders = new List<TDTowerHolderView>();
     private TDTowerHolderView m_TdTowerHolderView0, m_TdTowerHolderView1, m_TdTowerHolderView2, m_TdTowerHolderView3, m_TdTowerHolderView4;
     private GameObject m_CurrentTower;
+    private TowerType  m_CurrentTowerType;
 
     private List<Vector3> m_ValidTowerPositions = new List<Vector3>();
-    private readonly List<GameObject> m_HighlightTiles = new List<GameObject>();
+    private readonly List<GameObject> m_HighlightTiles      = new List<GameObject>();
+    private readonly List<GameObject> m_RangeHighlightTiles = new List<GameObject>();
+    private Vector2Int m_LastRangeCell     = new Vector2Int(int.MinValue, int.MinValue);
+    private int        m_LastRangeRotIndex = -1;
     private int m_CurrentRotationIndex;
 
     // Phase 1: drag đến cell (position)
@@ -48,6 +54,7 @@ public class TDTowerMainView : MonoBehaviour
         if (IsPointerOverUI()) return;
 
         UpdateGhostTransform();
+        RefreshRangeHighlights();
         HandlePlacementInput();
     }
 
@@ -217,7 +224,7 @@ public class TDTowerMainView : MonoBehaviour
 
     private void RegistryTowerControlEvents()
     {
-        TDTowerMainControl.api.onGetTowerName             += OnCreateTower;
+        TDTowerMainControl.api.onGetTowerName             += OnCreateTower;  // (string, TowerType)
         TDTowerMainControl.api.onGetCurrentRotationIndex  += OnGetCurrentRotationIndex;
 
         TDPlaceTowerControl.api.onPlaceTowerSuccess       += OnPlaceTowerSuccess;
@@ -232,7 +239,7 @@ public class TDTowerMainView : MonoBehaviour
 
     private void OnDestroy()
     {
-        TDTowerMainControl.api.onGetTowerName             -= OnCreateTower;
+        TDTowerMainControl.api.onGetTowerName             -= OnCreateTower;  // (string, TowerType)
         TDTowerMainControl.api.onGetCurrentRotationIndex  -= OnGetCurrentRotationIndex;
 
         TDPlaceTowerControl.api.onPlaceTowerSuccess       -= OnPlaceTowerSuccess;
@@ -297,7 +304,7 @@ public class TDTowerMainView : MonoBehaviour
         m_ValidTowerPositions = positions;
     }
 
-    private void OnCreateTower(string towerName)
+    private void OnCreateTower(string towerName, TowerType towerType)
     {
         if (m_CurrentTower != null)
             Destroy(m_CurrentTower);
@@ -306,11 +313,68 @@ public class TDTowerMainView : MonoBehaviour
         m_CurrentTower = Instantiate(prefab, Vector3.zero, Quaternion.identity);
         m_CurrentTower.transform.localScale = new Vector3(1.0f, 1.0f, 1.0f);
         m_CurrentRotationIndex = 0;
-        m_IsDirectionSelected = false;
-        m_LastSnappedPos = Vector3.negativeInfinity;
+        m_IsDirectionSelected  = false;
+        m_LastSnappedPos       = Vector3.negativeInfinity;
+        m_CurrentTowerType     = towerType;
+        m_LastRangeCell        = new Vector2Int(int.MinValue, int.MinValue);
+        m_LastRangeRotIndex    = -1;
 
         ShowHighlights();
         ShowPlacementPanel();
+    }
+
+    // ─── Range Highlights ────────────────────────────────────────────────────
+
+    private void RefreshRangeHighlights()
+    {
+        if (m_CurrentTower == null || m_RangeHighlightPrefab == null) return;
+
+        Vector2Int cell   = TDGridMainModel.api.WorldToCell(m_CurrentTower.transform.position);
+        int        rotIdx = m_CurrentRotationIndex;
+
+        if (cell == m_LastRangeCell && rotIdx == m_LastRangeRotIndex) return;
+        m_LastRangeCell     = cell;
+        m_LastRangeRotIndex = rotIdx;
+
+        var data = TDFlyweightBulletFactoryModel.api.Setting.GetData(m_CurrentTowerType);
+        if (data?.rangeOffsets == null || data.rangeOffsets.Length == 0)
+        {
+            HideRangeHighlights();
+            return;
+        }
+
+        var              rangeDto = new TDOffsetRangeDTO(data.rangeOffsets);
+        List<Vector2Int> cells    = rangeDto.GetCellsInRange(cell, m_CurrentTower.transform.rotation);
+
+        // Grow pool on demand
+        while (m_RangeHighlightTiles.Count < cells.Count)
+        {
+            var tile = Object.Instantiate(m_RangeHighlightPrefab);
+            tile.SetActive(false);
+            m_RangeHighlightTiles.Add(tile);
+        }
+
+        for (int i = 0; i < m_RangeHighlightTiles.Count; i++)
+        {
+            if (i < cells.Count)
+            {
+                Vector3 world = TDGridMainModel.api.CellToWorld(cells[i]);
+                m_RangeHighlightTiles[i].transform.position = new Vector3(world.x, 0.12f, world.z);
+                m_RangeHighlightTiles[i].SetActive(true);
+            }
+            else
+            {
+                m_RangeHighlightTiles[i].SetActive(false);
+            }
+        }
+    }
+
+    private void HideRangeHighlights()
+    {
+        foreach (var tile in m_RangeHighlightTiles)
+            if (tile != null) tile.SetActive(false);
+        m_LastRangeCell     = new Vector2Int(int.MinValue, int.MinValue);
+        m_LastRangeRotIndex = -1;
     }
 
     private void ShowHighlights()
@@ -371,6 +435,7 @@ public class TDTowerMainView : MonoBehaviour
             m_CurrentTower = null;
             TDPlaceTowerControl.api.onPlaceTowerSuccess?.Invoke(false);
             HideHighlights();
+            HideRangeHighlights();
             HidePlacementPanel();
         }
     }
@@ -423,8 +488,9 @@ public class TDTowerMainView : MonoBehaviour
             m_CurrentTower = null;
         }
         m_IsDirectionSelected = false;
-        m_LastSnappedPos = Vector3.negativeInfinity;
+        m_LastSnappedPos      = Vector3.negativeInfinity;
         HideHighlights();
+        HideRangeHighlights();
         HidePlacementPanel();
     }
 }

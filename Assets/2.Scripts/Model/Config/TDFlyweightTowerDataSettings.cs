@@ -11,8 +11,10 @@ public class TowerData
     [FormerlySerializedAs("prefab")]
     public GameObject bulletPrefab;
     public int        cost;
-    public float       damage;
-    public float       attackSpeed;
+    public float        damage;
+    public float        attackSpeed;
+    public AttackType   attackType;
+    public int          maxTargets;    // [2..5], chỉ đọc khi attackType = Multiple
     public Vector2Int[] rangeOffsets;
 }
 

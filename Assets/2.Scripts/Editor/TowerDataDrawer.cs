@@ -27,12 +27,21 @@ public class TowerDataDrawer : PropertyDrawer
     {
         if (!prop.isExpanded) return LH + 2f;
 
-        return LH + 4f                   // foldout header
-             + (LH + 2f) * 5f           // 5 standard fields
-             + 4f                        // spacer
-             + LH + 4f                   // grid label
-             + Rows * (CELL + GAP)       // grid rows
-             + 10f;                      // bottom padding
+        bool isMultiple = IsMultiple(prop);
+        float standardFields = (LH + 2f) * (isMultiple ? 8f : 7f); // +attackType +maxTargets(cond)
+
+        return LH + 4f              // foldout header
+             + standardFields
+             + 4f                   // spacer
+             + LH + 4f              // grid label
+             + Rows * (CELL + GAP)  // grid rows
+             + 10f;                 // bottom padding
+    }
+
+    private static bool IsMultiple(SerializedProperty prop)
+    {
+        var at = prop.FindPropertyRelative("attackType");
+        return at != null && at.enumValueIndex == 1; // AttackType.Multiple = index 1
     }
 
     public override void OnGUI(Rect pos, SerializedProperty prop, GUIContent label)
@@ -55,6 +64,9 @@ public class TowerDataDrawer : PropertyDrawer
         DrawField(ref y, x, w, prop, "cost");
         DrawField(ref y, x, w, prop, "damage");
         DrawField(ref y, x, w, prop, "attackSpeed");
+        DrawField(ref y, x, w, prop, "attackType");
+        if (IsMultiple(prop))
+            DrawField(ref y, x, w, prop, "maxTargets");
         y += 4f;
 
         // ── Grid header ──────────────────────────────────────────────────────

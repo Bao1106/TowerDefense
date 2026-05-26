@@ -1,37 +1,28 @@
 using System;
+using TDEnums;
 using UnityEngine;
 
 public class TDTowerMainControl
 {
     public static TDTowerMainControl api;
 
-    public Action<string> onGetTowerName;
-    public Action<int> onGetCurrentRotationIndex;
-    
+    public Action<string, TowerType> onGetTowerName;
+    public Action<int>               onGetCurrentRotationIndex;
+
+    private static readonly (string name, TowerType type)[] k_TowerDefs =
+    {
+        (TDConstant.PREFAB_FATTY_CANNON_G02,    TowerType.Cannon),
+        (TDConstant.PREFAB_FATTY_CATAPULT_G02,  TowerType.Catapult),
+        (TDConstant.PREFAB_FATTY_MISSILE_G02,   TowerType.MissileG02),
+        (TDConstant.PREFAB_FATTY_MISSILE_G03,   TowerType.MissileG03),
+        (TDConstant.PREFAB_FATTY_MORTAR_G02,    TowerType.Mortar),
+    };
+
     public void OnSelectTowerHolder(int index)
     {
-        string towerName = string.Empty;
-        
-        switch (index)
-        {
-            case 0:
-                towerName = TDConstant.PREFAB_FATTY_CANNON_G02;
-                break;
-            case 1:
-                towerName = TDConstant.PREFAB_FATTY_CATAPULT_G02;
-                break;
-            case 2:
-                towerName = TDConstant.PREFAB_FATTY_MISSILE_G02;
-                break;
-            case 3:
-                towerName = TDConstant.PREFAB_FATTY_MISSILE_G03;
-                break;
-            case 4:
-                towerName = TDConstant.PREFAB_FATTY_MORTAR_G02;
-                break;
-        }
-        
-        onGetTowerName?.Invoke(towerName);
+        if (index < 0 || index >= k_TowerDefs.Length) return;
+        var (name, type) = k_TowerDefs[index];
+        onGetTowerName?.Invoke(name, type);
     }
 
     public void OnSelectTower(GameObject currentTower)

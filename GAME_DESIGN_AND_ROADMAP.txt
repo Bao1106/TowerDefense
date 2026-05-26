@@ -1,6 +1,6 @@
 ================================================================================
   TOWER DEFENSE — GAME DESIGN, TECHNICAL REFERENCE & DEVELOPMENT ROADMAP
-  Last updated: 2026-05-26  (session 11 — Phase 10 Offset Refactor + Codebase Logic Sync)
+  Last updated: 2026-05-26  (session 15 — Phase 12 DONE: Range Visualization + White Screen Fix)
 ================================================================================
 
 
@@ -89,10 +89,10 @@ File: Assets/3.Scenes/DTGamePlay.unity
   TDGridDTO.cs                     ← logical width×height IGridCellDTO[,] grid
   TDGridCellDTO.cs                 ← cell data: position(x,y), isWalkable, CellType
   TDaStarPathModel.cs              ← heuristic (Manhattan: dx+dy), GetNeighbors
-  TDFlyweightBulletFactoryModel.cs ← lazy pool per TowerType (Flyweight), bullet Spawn/Return
+  TDFlyweightBulletFactoryModel.cs ← lazy pool per TowerType (Flyweight); pool TDAttackVFX [Phase 7]
   TDFlyweightTowerDataSettings.cs  ← ScriptableObject; TowerData: bulletPrefab, cost, damage,
-                                      attackSpeed, rangeOffsets (Vector2Int[]) [Phase 6.2 + 10]
-  TDTowerBehaviorModel.cs          ← reads damage/attackSpeed/range dari SO; GetTowerRange → TDOffsetRangeDTO
+                                      attackSpeed, attackType, maxTargets, rangeOffsets [Phase 6.2+10+7]
+  TDTowerBehaviorModel.cs          ← damage/speed/attackType/maxTargets/range từ SO
   TDRangeDTO.cs                    ← abstract base; virtual GetCellsInRange (bounding-box) [Phase 10 NEW]
   TDOffsetRangeDTO.cs              ← Arknights-style explicit cell offsets, O(n), 4-dir auto-rotate [Phase 10 NEW]
 
@@ -117,8 +117,8 @@ File: Assets/3.Scenes/DTGamePlay.unity
   TDTowerMainControl.cs      ← select tower, rotate (E/Q), place
   TDPlaceTowerControl.cs     ← raycast placement, occupancy check
   TDTowerFactoryControl.cs   ← factory spawn + init
-  TDTowerBehaviorMainControl.cs  ← attack cooldown timer, onGetLastAttackTime event
-  TDTowerBehaviorSubControl.cs   ← spawn bullet từ đúng pool theo type [Phase 6.1 refactor]
+  TDTowerBehaviorMainControl.cs  ← attack cooldown; AttackTargets(List<TDEnemyView>) [Phase 7]
+  TDTowerBehaviorSubControl.cs   ← spawn N TDAttackVFX per target list [Phase 7]
   TDUserInputControl.cs      ← mobile/desktop input event dispatching
 
   ── View ────────────────────────────────────────────────────────────────────
@@ -130,10 +130,12 @@ File: Assets/3.Scenes/DTGamePlay.unity
   TDEnemyView.cs             ← enemy MonoBehaviour: move along path, reach-end → LoseLife
                                [Phase 4.5: m_HasReachedEnd guard]
                                [Phase 6.1: PathProgress property, Register/Unregister registry]
-  TDTowerMainView.cs         ← 5 tower holders, input handler, green highlight tiles
-  TDTowerWeaponView.cs       ← placed tower behavior: tick scan (0.2s) + PathProgress priority
-                               IsInRange per frame (clears target if out of range) [Phase 6.1]
-                               Range nguồn từ TDOffsetRangeDTO [Phase 10]
+  TDTowerMainView.cs         ← 5 tower holders, input handler, green highlight tiles,
+                               range highlight tile pool (Phase 12)
+  TDTowerWeaponView.cs       ← m_Targets List, ScanForTargets sort PathProgress, validate per frame
+                               AttackTargets với rangeDTO + towerRotation [Phase 7]
+  TDAttackVFX.cs             ← [NEW Phase 7] thay TDBulletsView; homing → OnImpact → Single/AOE damage
+  [DELETED] TDBulletsView.cs ← removed Phase 7 (replaced by TDAttackVFX)
   TDTowerHolderView.cs       ← HUD slot (button + cost)
   TDGateView.cs              ← GateStart MonoBehaviour: PlaySpawnEffect() per wave [Phase 4.5]
   TDGateEndView.cs           ← GateEnd MonoBehaviour: trigger visual + life text [Phase 4.5]
@@ -176,23 +178,39 @@ File: Assets/3.Scenes/DTGamePlay.unity
   │                                                                       │
   └───────────────────────────────────────────────────────────────────────┘
 
-  ┌──── PER WAVE (10 waves total) ───────────────────────────────────────┐
+  ┌──── PER WAVE (LevelConfig-driven — Phase 11) ────────────────────────┐
   │                                                                       │
-  │  StartWaveLoop:                                                       │
-  │    for waveIdx in 0..CONFIG_MAX_WAVES (10):                           │
-  │      pathIdx = Random.Range(0, allPaths.Count)                        │
-  │      onWaveStart?.Invoke(waveIdx)  → GateView.PlaySpawnEffect() [4.5]│
-  │      await SpawnWave(spawn, wavePath, waveIdx, ct)                    │
-  │      await PauseAwareDelay(CONFIG_WAVE_INTERVAL_MS=10000, ct) [8.5]  │
+  │  StartWaveLoop(spawnPos, allPaths, LevelConfig, ct):                  │
+  │    waveBatches = BuildWavePlans(difficulty, waveCount, totalEnemies)  │
+  │    ratio = DifficultyRatioTable.Get(difficulty)  ← HP×/Speed×        │
+  │    for waveIdx in 0..waveBatches.Count:                               │
+  │      corridor = allPaths[Random.Range(0, allPaths.Count)]             │
+  │      onWaveStart?.Invoke(waveIdx) → GateView.PlaySpawnEffect() [4.5] │
+  │      await SpawnBatch(spawnPos, corridor, waveBatches[waveIdx], ...)  │
+  │      await PauseAwareDelay(config.waveInterval, ct)                   │
   │                                                                       │
-  │  SpawnWave:                                                           │
-  │    for i in 0..CONFIG_ENEMIES_NUMBER (5):                             │
-  │      enemy = m_EnemyPool.Get()   ← Object Pool [Phase 8.5]           │
-  │      enemy.position = spawnPos; rotation = identity                   │
-  │      key = "w{waveIdx}-e{i}-{instanceId}"                            │
-  │      enemy.Initialize(key) → reset state + Subscribe + Register      │
-  │      enemy.SetPath(wavePath)                                          │
-  │      await PauseAwareDelay(CONFIG_ENEMY_SPAWN_DELAY_MS=2000, ct)     │
+  │  BuildWavePlans(difficulty, waveCount, totalEnemies):                 │
+  │    Clamp Extreme/Nightmare: waveCount≥15, totalEnemies≥75             │
+  │    GetBossParams(difficulty) → (bossWaves, bossPerWave, mult)         │
+  │      Easy/Normal: 1 bossWave, 1 boss, 2.0×                           │
+  │      Hard:        2 bossWaves, 1 boss, 2.5×                           │
+  │      Extreme:     3 bossWaves, 1 boss, 2.5×                           │
+  │      Nightmare:   5 bossWaves, 2 boss, 2.5×                           │
+  │    Solve r: regularWaves×r + bossWaves×(r×mult) = totalEnemies       │
+  │    regularSize  = round(r);  bossWaveSize = round(r×mult)             │
+  │    Boss wave positions: boss k → wave ceil(W×k/B)-1 (0-indexed)       │
+  │    Regular wave: Normal/Fast/Tank mix (ratio-proportional), shuffled   │
+  │    Boss wave:    mix (bossWaveSize - bossPerWave) + boss spawn LAST   │
+  │                                                                       │
+  │  SpawnBatch:                                                          │
+  │    for each EnemyType in batch:                                       │
+  │      pool = m_EnemyPools[type].Get()  ← 4 pools, 1 per EnemyType    │
+  │      hp    = baseHP    × ratio.hpMult                                 │
+  │      speed = baseSpeed × ratio.speedMult                              │
+  │      key = "w{waveIdx}-{type}-e{i}-{instanceId}"                     │
+  │      enemy.Initialize(key, hp, speed, enemyType)                     │
+  │      enemy.SetPath(corridor)                                          │
+  │      await PauseAwareDelay(config.spawnInterval, ct)                  │
   │                                                                       │
   └───────────────────────────────────────────────────────────────────────┘
 
@@ -373,11 +391,24 @@ File: Assets/3.Scenes/DTGamePlay.unity
  10. WAVE SYSTEM
 ════════════════════════════════════════════════════════════════════════════════
 
-  CONFIG_MAX_WAVES             = 10
-  CONFIG_ENEMIES_NUMBER        = 5
-  CONFIG_ENEMY_SPAWN_DELAY_MS  = 2000
-  CONFIG_WAVE_INTERVAL_MS      = 10000
-  Total: ~3.5 phút
+  ✅  Phase 11 DONE — LevelConfig-driven wave system (session 14)
+
+  LevelConfig (SO — Assets/1.Assets/Resources/Configs/Level Config.asset):
+    levelIndex    : màn hiện tại (dùng k_CurrentLevelIndex = 0)
+    difficulty    : Easy/Normal/Hard/Extreme/Nightmare
+    totalEnemies  : target tổng (actual có thể ±5% do rounding)
+    waveCount     : số wave (Extreme/Nightmare clamp lên ≥15)
+    waveInterval  : giây nghỉ giữa wave
+    spawnInterval : giây giữa 2 enemy trong 1 wave
+
+  Wave structure tự động từ BuildWavePlans():
+    Regular wave: ~4-5 enemy, Normal/Fast/Tank mix
+    Boss wave:    2.5× enemy count, mix + boss(es) spawn LAST
+    Boss positions: ceil(W×k/B)-1 formula → spacing đều, boss cuối = wave cuối
+
+  Constants cũ (DEPRECATED — không dùng cho enemy spawn nữa):
+    CONFIG_MAX_WAVES, CONFIG_ENEMIES_NUMBER, CONFIG_ENEMY_SPAWN_DELAY_MS,
+    CONFIG_WAVE_INTERVAL_MS  → thay bằng LevelConfig SO fields
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -389,14 +420,15 @@ File: Assets/3.Scenes/DTGamePlay.unity
     m_CurrentPathIndex : int
     m_HasReachedEnd    : bool           ← guard tránh LoseLife nhiều lần [4.5]
     m_HasBeenReturned  : bool           ← guard tránh double ReturnToPool [8.5]
-    m_EnemyHealth      : CONFIG_ENEMY_HEALTH = 300f
-    m_MoveSpeed        : CONFIG_ENEMY_MOVE_SPEED = 3f
-    m_EnemyKey         : string         ← unique "w{wave}-e{i}-{instanceId}"
+    m_EnemyHealth      : float          ← set từ SpawnBatch (baseHP × hpMult) [Phase 11]
+    m_MoveSpeed        : float          ← set từ SpawnBatch (baseSpeed × speedMult) [Phase 11]
+    m_EnemyKey         : string         ← unique "w{wave}-{type}-e{i}-{instanceId}"
+    EnemyType          : EnemyType      ← property { get; private set; } [Phase 11]
 
   PathProgress: m_CurrentPathIndex / m_PathsPosition.Count (0→1)
     → Tower dùng để ưu tiên enemy gần GateEnd nhất
 
-  Initialize(key): reset tất cả state, Subscribe onGetEnemyPathPos, Registry.Register
+  Initialize(key, hp, speed, enemyType): reset state, set stats, Subscribe, Register [Phase 11]
   ReturnToPool():  guard m_HasBeenReturned → Unsubscribe → Unregister → Pool.Release [8.5]
   TakeDamage(dmg): health -= dmg; health ≤ 0 → ReturnToPool() [không Destroy]
   OnDestroy():     chỉ cleanup nếu !m_HasBeenReturned (scene unload safety)
@@ -441,9 +473,14 @@ File: Assets/3.Scenes/DTGamePlay.unity
   CONFIG_WAVE_INTERVAL_MS           = 10000
 
   ── Enemy ────────────────────────────────────────────────────────────────
-  CONFIG_ENEMY_MOVE_SPEED        = 3f
-  CONFIG_ENEMY_HEALTH            = 300f
-  CONFIG_ENEMY_VISUAL_SCALE      = 1.5f   (applied at spawn in SpawnWave)
+  CONFIG_ENEMY_MOVE_SPEED        = 3f     ← DEPRECATED (Phase 11: từ EnemyData SO)
+  CONFIG_ENEMY_HEALTH            = 300f   ← DEPRECATED (Phase 11: từ EnemyData SO)
+  CONFIG_ENEMY_VISUAL_SCALE      = 1.5f   ← DEPRECATED (Phase 11: baked vào từng prefab)
+
+  Enemy stats nguồn thực tế (Phase 11):
+    HP    = EnemyData.baseHP    × DifficultyRatioTable.hpMult
+    Speed = EnemyData.baseSpeed × DifficultyRatioTable.speedMult
+    Scale = baked vào prefab (Slime=1.5, Fast=0.56, Tank=0.74, Boss=0.32)
 
   ── Player / Gates [Phase 4.5] ───────────────────────────────────────────
   CONFIG_PLAYER_STARTING_LIVES   = 20
@@ -849,24 +886,169 @@ File: Assets/3.Scenes/DTGamePlay.unity
        Ô active = màu xanh lá, ô inactive = tối với tọa độ nhỏ làm reference
        Click ô → toggle rangeOffsets array tự động — không cần edit số tay
 
-  ── Pattern usage (Phase 7 area damage) ──────────────────────────────────────
-    var towerCell = TDGridMainModel.api.WorldToCell(bulletHitPos);
-    var cells = towerRange.GetCellsInRange(towerCell, towerRotation);
-    // → TakeDamage tất cả enemy có enemyCell nằm trong cells list
+  ── Pattern usage (AOE — implemented Phase 7) ────────────────────────────────
+    // TDAttackVFX.ApplyAOEDamage():
+    var hitCell = TDGridMainModel.api.WorldToCell(transform.position);
+    var cells   = m_RangeDTO.GetCellsInRange(hitCell, m_TowerRotation);
+    // → damage tất cả enemy có WorldToCell trong cells (copy list để tránh modify-while-iterate)
 
   ─────────────────────────────────────────────────────────────────────────────
 
   ╔══════════════════════════════════════════════════════════════════════════╗
-  ║  PHASE 7 — Ammo + Combat                                [TODO]            ║
+  ║  PHASE 7 — Ammo + Combat (Session 12)                   [✅ DONE]         ║
   ╚══════════════════════════════════════════════════════════════════════════╝
 
-  Core combat pipeline đã có sẵn từ Phase 6.1 (pool + spawn + TakeDamage).
-  Việc còn lại của Phase 7:
-    1. Area damage cho MissileG03 — nổ damage tất cả enemy trong range pattern
-       (cần Phase 10 xong trước để dùng grid-cell range, tránh viết lại 2 lần)
-    2. Wiring đúng ammo prefab per tower type trong SO Inspector
-       KenneyAmmo: AmmoArrow / AmmoBoulder / AmmoBullet / AmmoBeam
-    3. Bullet timeout / max distance — bullet bay ra ngoài map không return pool
+  ── AttackType System ────────────────────────────────────────────────────────
+    AttackType enum (Enums.cs):
+      Single   — 1 projectile homing vào 1 target (PathProgress cao nhất)
+      Multiple — N projectiles homing vào top N targets đồng thời (N = maxTargets [2..5])
+      AOE      — 1 projectile bay đến target pos → OnImpact → splash tất cả enemy trong rangeOffsets
+
+    TowerData SO thêm:
+      attackType : AttackType
+      maxTargets : int  (Clamp 2..5, chỉ đọc khi attackType = Multiple)
+
+    Phân công hiện tại (set trong SO Inspector):
+      Cannon     → Single
+      Catapult   → Multiple, maxTargets=3
+      MissileG02 → Single
+      MissileG03 → AOE
+      Mortar     → AOE
+
+  ── TDAttackVFX (thay TDBulletsView) ─────────────────────────────────────────
+    Pool: TDFlyweightBulletFactoryModel pool TDAttackVFX thay vì TDBulletsView
+          Auto-AddComponent<TDAttackVFX> nếu prefab chưa có → dùng được bulletPrefab cũ
+
+    Init(target, damage, attackType, rangeDTO, towerRotation):
+      m_TargetPos snapshot từ target.position ban đầu
+
+    Update() mỗi frame:
+      Nếu target còn sống → update m_TargetPos (homing)
+      Nếu target chết     → giữ m_TargetPos cuối cùng (fly-to-last-known)
+      MoveTowards(m_TargetPos, 15f * dt)
+      Khi dist < 0.25f → OnImpact()
+
+    OnImpact():
+      Single/Multiple → m_Target?.TakeDamage(damage)   (null-safe: miss nếu target chết)
+      AOE             → ApplyAOEDamage()
+        hitCell = WorldToCell(transform.position)
+        cells   = rangeDTO.GetCellsInRange(hitCell, towerRotation)
+        Copy registry list → foreach enemy: if WorldToCell(enemy.pos) in cellSet → TakeDamage
+      → ReturnToPool(this)
+
+    Không có pool leak: VFX luôn arrive (target chết → fly đến vị trí cuối)
+
+  ── ScanForTargets (TDTowerWeaponView) ───────────────────────────────────────
+    m_Targets: List<TDEnemyView> (thay m_Target: Transform)
+    m_MaxTargets: cache từ SO khi Init()
+      → Single/AOE: 1; Multiple: maxTargets
+
+    ScanForTargets() [mỗi 0.2s]:
+      Collect in-range enemies → Sort by PathProgress giảm dần → take top m_MaxTargets
+
+    Update() validate per frame:
+      RemoveAll từ m_Targets nếu null hoặc IsInRange = false
+      Nếu có targets → RotateTowardsPrimary + AttackTargets(list, rangeDTO, towerRotation)
+
+  ── TowerDataDrawer cập nhật ─────────────────────────────────────────────────
+    Thêm DrawField("attackType") luôn hiện
+    DrawField("maxTargets") chỉ hiện khi attackType == Multiple (enumValueIndex == 1)
+    GetPropertyHeight tính đúng số dòng: 7 fields (+ 1 nếu Multiple)
+
+  ── Còn lại (defer đến khi có VFX package) ───────────────────────────────────
+    ⬜ Swap bulletPrefab → VFX prefab per tower (chỉ đổi SO, không đụng code)
+    ⬜ Mortar arc trajectory visual (logic OnImpact giữ nguyên)
+    ⬜ Beam effect cho linear range tower tương lai
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 11 — Multi-Enemy Type + LevelConfig (Session 14) [✅ DONE]       ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+
+  ── Enemy Tiers ──────────────────────────────────────────────────────────────
+    ✅ EnemyType enum: Normal | Fast | Tank | Boss
+    ✅ Difficulty enum: Easy | Normal | Hard | Extreme | Nightmare
+    ✅ TDEnemyDataSettings SO: baseHP, baseSpeed, prefab per type
+    ✅ DifficultyRatioTable: % distribution + HP×/Speed× multiplier per difficulty
+
+  ── 4 Enemy Prefabs ──────────────────────────────────────────────────────────
+    ✅ Slime.prefab       → Normal (scale 1.5 baked, ~0.98u wide)
+    ✅ EnemyFast.prefab   → Fast   (scale 0.56 baked, ~0.74u wide — Swarm09PA)
+    ✅ EnemyTank.prefab   → Tank   (scale 0.74 baked, ~1.15u wide — TurtleShellPolyart)
+    ✅ EnemyBoss.prefab   → Boss   (scale 0.32 baked, ~1.48u wide — GoldBoarPBR)
+    ✅ CONFIG_ENEMY_VISUAL_SCALE override removed — scale baked per prefab
+
+  ── LevelConfig + Wave Engine ─────────────────────────────────────────────────
+    ✅ LevelConfig SO fields: difficulty, totalEnemies, waveCount, waveInterval, spawnInterval
+       path1Ratio REMOVED — random corridor per wave đã đủ variety
+    ✅ 4 ObjectPool<TDEnemyView> — Dictionary<EnemyType, IObjectPool>
+    ✅ BuildWavePlans(): regular wave + boss event wave (2.5× enemy count)
+    ✅ Boss spawn last trong boss wave (dramatic effect)
+    ✅ Boss distribution: ceil(W×k/B)-1 — spacing đều, last boss = last wave
+    ✅ GetBossParams per difficulty:
+         Easy/Normal: 1 boss wave, ×2.0
+         Hard:        2 boss waves, ×2.5
+         Extreme:     3 boss waves, ×2.5 (waveCount≥15, totalEnemies≥75)
+         Nightmare:   5 boss waves, 2 boss/wave, ×2.5
+
+  ── Inspector Assignments ─────────────────────────────────────────────────────
+    ✅ TDEnemyPathMainView.m_EnemyDataSettings  = Enemy Data Config.asset
+    ✅ TDEnemyPathMainView.m_LevelConfigSettings = Level Config.asset
+    ✅ Enemy Data Config.asset: 4 entries, tất cả prefab assigned
+    ✅ Level Config.asset: Level 0 — Easy, 30 enemy, 5 wave, 10s interval
+
+  ── Còn lại (defer Phase 11+) ────────────────────────────────────────────────
+    ⬜ DEF / RES stats (physical/arts resistance)
+    ⬜ Air Drone tier (DragonSoulEaterPBR — flying)
+    ⬜ BeholderPBR — Elite/Boss wave 2 tier
+    ⬜ Animation per enemy type (Walk/Run/Attack)
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 12 — Tower Range Visualization (Session 15)      [✅ DONE]        ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+
+  Goal: Hiển thị ô range của tower khi user đang giữ ghost tower để đặt.
+
+  ── TDTowerMainControl ────────────────────────────────────────────────────────
+    ✅ onGetTowerName: Action<string> → Action<string, TowerType>
+       (cần pass TowerType để lookup rangeOffsets từ SO)
+    ✅ k_TowerDefs[]: static readonly (name, TowerType) tuple lookup table
+       thay thế switch statement — thêm tower mới chỉ cần thêm 1 entry
+    ✅ OnSelectTowerHolder(index): invoke onGetTowerName(name, type)
+
+  ── TDTowerMainView ────────────────────────────────────────────────────────
+    ✅ [SerializeField] m_RangeHighlightPrefab: GameObject
+       → assigned RangeHighlight.prefab trong Inspector (session 15)
+    ✅ m_CurrentTowerType: TowerType — lưu khi OnCreateTower() gọi
+    ✅ m_RangeHighlightTiles: List<GameObject> — lazy-grow pool, SetActive on/off
+    ✅ m_LastRangeCell, m_LastRangeRotIndex — change detection, skip nếu không đổi
+
+    RefreshRangeHighlights() [gọi mỗi frame sau UpdateGhostTransform]:
+      - Skip nếu m_CurrentTower == null || prefab == null
+      - WorldToCell(ghost.position) → so sánh với m_LastRangeCell
+      - Skip nếu cell + rotIndex không đổi (O(1) guard)
+      - GetData(m_CurrentTowerType) → new TDOffsetRangeDTO(rangeOffsets)
+      - GetCellsInRange(cell, ghost.rotation) → List<Vector2Int>
+      - Lazy grow pool: Instantiate nếu cells.Count > m_RangeHighlightTiles.Count
+      - Position tiles tại y=0.12f (trên path tile y=0.1f → không bị che)
+      - SetActive(true/false) cho từng tile
+
+    HideRangeHighlights(): deactivate all, reset tracking vars
+    → gọi trong CancelPlacement() + OnPlaceTowerSuccess()
+
+  ── Render layer ordering ─────────────────────────────────────────────────────
+    Path tile (Plane.prefab):      y=0.10f (CONFIG_PATH_OFFSET_Y), renderQueue=3000
+    Placement highlight:           y=0.06f
+    RangeHighlight:                y=0.12f  ← trên path tile → transparent queue sort đúng
+    RangeHighlight material:       URP/Unlit, Transparent, renderQueue=3000, ZTest=Disabled
+    → Trong transparent queue: Y cao hơn → closer to camera → render sau → on top ✓
+
+  ── Inspector Assignments ─────────────────────────────────────────────────────
+    ✅ TDTowerMainView.m_RangeHighlightPrefab = RangeHighlight.prefab
+       (Assets/1.Assets/Resources/Prefabs/RangeHighlight.prefab)
 
   ─────────────────────────────────────────────────────────────────────────────
 
@@ -1013,6 +1195,18 @@ File: Assets/3.Scenes/DTGamePlay.unity
       TxtLifePoint, TowerMainView, TowerHolder ×5 và inner children scale ×1.5
       HorizontalLayoutGroup padding/spacing 6→9; LayoutElement preferredW/H updated
 
+  ✅  White screen / overexposed game view                  FIXED session 15
+      Root cause: ArkEnvironment floor tiles (Generic_Road, Generic_01_A) BaseColor=(1,1,1,1)
+      → pure white surface + ACES Tonemapping blow out toàn bộ center area
+      Fix: Global Volume profile — Tonemapping ACES → Neutral; postExposure +0.1 → -0.3
+      File: Assets/3.Scenes/DTGamePlay.unity (Global Volume component)
+
+  ✅  Range highlight bị path tile đè lên                   FIXED session 15
+      Root cause: range highlight y=0.07f < path tile y=0.10f (CONFIG_PATH_OFFSET_Y)
+      Transparent queue sort by Y (higher=closer=rendered last=on top) → path tile che highlight
+      Fix: range highlight y=0.12f > path tile y=0.10f
+      File: TDTowerMainView.cs line 362
+
   ⚠️  PlacementPanel missing trong scene hierarchy
       TDTowerMainView.InitPlacementPanel(): transform.Find(GAMEPLAY_PLACEMENT_PANEL) = null
       → Mobile Cancel button không hiển thị (null-safe → không crash)
@@ -1062,12 +1256,28 @@ File: Assets/3.Scenes/DTGamePlay.unity
      │   Part 3: SO rangeOffsets configured for all 5 tower types
      │   Part 4: TowerDataDrawer custom Inspector — click-to-toggle 8×9 grid (Editor only)
      │
-  ⬜ Phase 7   (Ammo + Combat)          ── cần Phase 10 DONE ✓ — sẵn sàng
-     │   Core pipeline đã có (6.1). Còn: area damage, ammo wiring, bullet timeout
+  ✅ Phase 7   (Ammo + Combat)          ── DONE (session 12)
+     │   AttackType Single/Multiple/AOE; TDAttackVFX homing; AOE splash GetCellsInRange
+     │   TowerData SO: attackType + maxTargets; TowerDataDrawer cập nhật
      │
-  ⬜ Phase 11  (Multi-Enemy Type)       ── có thể song song với Phase 7
-     │   Normal / Fast / Tank / Boss + WaveConfig 10 waves
-     │   Scope: ~2.5 giờ (xem Section 18 — Phase 11 detail)
+  ✅ Phase 11  (Multi-Enemy Type + LevelConfig)  ── DONE (session 14)
+     │   EnemyType enum: Normal/Fast/Tank/Boss
+     │   TDEnemyDataSettings SO: baseHP, baseSpeed, prefab per type
+     │   TDLevelConfigSettings SO: difficulty, totalEnemies, waveCount, intervals
+     │   DifficultyRatioTable: % type distribution + HP×/Speed× per difficulty
+     │   4 ObjectPool<TDEnemyView> — 1 per EnemyType (Dictionary<EnemyType, pool>)
+     │   BuildWavePlans(): regular wave + boss wave (2.5× size, boss spawn last)
+     │   Boss distribution: ceil(W×k/B)-1 formula — spacing đều, cuối=wave cuối
+     │   Extreme/Nightmare constraint: waveCount≥15, totalEnemies≥75
+     │   3 enemy prefabs mới: EnemyFast(0.56), EnemyTank(0.74), EnemyBoss(0.32) scale baked
+     │   path1Ratio REMOVED — wave corridor random per wave (old behavior preserved)
+     │
+  ✅ Phase 12  (Range Visualization)    ── DONE (session 15)
+     │   TDTowerMainControl: onGetTowerName Action<string>→Action<string,TowerType>
+     │   k_TowerDefs[] lookup table thay switch statement
+     │   TDTowerMainView: RefreshRangeHighlights() lazy pool; HideRangeHighlights()
+     │   RangeHighlight y=0.12f > path tile y=0.10f → transparent sort đúng
+     │   Inspector: m_RangeHighlightPrefab = RangeHighlight.prefab
      │
   ⬜ Phase 8   (Win/Lose + HUD)         ── cần Phase 4.5 ✓ + Phase 7
      │   (onGameOver stub đã có, chỉ cần GameOver panel UI)
@@ -1076,13 +1286,14 @@ File: Assets/3.Scenes/DTGamePlay.unity
      │
   ⬜ Phase 9   (Polish + Perf)          ── final pass
 
-  ── Thứ tự implement đề xuất (cập nhật session 11) ──────────────────────
-  ✅ Phase 10 DONE → Phase 7 → Phase 11 → Phase 8 → Phase 9
-                               (song song)
+  ── Thứ tự implement đề xuất (cập nhật session 15) ──────────────────────
+  ✅ Phase 10 DONE → ✅ Phase 7 DONE → ✅ Phase 11 DONE → ✅ Phase 12 DONE → Phase 8 → Phase 9
 
   Lý do thứ tự:
     Phase 10 trước Phase 7  : area damage cần grid-cell range → tránh viết lại (DONE)
+    Phase 7 DONE            : Single/Multiple/AOE + homing TDAttackVFX (DONE)
     Phase 11 song song P7   : multi-enemy độc lập với combat ammo logic
+    Phase 12 DONE           : range visualization dùng TDOffsetRangeDTO từ Phase 10
     Phase 8 sau Phase 7     : Win/Lose cần combat hoàn chỉnh để test đúng
     Phase 9 cuối            : polish sau khi core gameplay stable
 
@@ -1102,7 +1313,9 @@ File: Assets/3.Scenes/DTGamePlay.unity
   Assets/2.Scripts/Model/Tower/TowerRange/TDRangeDTO.cs         ← [NEW s11] abstract base; virtual GetCellsInRange (bounding-box scan)
   Assets/2.Scripts/Model/Tower/TowerRange/TDOffsetRangeDTO.cs   ← [NEW s11] Arknights-style; O(n) GetCellsInRange; 4-dir auto-rotate
   Assets/2.Scripts/Editor/TowerDataDrawer.cs                    ← [NEW s11] CustomPropertyDrawer click-to-toggle 8×9 grid (Editor only)
-  Assets/1.Assets/Resources/Configs/Tower Bullet Config.asset   ← rangeOffsets: Cannon/Catapult/MissileG02/MissileG03/Mortar
+                                                                   [s12] thêm attackType + maxTargets (conditional)
+  Assets/2.Scripts/View/GamePlay/Projectile/TDAttackVFX.cs      ← [NEW s12] homing VFX; Single/Multiple/AOE OnImpact; AOE splash
+  Assets/1.Assets/Resources/Configs/Tower Bullet Config.asset   ← rangeOffsets + attackType + maxTargets per tower
 
   ── Control / Path ──────────────────────────────────────────────────────────
   Assets/2.Scripts/Control/PathControl/TDaStarPathControl.cs
@@ -1151,8 +1364,24 @@ File: Assets/3.Scenes/DTGamePlay.unity
   Assets/1.Assets/Resources/Prefabs/FattyMissileG02.prefab
   Assets/1.Assets/Resources/Prefabs/FattyMissileG03.prefab
   Assets/1.Assets/Resources/Prefabs/FattyMortarG02.prefab
-  Assets/1.Assets/Resources/Prefabs/Slime.prefab
+  Assets/1.Assets/Resources/Prefabs/Slime.prefab         ← Normal, scale=1.5 baked
+  Assets/1.Assets/Resources/Prefabs/EnemyFast.prefab     ← [Phase 11 NEW] Fast, scale=0.56 (copy Swarm09PA)
+  Assets/1.Assets/Resources/Prefabs/EnemyTank.prefab     ← [Phase 11 NEW] Tank, scale=0.74 (copy TurtleShellPolyart)
+  Assets/1.Assets/Resources/Prefabs/EnemyBoss.prefab     ← [Phase 11 NEW] Boss, scale=0.32 (copy GoldBoarPBR)
   Assets/1.Assets/Resources/Prefabs/Plane.prefab
+
+  ── ScriptableObjects (Phase 11 NEW) ────────────────────────────────────────
+  Assets/1.Assets/Resources/Configs/Enemy Data Config.asset
+    Normal: baseHP=300,  baseSpeed=3,   prefab=Slime
+    Fast:   baseHP=150,  baseSpeed=6,   prefab=EnemyFast
+    Tank:   baseHP=900,  baseSpeed=1.5, prefab=EnemyTank
+    Boss:   baseHP=3000, baseSpeed=1,   prefab=EnemyBoss
+  Assets/1.Assets/Resources/Configs/Level Config.asset
+    Level 0: Easy, totalEnemies=30, waveCount=5, waveInterval=10, spawnInterval=2
+
+  ── Scripts (Phase 11 NEW) ────────────────────────────────────────────────────
+  Assets/2.Scripts/Model/Config/TDEnemyDataSettings.cs    ← EnemyData + TDEnemyDataSettings SO
+  Assets/2.Scripts/Model/Config/TDLevelConfigSettings.cs  ← LevelConfig + DifficultyRatioTable
 
   ── Materials (Gates) ────────────────────────────────────────────────────────
   Assets/1.Assets/Resources/Materials/Gates/GS_Edge.mat   ← [Phase 4.6 NEW] GateStart edge
@@ -1285,6 +1514,342 @@ File: Assets/3.Scenes/DTGamePlay.unity
   [DELETED] Assets/2.Scripts/Model/Tower/TowerRange/TDAreaRangeDTO.cs
   [DELETED] Assets/2.Scripts/Model/Tower/TowerRange/TDHorizontalRangeDTO.cs
   [DELETED] Assets/2.Scripts/Model/Tower/TowerRange/TDVerticalRangeDTO.cs
+
+
+  ── Scripts / Assets modified (Session 15 — Phase 12 Range Visualization + Fixes) ───
+  Assets/2.Scripts/Control/Tower/TDTowerMainControl.cs
+    ← onGetTowerName: Action<string> → Action<string, TowerType>
+    ← ADDED k_TowerDefs[]: static readonly (name, TowerType)[] lookup table
+    ← OnSelectTowerHolder: invoke(name, type) từ k_TowerDefs[]
+
+  Assets/2.Scripts/View/GamePlay/Tower/TDTowerMainView.cs
+    ← ADDED [SerializeField] m_RangeHighlightPrefab: GameObject
+    ← ADDED m_CurrentTowerType, m_RangeHighlightTiles, m_LastRangeCell, m_LastRangeRotIndex
+    ← OnCreateTower signature: (string, TowerType) — lưu m_CurrentTowerType
+    ← ADDED RefreshRangeHighlights(): lazy pool, GetCellsInRange, SetActive per tile
+    ← ADDED HideRangeHighlights(): deactivate all + reset tracking
+    ← CancelPlacement() + OnPlaceTowerSuccess(): gọi HideRangeHighlights()
+    ← range highlight y: 0.07f → 0.12f (trên path tile y=0.10f)
+
+  Assets/3.Scenes/DTGamePlay.unity
+    ← TDTowerMainView.m_RangeHighlightPrefab = RangeHighlight.prefab (Inspector)
+    ← Global Volume profile: Tonemapping ACES → Neutral
+    ← Global Volume profile: ColorAdjustments postExposure +0.1 → -0.3
+
+  ── Scripts modified (Session 12 — Phase 7 Attack System) ───────────────────
+  Assets/2.Scripts/Model/Config/Enum/Enums.cs
+    ← thêm AttackType enum: Single | Multiple | AOE
+  Assets/2.Scripts/Model/Config/TDFlyweightTowerDataSettings.cs
+    ← TowerData thêm: attackType (AttackType), maxTargets (int)
+  Assets/2.Scripts/Model/Info/Tower Type/TDTowerBehaviorModel.cs
+    ← thêm GetAttackType(type), GetMaxTargets(type) [Mathf.Clamp 2..5]
+  Assets/2.Scripts/Model/Info/Flyweight/TDFlyweightBulletFactoryModel.cs
+    ← pool TDAttackVFX thay TDBulletsView; auto-AddComponent nếu prefab thiếu
+  Assets/2.Scripts/View/GamePlay/Projectile/TDAttackVFX.cs      [NEW]
+    ← homing projectile: track target mỗi frame; fly-to-last-known nếu target chết
+    ← OnImpact: Single/Multiple → TakeDamage(target); AOE → ApplyAOEDamage()
+    ← ApplyAOEDamage: WorldToCell → GetCellsInRange → damage all enemies in cellSet
+    ← ReturnToPool sau OnImpact; m_HasImpacted guard tránh double trigger
+  Assets/2.Scripts/Control/Tower/TowerBehavior/TDTowerBehaviorSubControl.cs
+    ← Attack(List<TDEnemyView>, spawnProjectile, type, rangeDTO, towerRotation)
+    ← spawn 1 TDAttackVFX per target với đúng Init params
+  Assets/2.Scripts/Control/Tower/TowerFactory/TDTowerBehaviorMainControl.cs
+    ← AttackTargets(lastAttackTime, List<TDEnemyView>, ...) thay AttackTarget single
+  Assets/2.Scripts/View/GamePlay/Tower/TDTowerWeaponView.cs
+    ← m_Targets List<TDEnemyView> + m_CandidateBuffer; m_MaxTargets cached từ SO
+    ← ScanForTargets(): collect in-range → Sort PathProgress desc → take top N
+    ← Update(): validate per frame (null/out-of-range) → RotateTowardsPrimary → AttackTargets
+    ← AttackTargets call truyền thêm m_TowerRangeDTO + m_OriQuaternion cho AOE
+  Assets/2.Scripts/Editor/TowerDataDrawer.cs
+    ← DrawField("attackType") luôn hiện
+    ← DrawField("maxTargets") conditional (chỉ khi attackType == Multiple, index 1)
+    ← GetPropertyHeight cập nhật: 7 fields base + 1 nếu Multiple
+  [DELETED] Assets/2.Scripts/View/GamePlay/Projectile/TDBulletsView.cs
+    ← replaced hoàn toàn bởi TDAttackVFX
+
+
+════════════════════════════════════════════════════════════════════════════════
+ 18. PHASE 11 — MULTI-ENEMY TYPE + LEVEL CONFIG (DESIGN s13, IMPL s14 — ✅ DONE)
+════════════════════════════════════════════════════════════════════════════════
+
+  ── Implementation vs Design Delta ───────────────────────────────────────────
+
+  ❌ path1Ratio REMOVED — design ban đầu có field này để split 50% enemy mỗi path.
+     Thực tế: StartWaveLoop đã random chọn 1 trong 3 corridor mỗi wave → đủ variety.
+     Fix: mỗi wave chọn allPaths[Random.Range(0, allPaths.Count)] — giữ nguyên hành vi cũ.
+
+  ❌ Simple ChunkIntoWaves REPLACED bởi BuildWavePlans() — thiết kế mới:
+     Boss wave là "event wave" với số lượng enemy nhiều hơn 2.5×, không chỉ 1 boss.
+     Boss spawn LAST trong boss wave để tạo dramatic effect.
+
+  ✅ Boss distribution algorithm: boss k → wave ceil(W×k/B)-1
+     - 5 wave 1 boss → wave 5
+     - 10 wave 2 boss → wave 5, 10
+     - Extreme: 3 boss waves; Nightmare: 5 boss waves (2 boss/wave)
+
+  ✅ Extreme/Nightmare constraint: waveCount≥15, totalEnemies≥75 (clamp trong BuildWavePlans)
+
+  ✅ CONFIG_ENEMY_VISUAL_SCALE override REMOVED — scale baked vào từng prefab:
+     Slime (Normal)=1.5, EnemyFast=0.56, EnemyTank=0.74, EnemyBoss=0.32
+     Sizing basis (cellSize=2f, target widths):
+       Normal ~0.98u, Fast ~0.74u, Tank ~1.15u, Boss ~1.48u
+
+  ✅ LevelConfig fields thực tế:
+     levelIndex, difficulty, totalEnemies, waveCount, waveInterval, spawnInterval
+     (path1Ratio đã bị xóa)
+
+  ── Scripts modified (Session 14 — Phase 11 Implementation) ─────────────────
+
+  Assets/2.Scripts/Model/Config/Enum/Enums.cs
+    ← thêm EnemyType enum: Normal | Fast | Tank | Boss
+    ← thêm Difficulty enum: Easy | Normal | Hard | Extreme | Nightmare
+
+  Assets/2.Scripts/Model/Config/TDEnemyDataSettings.cs   [NEW]
+    ← EnemyData class: type, baseHP, baseSpeed, prefab
+    ← TDEnemyDataSettings : ScriptableObject — GetData(EnemyType)
+
+  Assets/2.Scripts/Model/Config/TDLevelConfigSettings.cs  [NEW]
+    ← LevelConfig class: levelIndex, difficulty, totalEnemies, waveCount,
+                          waveInterval, spawnInterval
+    ← TDLevelConfigSettings : ScriptableObject — GetLevel(int)
+    ← DifficultyRatioTable static class:
+         RatioRow struct: normalPct, fastPct, tankPct, bossPct, hpMult, speedMult
+         Get(Difficulty d) → RatioRow
+         Distribute(Difficulty d, int total) → int[4] (sum = total, Fisher-remainder)
+
+  Assets/2.Scripts/View/GamePlay/Enemy/TDEnemyView.cs
+    ← thêm EnemyType { get; private set; } property
+    ← Initialize(string key, float hp, float speed, EnemyType type)
+       (bỏ đọc từ TDConstant.CONFIG_ENEMY_HEALTH / CONFIG_ENEMY_MOVE_SPEED)
+
+  Assets/2.Scripts/Control/PathControl/TDEnemyPathMainControl.cs
+    ← m_EnemyPool (single) → Dictionary<EnemyType, IObjectPool<TDEnemyView>> m_EnemyPools
+    ← InitEnemyPools(TDEnemyDataSettings, Transform): tạo 4 pool, 1 per EnemyType
+    ← ReturnEnemy: m_EnemyPools[enemy.EnemyType].Release(enemy)
+    ← REMOVED: view.transform.localScale = CONFIG_ENEMY_VISUAL_SCALE (scale từ prefab)
+    ← StartWaveLoop: dùng BuildWavePlans() + PauseAwareDelay(config.waveInterval)
+    ← SpawnBatch: hp=baseHP×hpMult, speed=baseSpeed×speedMult; key có EnemyType
+    ← BuildWavePlans(difficulty, waveCount, totalEnemies):
+         GetBossParams → (bossWaves, bossPerWave, bossWaveMult)
+         boss wave indices dùng ceil(W×k/B)-1 formula
+         regular wave: Normal/Fast/Tank mix ratio-proportional, Fisher-Yates shuffle
+         boss wave: mix (bossWaveSize - bossPerWave) + boss(es) appended last
+    ← GetBossParams(Difficulty) → switch expression
+    ← REMOVED: BuildShuffledQueue, ChunkIntoWaves, DistributeBossesAcrossWaves
+
+  Assets/2.Scripts/View/GamePlay/EnemyPath/TDEnemyPathMainView.cs
+    ← REMOVED: m_Slime (single prefab field)
+    ← ADDED: [SerializeField] m_EnemyDataSettings : TDEnemyDataSettings
+    ← ADDED: [SerializeField] m_LevelConfigSettings : TDLevelConfigSettings
+    ← Initialize(): gọi InitEnemyPools(m_EnemyDataSettings, transform)
+    ← OnGetAllPaths: load GetLevel(k_CurrentLevelIndex=0) → StartWaveLoop
+
+  Assets/1.Assets/Resources/Configs/Enemy Data Config.asset   [NEW SO]
+  Assets/1.Assets/Resources/Configs/Level Config.asset        [NEW SO]
+  Assets/1.Assets/Resources/Prefabs/EnemyFast.prefab          [NEW — Swarm09PA scale 0.56]
+  Assets/1.Assets/Resources/Prefabs/EnemyTank.prefab          [NEW — TurtleShellPolyart scale 0.74]
+  Assets/1.Assets/Resources/Prefabs/EnemyBoss.prefab          [NEW — GoldBoarPBR scale 0.32]
+
+
+
+  ── Mục tiêu ─────────────────────────────────────────────────────────────────
+  1. Thêm 4 tier enemy (Normal / Fast / Tank / Boss) với HP + Speed + prefab khác nhau
+  2. Refactor hệ thống wave: config per-màn thay vì per-wave hardcode
+  3. Hỗ trợ 2 đường (path) trong 1 màn
+  Scope: HP + Speed + prefab only. Chưa làm: DEF/RES stats, Air Drone (DragonSoulEater)
+
+  ── Enemy Tier Specs ──────────────────────────────────────────────────────────
+
+  Tier    | Base HP | Base Speed | Prefab (source)                          | Cảm giác
+  --------|---------|------------|------------------------------------------|----------
+  Normal  |   300   |    3.0     | SlimePolyart.prefab (đang dùng)          | Mặc định, quen thuộc
+  Fast    |   150   |    6.0     | Swarm09PA.prefab (Monster Minion Survivor) | Nhỏ, nhiều chân, nhanh nhẹn
+  Tank    |   900   |    1.5     | TurtleShellPolyart.prefab (RPG Monster DUO) | Mai rùa = armor heavy, chậm
+  Boss    |  3000   |    1.0     | GoldBoarPBR.prefab (FreeDragons)          | Dragon boar vàng, đe dọa
+
+  Prefab paths:
+    Normal: Assets/1.Assets/UnityStore Resources/RPG Monster DUO PBR Polyart/Prefabs/PolyartDefault/SlimePolyart.prefab
+    Fast:   Assets/1.Assets/UnityStore Resources/Monster Minion Survivor PBR Polyart/Prefab/Swarm09PA.prefab
+    Tank:   Assets/1.Assets/UnityStore Resources/RPG Monster DUO PBR Polyart/Prefabs/PolyartDefault/TurtleShellPolyart.prefab
+    Boss:   Assets/1.Assets/UnityStore Resources/FreeDragons/Prefab/DragonBoarPBR/GoldBoarPBR.prefab
+
+  Reserve (không dùng Phase 11):
+    DragonSoulEaterPBR → Air Drone (flying, future)
+    BeholderPBRDefault → Boss wave 2 / Elite tier (future)
+    ChestMonsterPolyartDefault → trap/puzzle mechanic (future)
+
+  ── EnemyType Enum ────────────────────────────────────────────────────────────
+
+  // Enums.cs
+  public enum EnemyType { Normal, Fast, Tank, Boss }
+
+  ── EnemyData Config (ScriptableObject) ──────────────────────────────────────
+
+  [Serializable]
+  public class EnemyData
+  {
+      public EnemyType   type;
+      public float       baseHP;
+      public float       baseSpeed;
+      public GameObject  prefab;
+  }
+
+  [CreateAssetMenu(...)]
+  public class TDEnemyDataSettings : ScriptableObject
+  {
+      [SerializeField] private List<EnemyData> enemies;
+      public EnemyData GetData(EnemyType type) { ... }
+  }
+
+  ── LevelConfig System ────────────────────────────────────────────────────────
+
+  Approach: Difficulty + TotalEnemies → auto-distribute (Hướng B)
+  Lý do chọn B:
+    - Designer set 2 field là xong (không phải 4 count riêng lẻ)
+    - Difficulty ratio đảm bảo balance nhất quán
+    - totalEnemies cho phép từng màn có cá tính riêng (dù cùng difficulty)
+    - Dễ mở rộng: thêm difficulty level mới chỉ cần thêm 1 dòng config
+
+  Difficulty enum:
+    public enum Difficulty { Easy, Normal, Hard, Extreme, Nightmare }
+
+  Difficulty Ratio Table (phân phối % + multiplier stats):
+
+    Difficulty | Normal% | Fast% | Tank% | Boss% | HP mult | Speed mult
+    -----------|---------|-------|-------|-------|---------|------------
+    Easy       |   80%   |  15%  |   4%  |   1%  |  ×0.8   |   ×0.9
+    Normal     |   60%   |  25%  |  12%  |   3%  |  ×1.0   |   ×1.0
+    Hard       |   45%   |  30%  |  18%  |   7%  |  ×1.2   |   ×1.1
+    Extreme    |   30%   |  30%  |  25%  |  15%  |  ×1.5   |   ×1.2
+    Nightmare  |   15%   |  25%  |  35%  |  25%  |  ×2.0   |   ×1.5
+
+  Ví dụ: difficulty=Hard, totalEnemies=50
+    Normal = 45% × 50 = 22.5 → 23 con
+    Fast   = 30% × 50 = 15   → 15 con
+    Tank   = 18% × 50 =  9   →  9 con
+    Boss   =  7% × 50 =  3.5 →  3 con
+    (làm tròn, đảm bảo sum = totalEnemies)
+
+  HP/Speed multiplier apply lúc runtime khi spawn:
+    float hp    = baseData.baseHP    * difficultyConfig.hpMult;
+    float speed = baseData.baseSpeed * difficultyConfig.speedMult;
+
+  ── LevelConfig Data Structure ────────────────────────────────────────────────
+
+  [Serializable]
+  public class LevelConfig
+  {
+      public int        levelIndex;
+      public Difficulty difficulty;
+      public int        totalEnemies;       // designer set (e.g. 30, 50, 80)
+      [Range(0.1f, 0.9f)]
+      public float      path1Ratio;         // % enemy đi path 1; path 2 = 1 - path1Ratio
+      public int        waveCount;          // số wave trong màn (e.g. 5, 8, 10)
+      public float      waveInterval;       // giây giữa các wave (e.g. 15f)
+      public float      spawnInterval;      // giây giữa từng enemy trong 1 wave (e.g. 1.5f)
+  }
+
+  [CreateAssetMenu(...)]
+  public class TDLevelConfigSettings : ScriptableObject
+  {
+      [SerializeField] private List<LevelConfig> levels;
+      public LevelConfig GetLevel(int index) { ... }
+  }
+
+  ── 2-Path System ─────────────────────────────────────────────────────────────
+
+  Mỗi màn có 2 đường → enemy split theo path1Ratio:
+    path1Count = Round(totalEnemies × path1Ratio)
+    path2Count = totalEnemies - path1Count
+
+  Phân phối type ratio tính trước → sau đó split:
+    path1: tỉ lệ type tương đương, Boss ưu tiên path nhiều hơn (path1 nếu path1Ratio ≥ 0.5)
+
+  Spawn: mỗi path có spawn queue riêng, spawn đan xen (hoặc đồng thời)
+
+  ── Wave Subdivision Auto ─────────────────────────────────────────────────────
+
+  totalEnemies chia đều cho waveCount:
+    basePerWave = totalEnemies / waveCount
+    remainder   = totalEnemies % waveCount (distributed to first N waves)
+
+  Mỗi wave: spawn basePerWave (hoặc +1) enemy, cách nhau spawnInterval giây
+  Giữa các wave: waveInterval giây (qua PauseAwareDelay)
+
+  ── Spawn Logic Flow (Phase 11) ───────────────────────────────────────────────
+
+  1. LevelConfig loaded từ SO → GetLevel(levelIndex)
+  2. Auto-distribute: DifficultyRatioTable → counts per type (Normal/Fast/Tank/Boss)
+  3. Split thành 2 spawn queues (path1 / path2) theo path1Ratio
+  4. Chia đều theo waveCount → spawnQueuePerWave[][]
+  5. For each wave:
+       onWaveStart → GateView.PlaySpawnEffect()
+       For each enemy in wave:
+         Xác định EnemyType từ queue → lấy EnemyData → tính HP×mult, speed×mult
+         GetOrSpawn prefab tương ứng từ pool
+         enemy.Initialize(key, hp, speed)
+         await PauseAwareDelay(spawnInterval)
+       await PauseAwareDelay(waveInterval)
+
+  ── Enemy Pool Refactor ───────────────────────────────────────────────────────
+
+  Hiện: 1 ObjectPool<TDEnemyView> dùng Slime prefab
+  Phase 11: 4 pools, 1 per EnemyType (giống bullet pool per TowerType)
+
+  TDEnemyPathMainControl:
+    Dictionary<EnemyType, ObjectPool<TDEnemyView>> m_EnemyPools
+    InitEnemyPools(): tạo pool cho từng EnemyType từ EnemyDataSettings
+    GetEnemy(EnemyType): m_EnemyPools[type].Get()
+    ReturnEnemy(enemy): m_EnemyPools[enemy.EnemyType].Release(enemy)
+
+  TDEnemyView refactor:
+    + EnemyType enemyType { get; private set; }
+    Initialize(key, hp, speed, enemyType): set stats từ tham số thay vì TDConstant
+
+  ── TDEnemyView Stats Refactor ────────────────────────────────────────────────
+
+  Hiện:
+    m_EnemyHealth = CONFIG_ENEMY_HEALTH  (hardcode từ TDConstant)
+    m_MoveSpeed   = CONFIG_ENEMY_MOVE_SPEED
+
+  Phase 11:
+    Initialize(string key, float hp, float speed, EnemyType type):
+      m_EnemyHealth = hp
+      m_MoveSpeed   = speed
+      m_EnemyType   = type
+      // reset state, subscribe, register như cũ
+
+  ── Implement Order (Phase 11) ────────────────────────────────────────────────
+
+  Step 1: EnemyType enum (Enums.cs)
+  Step 2: EnemyData + TDEnemyDataSettings SO
+  Step 3: Difficulty enum + DifficultyRatioConfig (hardcode table hoặc SO)
+  Step 4: LevelConfig + TDLevelConfigSettings SO
+  Step 5: TDEnemyView.Initialize() thêm hp + speed + type params
+  Step 6: TDEnemyPathMainControl: 4 pools per EnemyType
+  Step 7: Spawn logic: auto-distribute → queue → spawn với đúng type
+  Step 8: 2-path split (path1Ratio → 2 spawn queues)
+  Step 9: Assign prefabs trong TDEnemyDataSettings Inspector
+  Step 10: Điền LevelConfig cho màn 1 trong TDLevelConfigSettings Inspector
+
+  ── Prefab Notes ─────────────────────────────────────────────────────────────
+
+  Các enemy prefab mới cần:
+    - TDEnemyView component (hoặc auto-add như TDAttackVFX pattern)
+    - Không cần thay đổi gì khác — logic nằm hoàn toàn ở script
+    - Scale có thể khác nhau per prefab → set trong EnemyData hoặc pool createFunc
+
+  Boss: GoldBoarPBR có animation Idle/Walk/Run/Attack — dùng Walk cho di chuyển
+  Tank: TurtleShellPolyart — check animation Walk
+  Fast: Swarm09PA — small insect swarm, check animation
+  Normal: SlimePolyart — đang dùng, giữ nguyên
+
+  ── Còn lại (defer khỏi Phase 11) ────────────────────────────────────────────
+  ⬜ DEF / RES stats (physical/arts damage resistance)
+  ⬜ Air Drone tier (DragonSoulEaterPBR — flying)
+  ⬜ Weight mechanic (heavy enemies không bị knockback)
+  ⬜ BeholderPBR — Elite/Boss wave 2 tier
+  ⬜ Manual type count override per màn (nếu cần precision cao hơn Approach B)
 
 
 ================================================================================

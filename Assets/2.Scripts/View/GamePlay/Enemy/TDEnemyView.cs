@@ -1,46 +1,47 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using TDEnums;
 using UnityEngine;
 
 public class TDEnemyView : MonoBehaviour
 {
     private List<Vector3> m_PathsPosition = new List<Vector3>();
-    private float m_MoveSpeed, m_EnemyHealth;
-    private int m_CurrentPathIndex;
+    private float  m_MoveSpeed, m_EnemyHealth;
+    private int    m_CurrentPathIndex;
     private string m_EnemyKey;
-    private bool m_HasReachedEnd;
-    private bool m_HasBeenReturned;
+    private bool   m_HasReachedEnd;
+    private bool   m_HasBeenReturned;
 
-    // Progress từ 0.0 (vừa spawn) đến 1.0 (đến GateEnd)
+    public EnemyType EnemyType { get; private set; }
+
+    // Progress 0→1 (0 = vừa spawn, 1 = đến GateEnd)
     // Tower dùng để ưu tiên enemy gần GateEnd nhất
     public float PathProgress => m_PathsPosition.Count == 0 ? 0f
         : (float)m_CurrentPathIndex / m_PathsPosition.Count;
 
-    public void Initialize(string key)
+    public void Initialize(string key, float hp, float speed, EnemyType enemyType)
     {
         m_HasBeenReturned  = false;
         m_HasReachedEnd    = false;
         m_CurrentPathIndex = 0;
         m_PathsPosition.Clear();
-        m_EnemyHealth = TDConstant.CONFIG_ENEMY_HEALTH;
-        m_MoveSpeed   = TDConstant.CONFIG_ENEMY_MOVE_SPEED;
+        m_EnemyHealth = hp;
+        m_MoveSpeed   = speed;
+        EnemyType     = enemyType;
         m_EnemyKey    = key;
 
         TDEnemyControl.api.onGetEnemyPathPos += OnGetEnemyPathPos;
         TDEnemyRegistry.api.Register(this);
     }
-    
+
     private void OnGetEnemyPathPos(string key, List<Vector3> pathsPos, int index)
     {
         if (!key.Equals(m_EnemyKey)) return;
-        
-        m_PathsPosition = pathsPos;
+        m_PathsPosition    = pathsPos;
         m_CurrentPathIndex = index;
     }
 
     private void OnDestroy()
     {
-        // Chỉ cleanup nếu chưa được pool-return (tránh unsubscribe lại lần 2)
         if (!m_HasBeenReturned)
         {
             TDEnemyControl.api.onGetEnemyPathPos -= OnGetEnemyPathPos;
@@ -63,7 +64,7 @@ public class TDEnemyView : MonoBehaviour
         TDEnemyRegistry.api.Unregister(this);
         TDEnemyPathMainControl.api.ReturnEnemy(this);
     }
-        
+
     public void SetPath(List<IGridCellDTO> path)
     {
         TDEnemyControl.api.SetEnemyPath(m_EnemyKey, path);

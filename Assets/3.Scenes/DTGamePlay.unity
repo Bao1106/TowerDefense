@@ -7246,6 +7246,8 @@ MonoBehaviour:
   - {fileID: 472023531885247532, guid: 23d1a7dd3d1c2dd4888ad8183a624ebb, type: 3}
   m_GateStartPrefab: {fileID: 3157467065612542411, guid: 7ff469d747b7c2143ad82b9b7088051b, type: 3}
   m_GateEndPrefab: {fileID: 3466638691481364011, guid: 5c21da1d2d9879a4f958f25cdafa2d18, type: 3}
+  m_EnemyDataSettings: {fileID: 11400000, guid: 8a703885983e4c948a839504a79815b5, type: 2}
+  m_LevelConfigSettings: {fileID: 11400000, guid: 62dd9cd8da55f4c4f9d679b8b0f40ed4, type: 2}
 --- !u!1001 &256859641
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -10755,6 +10757,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_TowerHighlightPrefab: {fileID: 7426192192584708918, guid: 4b6296c1e6c53924d9d901f1efdb242b, type: 3}
+  m_RangeHighlightPrefab: {fileID: 7426192192584708918, guid: d86bf2d5f6cb9a64084e702b0762bd24, type: 3}
 --- !u!1001 &350260207
 PrefabInstance:
   m_ObjectHideFlags: 0

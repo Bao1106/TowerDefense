@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using TDEnums;
 using UnityEngine;
 using UnityEngine.Pool;
@@ -16,37 +16,33 @@ public class TDFlyweightBulletFactoryModel
     private readonly int  m_MaxCapacity     = 100;
 
     // 1 pool per TowerType — lazy-created khi bắn lần đầu
-    // Không có global m_TowerType state — pool lookup hoàn toàn stateless
-    private readonly Dictionary<TowerType, IObjectPool<TDBulletsView>> m_Pools
-        = new Dictionary<TowerType, IObjectPool<TDBulletsView>>();
+    private readonly Dictionary<TowerType, IObjectPool<TDAttackVFX>> m_Pools
+        = new Dictionary<TowerType, IObjectPool<TDAttackVFX>>();
 
     public TDFlyweightTowerDataSettings Setting
         => m_Setting ??= RepResourceObject.GetResource<TDFlyweightTowerDataSettings>(TDConstant.CONFIG_TOWER);
 
     // ── Public API ────────────────────────────────────────────────────────────
 
-    // Spawn bullet đúng type, ghi OwnerType để ReturnToPool biết trả về pool nào
-    public static TDBulletsView Spawn(TowerType type)
+    public static TDAttackVFX Spawn(TowerType type)
     {
         var pool = api.GetPoolFor(type);
         if (pool == null) return null;
 
-        TDBulletsView bullet = pool.Get();
-        bullet.OwnerType = type;
-        return bullet;
+        TDAttackVFX vfx = pool.Get();
+        vfx.OwnerType = type;
+        return vfx;
     }
 
-    // Return về đúng pool dựa vào OwnerType đã ghi lúc Spawn
-    public static void ReturnToPool(TDBulletsView bullet)
+    public static void ReturnToPool(TDAttackVFX vfx)
     {
-        if (bullet == null) return;
-        api.GetPoolFor(bullet.OwnerType)?.Release(bullet);
+        if (vfx == null) return;
+        api.GetPoolFor(vfx.OwnerType)?.Release(vfx);
     }
 
     // ── Internal ──────────────────────────────────────────────────────────────
 
-    // Lazy-create pool cho type — closure captures đúng prefab, không bị cross-contaminate
-    private IObjectPool<TDBulletsView> GetPoolFor(TowerType type)
+    private IObjectPool<TDAttackVFX> GetPoolFor(TowerType type)
     {
         if (m_Pools.TryGetValue(type, out var pool))
             return pool;
@@ -54,16 +50,21 @@ public class TDFlyweightBulletFactoryModel
         GameObject prefab = Setting.GetPrefab(type);
         if (prefab == null)
         {
-            Debug.LogError($"[TDFlyweightBulletFactoryModel] Cannot create pool: no prefab for TowerType.{type}");
+            Debug.LogError($"[TDFlyweightBulletFactoryModel] No prefab for TowerType.{type}");
             return null;
         }
 
-        // Closure capture 'prefab' tại thời điểm tạo pool → đúng prefab cho type này mãi mãi
-        pool = new ObjectPool<TDBulletsView>(
-            createFunc:      () => Object.Instantiate(prefab).GetComponent<TDBulletsView>(),
-            actionOnGet:     b  => b.gameObject.SetActive(true),
-            actionOnRelease: b  => b.gameObject.SetActive(false),
-            actionOnDestroy: b  => Object.Destroy(b.gameObject),
+        pool = new ObjectPool<TDAttackVFX>(
+            createFunc:      () =>
+            {
+                var go = Object.Instantiate(prefab);
+                // Đảm bảo prefab có TDAttackVFX — nếu chưa có thì tự add
+                var vfx = go.GetComponent<TDAttackVFX>() ?? go.AddComponent<TDAttackVFX>();
+                return vfx;
+            },
+            actionOnGet:     v => v.gameObject.SetActive(true),
+            actionOnRelease: v => v.gameObject.SetActive(false),
+            actionOnDestroy: v => Object.Destroy(v.gameObject),
             collectionCheck: m_CollectionCheck,
             defaultCapacity: m_DefaultCapacity,
             maxSize:         m_MaxCapacity
