@@ -1,6 +1,6 @@
 ================================================================================
   TOWER DEFENSE — GAME DESIGN, TECHNICAL REFERENCE & DEVELOPMENT ROADMAP
-  Last updated: 2026-05-26  (session 15 — Phase 12 DONE: Range Visualization + White Screen Fix)
+  Last updated: 2026-05-27  (session 16 — Phase 13 DONE: Enemy Animation System)
 ================================================================================
 
 
@@ -130,6 +130,8 @@ File: Assets/3.Scenes/DTGamePlay.unity
   TDEnemyView.cs             ← enemy MonoBehaviour: move along path, reach-end → LoseLife
                                [Phase 4.5: m_HasReachedEnd guard]
                                [Phase 6.1: PathProgress property, Register/Unregister registry]
+                               [Phase 13: Animator via GetComponent Awake; const triggers;
+                                Die coroutine; m_IsDying guard; Rebind on pool reuse]
   TDTowerMainView.cs         ← 5 tower holders, input handler, green highlight tiles,
                                range highlight tile pool (Phase 12)
   TDTowerWeaponView.cs       ← m_Targets List, ScanForTargets sort PathProgress, validate per frame
@@ -208,7 +210,7 @@ File: Assets/3.Scenes/DTGamePlay.unity
   │      hp    = baseHP    × ratio.hpMult                                 │
   │      speed = baseSpeed × ratio.speedMult                              │
   │      key = "w{waveIdx}-{type}-e{i}-{instanceId}"                     │
-  │      enemy.Initialize(key, hp, speed, enemyType)                     │
+  │      enemy.Initialize(key, hp, speed, data.dieDuration, enemyType)   │
   │      enemy.SetPath(corridor)                                          │
   │      await PauseAwareDelay(config.spawnInterval, ct)                  │
   │                                                                       │
@@ -428,13 +430,29 @@ File: Assets/3.Scenes/DTGamePlay.unity
   PathProgress: m_CurrentPathIndex / m_PathsPosition.Count (0→1)
     → Tower dùng để ưu tiên enemy gần GateEnd nhất
 
-  Initialize(key, hp, speed, enemyType): reset state, set stats, Subscribe, Register [Phase 11]
-  ReturnToPool():  guard m_HasBeenReturned → Unsubscribe → Unregister → Pool.Release [8.5]
-  TakeDamage(dmg): health -= dmg; health ≤ 0 → ReturnToPool() [không Destroy]
-  OnDestroy():     chỉ cleanup nếu !m_HasBeenReturned (scene unload safety)
+  State fields (session 16):
+    m_IsDying       : bool  ← guard TakeDamage + Update khi đang play Die anim [Phase 13]
+    m_DieDuration   : float ← nhận từ EnemyData.dieDuration qua Initialize() [Phase 13]
+
+  Animation fields [Phase 13]:
+    m_Animator       : Animator — GetComponent<Animator>() trong Awake()
+    TRIGGER_WALK     : const "Walk"
+    TRIGGER_GET_HIT  : const "GetHit"
+    TRIGGER_DIE      : const "Die"
+    TriggerSafe(str) : null-safe SetTrigger (bỏ qua nếu m_Animator == null)
+
+  Initialize(key, hp, speed, dieDuration, enemyType): reset state, set stats,
+    Rebind()+Update(0) để reset animator từ pool → TriggerSafe(WALK)
+    Subscribe + Register [Phase 11, 13]
+  TakeDamage(dmg): guard m_IsDying; health -= dmg; ≤ 0 → Die(); else TriggerSafe(GET_HIT)
+  Die(): m_IsDying=true; Unsubscribe+Unregister; TriggerSafe(DIE);
+         dieDuration>0 → Coroutine → PoolReturn(); else PoolReturn()
+  PoolReturn(): guard → m_HasBeenReturned=true → Pool.Release
+  ReturnToPool(): reach-end path → guard → Unsubscribe+Unregister → Pool.Release [8.5]
+  OnDestroy():    chỉ cleanup nếu !m_HasBeenReturned (scene unload safety)
 
   Update():
-    guard: m_PathsPosition==null || Count==0 || m_HasReachedEnd → return
+    guard: m_PathsPosition==null || Count==0 || m_HasReachedEnd || m_IsDying → return
     if m_CurrentPathIndex < Count:
       MoveTowards(target, speed*dt)
       LookRotation(dir)
@@ -973,10 +991,10 @@ File: Assets/3.Scenes/DTGamePlay.unity
     ✅ DifficultyRatioTable: % distribution + HP×/Speed× multiplier per difficulty
 
   ── 4 Enemy Prefabs ──────────────────────────────────────────────────────────
-    ✅ Slime.prefab       → Normal (scale 1.5 baked, ~0.98u wide)
-    ✅ EnemyFast.prefab   → Fast   (scale 0.56 baked, ~0.74u wide — Swarm09PA)
-    ✅ EnemyTank.prefab   → Tank   (scale 0.74 baked, ~1.15u wide — TurtleShellPolyart)
-    ✅ EnemyBoss.prefab   → Boss   (scale 0.32 baked, ~1.48u wide — GoldBoarPBR)
+    ✅ Slime.prefab          → Normal (scale 1.5 baked, ~0.98u wide)
+    ✅ SwarmFast.prefab      → Fast   (scale 0.56 baked, ~0.74u wide — Swarm09PA)
+    ✅ TurtleTank.prefab     → Tank   (scale 0.74 baked, ~1.15u wide — TurtleShellPolyart)
+    ✅ DragonBoarBoss.prefab → Boss   (scale 0.32 baked, ~1.48u wide — GoldBoarPBR)
     ✅ CONFIG_ENEMY_VISUAL_SCALE override removed — scale baked per prefab
 
   ── LevelConfig + Wave Engine ─────────────────────────────────────────────────
@@ -1002,7 +1020,7 @@ File: Assets/3.Scenes/DTGamePlay.unity
     ⬜ DEF / RES stats (physical/arts resistance)
     ⬜ Air Drone tier (DragonSoulEaterPBR — flying)
     ⬜ BeholderPBR — Elite/Boss wave 2 tier
-    ⬜ Animation per enemy type (Walk/Run/Attack)
+    ✅ Animation per enemy type → DONE Phase 13 (session 16)
 
   ─────────────────────────────────────────────────────────────────────────────
 
@@ -1053,17 +1071,125 @@ File: Assets/3.Scenes/DTGamePlay.unity
   ─────────────────────────────────────────────────────────────────────────────
 
   ╔══════════════════════════════════════════════════════════════════════════╗
-  ║  PHASE 8 — Win/Lose Conditions + HUD                    [TODO]            ║
+  ║  PHASE 13 — Enemy Animation System (Session 16)         [✅ DONE]        ║
   ╚══════════════════════════════════════════════════════════════════════════╝
-    Life=0 → GameOver screen (onGameOver stub đã có)
-    Waves complete + all enemies dead → Victory screen
 
-    HUD additions:
-      → "Wave 3/10" indicator
-      → Gold counter
-      → Next wave countdown timer
-      → Game speed toggle 1x/2x
-      → CONFIG_PLAYER_STARTING_GOLD=100, CONFIG_ENEMY_REWARD_GOLD=10
+  Goal: Wiring animation vào 4 enemy prefab — Walk, GetHit, Die.
+
+  ── Animator Controller Analysis ──────────────────────────────────────────────
+    Slime       (Normal): Controller "Slime"      — 0 params, WalkFWD auto-play on Enable
+    SwarmFast   (Fast):   Controller "Swarm09"    — 0 params, demo reel (ExitTime only)
+    TurtleTank  (Tank):   Controller "TurtleShell"— 0 params, demo reel (ExitTime only)
+    DragonBoarBoss (Boss): Controller "DragonBoarCTRL" — Trigger params: Walk/Run/BasicAttack/GetHit/Die/Scream
+
+  ── AnimatorController mới (SwarmFast & TurtleTank) ─────────────────────────
+    Lý do tạo mới: controller gốc (asset store) là demo reel không có params
+    → không code được SetTrigger. Tạo mới để tránh đụng chạm asset gốc.
+
+    Assets/1.Assets/Resources/AnimatorControllers/SwarmFast-Game.controller
+      States: Idle (default), Walk, GetHit, Die
+      Triggers: Walk, GetHit, Die
+      AnyState → Walk/GetHit/Die (Trigger, canTransitionToSelf=false, dur=0.1f)
+      Walk → Idle (ExitTime=1.0, dur=0.1f)
+      GetHit → Idle (ExitTime=1.0, dur=0.1f)
+      Clips: Swarm09_Idle, Swarm09_MoveFWD, Swarm09_GetHit, Swarm09_Die(0.63s,no-loop)
+
+    Assets/1.Assets/Resources/AnimatorControllers/TurtleTank-Game.controller
+      States: Idle (default), Walk, GetHit, Die
+      Triggers: Walk, GetHit, Die
+      Clips: IdleNormal, WalkFWD, GetHit, Die(2.0s,no-loop)
+
+    DragonBoarCTRL: parameter "Get Hit" → renamed "GetHit" (khớp với const)
+
+  ── TDEnemyView Animation Integration ────────────────────────────────────────
+    const string TRIGGER_WALK   = "Walk"
+    const string TRIGGER_GET_HIT = "GetHit"
+    const string TRIGGER_DIE    = "Die"
+    private Animator m_Animator   ← GetComponent<Animator>() trong Awake()
+    private float m_DieDuration   ← từ EnemyData.dieDuration, nhận qua Initialize()
+
+    Initialize(): m_Animator.Rebind() + Update(0) → reset từ pool state
+                  TriggerSafe(TRIGGER_WALK)
+    TakeDamage(): TriggerSafe(TRIGGER_GET_HIT) nếu chưa die
+    Die():        TriggerSafe(TRIGGER_DIE) → Coroutine(dieDuration) → PoolReturn()
+    TriggerSafe(): null-safe — bỏ qua nếu m_Animator == null
+
+  ── EnemyData.dieDuration (TDEnemyDataSettings) ──────────────────────────────
+    Slime (Normal):        0s    (không có Die animation — WalkFWD only controller)
+    SwarmFast (Fast):      0.63s (Swarm09_Die clip)
+    TurtleTank (Tank):     2.0s  (Die clip)
+    DragonBoarBoss (Boss): 1.33s (Die clip)
+    ⚠️ Cần set giá trị này trong Inspector: Enemy Data Config.asset
+
+  ── Prefab Setup ─────────────────────────────────────────────────────────────
+    Slime.prefab:          m_Animator = null (WalkFWD auto, không cần trigger)
+    SwarmFast.prefab:      TDEnemyView ADDED; m_Animator assigned; controller = SwarmFast-Game
+    TurtleTank.prefab:     TDEnemyView ADDED; m_Animator assigned; controller = TurtleTank-Game
+    DragonBoarBoss.prefab: TDEnemyView ADDED; m_Animator assigned; controller = DragonBoarCTRL
+                           triggerGetHit = "GetHit" (đã rename từ "Get Hit")
+
+  ── Inspector Assignments còn thiếu ─────────────────────────────────────────
+    ⚠️ Enemy Data Config.asset:
+       Normal.dieDuration = 0
+       Fast.dieDuration   = 0.63
+       Tank.dieDuration   = 2.0
+       Boss.dieDuration   = 1.33
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 8 — Win/Lose Conditions + HUD                    [⚠️ PARTIAL]      ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+
+  ── Trạng thái sau session 17+18 ─────────────────────────────────────────────
+
+    ✅ HUD Top Bar (scene DTGamePlay.unity):
+         [Far-left]  BackButton    → QUIT → SceneManager.LoadScene(SCENE_LOAD_FIRST)
+         [Near-left] SettingButton → TODO Phase 9
+         [Center]    EnemyCount    → "{killed}/{total}" (TDGameStateControl)
+                     LifePoint     → "{lives}" (TDPlayerLifeControl), đỏ khi ≤ 5
+         [Far-right] SpeedButton   → toggle x1/x2 (TDSpeedControl)
+                                     SpeedIcon/Normal ↔ SpeedIcon/SpeedX2
+                     PauseButton   → TDPauseControl.Toggle()
+
+    ✅ Gold Counter (Bottom/Currency/TxtValue):
+         Passive: +1 gold mỗi 5 giây (CONFIG_GOLD_PASSIVE_RATE = 5f)
+         Kill reward: +data.goldReward mỗi khi enemy die
+         Khởi điểm: 10 gold (CONFIG_PLAYER_STARTING_GOLD = 10)
+
+    ✅ Tower Bar (Bottom/TowerMainView): 5 cards — do TDTowerMainView quản lý
+
+    ✅ Control layer DONE (session 18):
+         TDGoldControl.cs       — gold, passive income Tick(), SpendGold()
+         TDGameStateControl.cs  — killed/total count, victory detection
+         TDSpeedControl.cs      — 1×/2× toggle, pause-aware
+
+    ✅ View layer DONE (session 18):
+         TDGameplayHUDView.cs   — gắn Canvas/SafeArea/Container
+                                   cache qua transform.Find() + PATH_GAMEPLAY_HUD_xxx
+                                   subscribe tất cả events, drive Tick()
+                                   FlashScreen dùng Time.unscaledDeltaTime
+
+    ✅ Wiring DONE (session 18):
+         TDEnemyView.Die()         → AddGold(goldReward) + OnEnemyKilled()
+         TDEnemyPathMainControl    → OnAllWavesSpawned() sau khi loop xong
+         TDEnemyPathMainView       → TDGameStateControl.Initialize(totalEnemies)
+         TDPauseControl.Resume()   → Time.timeScale = SpeedMultiplier (fix hardcode 1f)
+
+    ✅ Bug fix (session 18):
+         Speed UI hiển thị "2x" lúc start → fix bằng cách SubscribeEvents() trước
+         InitControls() → TDSpeedControl.Initialize() fire onSpeedChanged → sync UI
+
+    ⬜ CÒN LẠI:
+         - VictoryPanel UI  (TODO Phase 8 — OnVictory stub đã có)
+         - GameOverPanel UI (TODO Phase 8 — OnGameOver stub đã có)
+         - PausePanel wiring trong TDGameplayHUDView.OnPauseChanged()
+         - Gắn TDGameplayHUDView component vào Container trong scene (Inspector)
+         - Set EnemyData.goldReward trong Enemy Data Config.asset
+
+    ── Quit Button ──────────────────────────────────────────────────────────
+      PATH: Canvas/SafeArea/Container/Header/HUDButtonRight/BackButton
+      Action: SceneManager.LoadScene(TDConstant.SCENE_LOAD_FIRST)
 
   ─────────────────────────────────────────────────────────────────────────────
 
@@ -1212,6 +1338,19 @@ File: Assets/3.Scenes/DTGamePlay.unity
       → Mobile Cancel button không hiển thị (null-safe → không crash)
       Fix: Thêm PlacementPanel GameObject vào scene DTGamePlay.unity
 
+  ⚠️  HUD dùng text symbol thay sprite icon (session 17 review)
+      ☠ ♥ ♦ là text character trong TextMeshPro, không phải Image sprites
+      → Kém professional, không nhất quán với Arknights style
+      Fix: Thay bằng Layer Lab PictoIconPack01 sprites (xem Section 19)
+
+  ⚠️  Tower bar không full-width (session 17 review)
+      Cards right-aligned → khoảng trống trống bên trái
+      Fix: HorizontalLayoutGroup với childForceExpandWidth=true, hoặc anchor stretch
+
+  ⚠️  Gold chip ở bottom-right thay vì top-right (session 17 review)
+      Nên move lên HUDTopRight để nhất quán với Arknights layout
+      Fix: Phase 8.HUD Polish step 4
+
   ✅  SO duplicate Tower Bullet Config                        FIXED session 8
       Xóa Assets/2.Scripts/Model/Config/SO/Tower Bullet Config.asset
       DTLoadFirst.unity GUID → trỏ đúng Resources/Configs/Tower Bullet Config.asset
@@ -1269,7 +1408,7 @@ File: Assets/3.Scenes/DTGamePlay.unity
      │   BuildWavePlans(): regular wave + boss wave (2.5× size, boss spawn last)
      │   Boss distribution: ceil(W×k/B)-1 formula — spacing đều, cuối=wave cuối
      │   Extreme/Nightmare constraint: waveCount≥15, totalEnemies≥75
-     │   3 enemy prefabs mới: EnemyFast(0.56), EnemyTank(0.74), EnemyBoss(0.32) scale baked
+     │   3 enemy prefabs mới: SwarmFast(0.56), TurtleTank(0.74), DragonBoarBoss(0.32) scale baked
      │   path1Ratio REMOVED — wave corridor random per wave (old behavior preserved)
      │
   ✅ Phase 12  (Range Visualization)    ── DONE (session 15)
@@ -1279,15 +1418,30 @@ File: Assets/3.Scenes/DTGamePlay.unity
      │   RangeHighlight y=0.12f > path tile y=0.10f → transparent sort đúng
      │   Inspector: m_RangeHighlightPrefab = RangeHighlight.prefab
      │
-  ⬜ Phase 8   (Win/Lose + HUD)         ── cần Phase 4.5 ✓ + Phase 7
-     │   (onGameOver stub đã có, chỉ cần GameOver panel UI)
+  ✅ Phase 13  (Enemy Animation)        ── DONE (session 16)
+     │   TDEnemyView: const triggers; Animator GetComponent Awake; Die coroutine
+     │   TDEnemyDataSettings: EnemyData.dieDuration added
+     │   SwarmFast-Game.controller + TurtleTank-Game.controller (NEW — Trigger-based)
+     │   DragonBoarCTRL: "Get Hit" → "GetHit" (renamed để khớp const)
+     │   TDEnemyPathMainControl.SpawnBatch: truyền data.dieDuration vào Initialize()
+     │   ⚠️ Inspector pending: Enemy Data Config.asset dieDuration fields
+     │
+  ⚠️  Phase 8   (Win/Lose + HUD)         ── PARTIAL (session 17+18)
+     │   ✅ HUD scene elements: top bar, gold counter, tower bar (session 17)
+     │   ✅ Control layer: TDGoldControl, TDGameStateControl, TDSpeedControl (session 18)
+     │   ✅ View: TDGameplayHUDView — cache + events + FlashScreen (session 18)
+     │   ✅ Wiring: Die→gold, Die→state, OnAllWavesSpawned, Pause→SpeedMultiplier (session 18)
+     │   ✅ TDGameplayMainView stripped — chỉ giữ init logic (session 18)
+     │   ⬜ VictoryPanel UI + GameOverPanel UI (stubs đã có)
+     │   ⬜ PausePanel wiring trong TDGameplayHUDView
+     │   ⬜ Inspector: gắn TDGameplayHUDView vào Container; goldReward trong SO
      │
   ✅ Phase 8.5 (Pause + Enemy Pool)     ── DONE (session 10)
      │
   ⬜ Phase 9   (Polish + Perf)          ── final pass
 
-  ── Thứ tự implement đề xuất (cập nhật session 15) ──────────────────────
-  ✅ Phase 10 DONE → ✅ Phase 7 DONE → ✅ Phase 11 DONE → ✅ Phase 12 DONE → Phase 8 → Phase 9
+  ── Thứ tự implement đề xuất (cập nhật session 18) ──────────────────────
+  ✅ Phase 10 DONE → ✅ Phase 7 DONE → ✅ Phase 11 DONE → ✅ Phase 12 DONE → ✅ Phase 13 DONE → ⚠️ Phase 8 (control+view DONE, panels pending) → Phase 9
 
   Lý do thứ tự:
     Phase 10 trước Phase 7  : area damage cần grid-cell range → tránh viết lại (DONE)
@@ -1364,18 +1518,19 @@ File: Assets/3.Scenes/DTGamePlay.unity
   Assets/1.Assets/Resources/Prefabs/FattyMissileG02.prefab
   Assets/1.Assets/Resources/Prefabs/FattyMissileG03.prefab
   Assets/1.Assets/Resources/Prefabs/FattyMortarG02.prefab
-  Assets/1.Assets/Resources/Prefabs/Slime.prefab         ← Normal, scale=1.5 baked
-  Assets/1.Assets/Resources/Prefabs/EnemyFast.prefab     ← [Phase 11 NEW] Fast, scale=0.56 (copy Swarm09PA)
-  Assets/1.Assets/Resources/Prefabs/EnemyTank.prefab     ← [Phase 11 NEW] Tank, scale=0.74 (copy TurtleShellPolyart)
-  Assets/1.Assets/Resources/Prefabs/EnemyBoss.prefab     ← [Phase 11 NEW] Boss, scale=0.32 (copy GoldBoarPBR)
+  Assets/1.Assets/Resources/Prefabs/Slime.prefab              ← Normal, scale=1.5 baked; TDEnemyView (no Animator)
+  Assets/1.Assets/Resources/Prefabs/SwarmFast.prefab          ← [Phase 11] Fast, scale=0.56; [Phase 13] TDEnemyView+Anim
+  Assets/1.Assets/Resources/Prefabs/TurtleTank.prefab         ← [Phase 11] Tank, scale=0.74; [Phase 13] TDEnemyView+Anim
+  Assets/1.Assets/Resources/Prefabs/DragonBoarBoss.prefab     ← [Phase 11] Boss, scale=0.32; [Phase 13] TDEnemyView+Anim
   Assets/1.Assets/Resources/Prefabs/Plane.prefab
 
-  ── ScriptableObjects (Phase 11 NEW) ────────────────────────────────────────
+  ── ScriptableObjects (Phase 11 NEW, Phase 13 updated) ──────────────────────
   Assets/1.Assets/Resources/Configs/Enemy Data Config.asset
-    Normal: baseHP=300,  baseSpeed=3,   prefab=Slime
-    Fast:   baseHP=150,  baseSpeed=6,   prefab=EnemyFast
-    Tank:   baseHP=900,  baseSpeed=1.5, prefab=EnemyTank
-    Boss:   baseHP=3000, baseSpeed=1,   prefab=EnemyBoss
+    Normal: baseHP=300,  baseSpeed=3,   dieDuration=0,    prefab=Slime
+    Fast:   baseHP=150,  baseSpeed=6,   dieDuration=0.63, prefab=SwarmFast
+    Tank:   baseHP=900,  baseSpeed=1.5, dieDuration=2.0,  prefab=TurtleTank
+    Boss:   baseHP=3000, baseSpeed=1,   dieDuration=1.33, prefab=DragonBoarBoss
+    ⚠️ dieDuration cần set trong Inspector (field mới thêm Phase 13)
   Assets/1.Assets/Resources/Configs/Level Config.asset
     Level 0: Easy, totalEnemies=30, waveCount=5, waveInterval=10, spawnInterval=2
 
@@ -1516,6 +1671,46 @@ File: Assets/3.Scenes/DTGamePlay.unity
   [DELETED] Assets/2.Scripts/Model/Tower/TowerRange/TDVerticalRangeDTO.cs
 
 
+  ── Scripts / Assets modified (Session 16 — Phase 13 Enemy Animation) ──────
+  Assets/2.Scripts/View/GamePlay/Enemy/TDEnemyView.cs
+    ← [SerializeField] Animator/string/float fields → XÓA toàn bộ
+    ← const string TRIGGER_WALK/GET_HIT/DIE thay SerializeField strings
+    ← private Animator m_Animator ← GetComponent<Animator>() trong Awake()
+    ← private float m_DieDuration ← nhận qua Initialize() tham số mới
+    ← private bool m_IsDying ← guard Update + TakeDamage khi đang Die anim
+    ← Initialize(key, hp, speed, dieDuration, enemyType) ← thêm dieDuration param
+    ← Die(): tách riêng khỏi TakeDamage; TriggerSafe→Coroutine→PoolReturn
+    ← PoolReturn() tách riêng với ReturnToPool() (reach-end)
+    ← TriggerSafe(str): null-safe SetTrigger
+    ← Rebind()+Update(0f) khi Initialize để reset animator state từ pool
+
+  Assets/2.Scripts/Model/Config/TDEnemyDataSettings.cs
+    ← EnemyData: ADDED float dieDuration
+
+  Assets/2.Scripts/Control/PathControl/TDEnemyPathMainControl.cs
+    ← SpawnBatch: enemy.Initialize(key, hp, speed, data.dieDuration, type)
+
+  Assets/1.Assets/Resources/AnimatorControllers/SwarmFast-Game.controller [NEW]
+    ← Idle(default)→Walk/GetHit/Die via AnyState Triggers; cross-fade 0.1f
+    ← Clips từ Swarm09 controller gốc
+
+  Assets/1.Assets/Resources/AnimatorControllers/TurtleTank-Game.controller [NEW]
+    ← Idle(default)→Walk/GetHit/Die via AnyState Triggers; cross-fade 0.1f
+    ← Clips từ TurtleShell controller gốc
+
+  Assets/1.Assets/UnityStore Resources/FreeDragons/Animators/DragonBoarCTRL.controller
+    ← Trigger parameter "Get Hit" → renamed "GetHit" (khớp với const)
+    ← Tất cả transition conditions "Get Hit" → "GetHit"
+
+  Assets/1.Assets/Resources/Prefabs/SwarmFast.prefab
+    ← TDEnemyView ADDED; m_Animator assigned; controller = SwarmFast-Game
+
+  Assets/1.Assets/Resources/Prefabs/TurtleTank.prefab
+    ← TDEnemyView ADDED; m_Animator assigned; controller = TurtleTank-Game
+
+  Assets/1.Assets/Resources/Prefabs/DragonBoarBoss.prefab
+    ← TDEnemyView ADDED; m_Animator assigned; controller = DragonBoarCTRL
+
   ── Scripts / Assets modified (Session 15 — Phase 12 Range Visualization + Fixes) ───
   Assets/2.Scripts/Control/Tower/TDTowerMainControl.cs
     ← onGetTowerName: Action<string> → Action<string, TowerType>
@@ -1590,7 +1785,7 @@ File: Assets/3.Scenes/DTGamePlay.unity
   ✅ Extreme/Nightmare constraint: waveCount≥15, totalEnemies≥75 (clamp trong BuildWavePlans)
 
   ✅ CONFIG_ENEMY_VISUAL_SCALE override REMOVED — scale baked vào từng prefab:
-     Slime (Normal)=1.5, EnemyFast=0.56, EnemyTank=0.74, EnemyBoss=0.32
+     Slime (Normal)=1.5, SwarmFast=0.56, TurtleTank=0.74, DragonBoarBoss=0.32
      Sizing basis (cellSize=2f, target widths):
        Normal ~0.98u, Fast ~0.74u, Tank ~1.15u, Boss ~1.48u
 
@@ -1646,9 +1841,9 @@ File: Assets/3.Scenes/DTGamePlay.unity
 
   Assets/1.Assets/Resources/Configs/Enemy Data Config.asset   [NEW SO]
   Assets/1.Assets/Resources/Configs/Level Config.asset        [NEW SO]
-  Assets/1.Assets/Resources/Prefabs/EnemyFast.prefab          [NEW — Swarm09PA scale 0.56]
-  Assets/1.Assets/Resources/Prefabs/EnemyTank.prefab          [NEW — TurtleShellPolyart scale 0.74]
-  Assets/1.Assets/Resources/Prefabs/EnemyBoss.prefab          [NEW — GoldBoarPBR scale 0.32]
+  Assets/1.Assets/Resources/Prefabs/SwarmFast.prefab          [NEW — Swarm09PA scale 0.56]
+  Assets/1.Assets/Resources/Prefabs/TurtleTank.prefab         [NEW — TurtleShellPolyart scale 0.74]
+  Assets/1.Assets/Resources/Prefabs/DragonBoarBoss.prefab     [NEW — GoldBoarPBR scale 0.32]
 
 
 
@@ -1850,6 +2045,302 @@ File: Assets/3.Scenes/DTGamePlay.unity
   ⬜ Weight mechanic (heavy enemies không bị knockback)
   ⬜ BeholderPBR — Elite/Boss wave 2 tier
   ⬜ Manual type count override per màn (nếu cần precision cao hơn Approach B)
+
+
+================================================================================
+  19. SESSION 17 — HUD REVIEW + SCENE DOCUMENTATION
+================================================================================
+
+  ── Mục tiêu session 17 ───────────────────────────────────────────────────────
+    1. Thiết kế lại HUD theo phong cách Arknights (Chip icon + text)
+    2. Review toàn bộ scene gameplay và ghi nhận trạng thái thực tế
+    3. Map từng HUD element → Layer Lab PictoIconPack01 icon cụ thể
+    4. Cập nhật roadmap & tất cả phase status
+    HUD implementation trong session: đã thử → reverted theo yêu cầu user
+    (user tự revert toàn bộ scene changes bằng git checkout HEAD)
+
+  ── Scene State Confirmed (GameView 1920×1080 screenshot) ────────────────────
+
+    Canvas: CanvasScaler 1920×1080 Scale-With-Screen-Size, Match=0.5
+    SafeArea child contains all HUD elements
+
+    [TOP BAR — full width, dark semi-transparent]
+      • Red back arrow button "←"   (far-left)  → QUIT GAME action
+      • Settings/Gear button "⚙"    (near-left) → function TBD
+      • ☠ 36/36  [divider] ♥ 36    (center)    → enemy count + life (text symbols)
+      • "2x ▶"                      (far-right) → speed toggle 1×/2×
+      • "‖"                         (far-right) → pause button
+
+    [BOTTOM-RIGHT — standalone]
+      • ♦ 36                                    → gold counter (diamond text symbol)
+
+    [BOTTOM BAR — tower cards]
+      • 5 tower cards, right-aligned (NOT full-width)
+      • Each card: 3D tower render | Kenney border frame | "10$" cost badge
+      • Cost badge: yellow $ text on dark bg  (NOT gold sprite)
+
+    [3D MAP]
+      • Top-down 30° orthographic camera
+      • White/gray battlefield plane (42×24 world units)
+      • Low-poly trees/rocks at edges
+      • Normal enemy (Slime) visible
+      • Blue GateEnd (TowerCrystals KenneyTower prop) at far end
+
+  ── Layer Lab PictoIconPack01 → HUD Element Mapping ─────────────────────────
+
+    HUD Element          | Layer Lab Icon File           | Màu đề xuất
+    ---------------------|-------------------------------|----------------
+    Quit Button (←)      | Navigation_ArrowBack.png      | Đỏ (#FF4444)
+    Settings Button      | Control_Settings.png          | Xám (#888888)
+    Enemy Count (☠)      | GameElement_Skull.png         | Cam (#FF8800)
+    Life Counter (♥)     | GameElement_Heart.png         | Đỏ (#FF4466)
+    Speed Toggle (1×/2×) | Control_FastForward.png       | Xanh lá (#44FF88)
+    Pause Button (‖)     | Control_Pause.png             | Trắng (#FFFFFF)
+    Gold Counter (♦)     | GameElement_Gold.png          | Vàng (#FFD700)
+    Wave Indicator       | GameElement_Flag.png          | Xanh dương (#4488FF)
+    Tower Cost Badge     | GameElement_Gold.png          | Vàng (#FFD700)
+
+    Icon size chuẩn cho HUD Chip: 48×48px
+    Icon size chuẩn cho cost badge: 24×24px
+    Tất cả size là bội số của 12px
+
+    ── Chip Layout Formula (multiples of 12) ────────────────────────────────
+      Chip width  = pad(12) + icon(48) + spacing(12) + text(72) + pad(12) = 156px
+      Chip height = 60px
+      HUDTopLeft  = chip + spacing(12) + chip = 156+12+156 = 324×60
+      HUDTopRight = 156×(60+12+60) = 156×132 (VLG stacked)
+
+  ── HUD Design Spec (Arknights-inspired, Pending Implementation) ─────────────
+
+    Layout:
+      HUDTopLeft  (anchor top-left, offset 12,-12)
+        ├── LifeChip    [Heart icon | "20"]     → m_LifeText
+        └── EnemyChip   [Skull icon | "0/30"]   → m_EnemyText
+      HUDTopRight (anchor top-right, offset -120,-12)
+        ├── GoldChip    [Gold icon | "100"]      → m_GoldText
+        └── WaveChip    [Flag icon | "W 1/5"]    → m_WaveText
+      PauseButton (anchor top-right, offset -12,-12) size 96×60
+        └── [Pause icon]
+      QuitButton  (anchor top-left, offset 12,-12 but BEHIND HUDTopLeft) — hiện tại là red arrow
+
+    All chips:
+      Background: Kenney fantasy-ui-borders panel (9-sliced)
+      HLG: padding L12 R12 T6 B6, spacing 12
+      Icon: Image 48×48, sprite from PictoIconPack01
+      Text: TextMeshProUGUI 36pt Bold
+
+  ── Các Issues từ Scene Review (Session 17) ──────────────────────────────────
+
+    Issue                                  | Priority | Phase
+    ---------------------------------------|----------|----------------
+    HUD dùng text symbol thay sprite icon  | HIGH     | Phase 8.HUD Polish
+    Tower bar right-aligned (không full-W) | MEDIUM   | Phase 8.HUD Polish
+    Gold chip ở bottom-right, nên top-right| MEDIUM   | Phase 8.HUD Polish
+    "$" trong cost badge → Gold.png sprite | LOW      | Phase 8.HUD Polish
+    PlacementPanel GameObject missing      | HIGH     | Phase 6 (Existing ⚠️)
+    Settings button chức năng chưa rõ      | LOW      | Phase 9 Polish
+
+  ── New Phase: 8.HUD Polish (Pending) ────────────────────────────────────────
+
+    Mục tiêu: Thay thế tất cả text symbol (☠ ♥ ♦) bằng Layer Lab sprite icons
+              và fix layout issues từ scene review
+
+    Step 1: Replace ☠ text → GameElement_Skull.png (48×48 Image)
+    Step 2: Replace ♥ text → GameElement_Heart.png (48×48 Image)
+    Step 3: Replace ♦ gold → GameElement_Gold.png (48×48 Image)
+    Step 4: Move gold chip từ bottom-right → HUDTopRight (stacked với wave chip)
+    Step 5: Fix tower bar layout → HLG fill full width (flexibleWidth=1 per card)
+    Step 6: Replace "$" in cost badge → GameElement_Gold.png (24×24 Image)
+    Step 7: Fix PlacementPanel missing (add GO vào scene)
+    Step 8: Ensure all sizes multiples of 12; remove ContentSizeFitter
+    Phụ thuộc: Phase 8 control layer DONE (gold events, wave events)
+
+  ── Scripts cần tạo mới (Phase 8 Control Layer) ──────────────────────────────
+
+    TDGoldControl.cs
+      int Gold { get; }
+      Action<int> onGoldChanged
+      void AddGold(int amount)
+      bool SpendGold(int amount)   → false if insufficient
+
+    TDGameStateControl.cs
+      bool IsGameOver { get; }
+      bool IsVictory  { get; }
+      int  EnemyAlive { get; }
+      Action onVictory
+      Action onDefeat
+      void OnEnemyDied()           → decrement count; check win
+      void OnLifeReachedZero()     → trigger defeat
+
+    TDSpeedControl.cs
+      float SpeedMultiplier { get; }  → 1f hoặc 2f
+      void ToggleSpeed()              → Time.timeScale *= 2 / reset
+      Action<float> onSpeedChanged
+
+    TDGameplayHUDView.cs (View layer — subscribe to all control events)
+      [SerializeField] TMP_Text m_LifeText, m_EnemyText, m_GoldText, m_WaveText
+      Subscribe: onLifeChanged, onGoldChanged, onWaveChanged, onSpeedChanged
+      OnVictory() → show VictoryPanel
+      OnDefeat()  → show GameOverPanel
+
+  ── Wiring Changes cần thiết ─────────────────────────────────────────────────
+
+    TDControl.cs:
+      + TDGoldControl.api      = new TDGoldControl()
+      + TDGameStateControl.api = new TDGameStateControl()
+      + TDSpeedControl.api     = new TDSpeedControl()
+
+    TDEnemyView.Die():
+      + TDGoldControl.api.AddGold(CONFIG_ENEMY_REWARD_GOLD)
+      + TDGameStateControl.api.OnEnemyDied()
+
+    TDPlayerLifeControl (existing):
+      + onLifeChanged → TDGameStateControl.api.OnLifeReachedZero() when life==0
+
+    TDEnemyPathMainControl (existing):
+      + onAllWavesCompleted (new Action) → TDGameStateControl check
+
+  ── Scripts modified (Session 17) ────────────────────────────────────────────
+    (HUD implementation scripts were written and executed, then scene was reverted
+     via git checkout HEAD at user's request. No permanent script changes this session.)
+
+    Key decision: user confirmed red ← top-left = QUIT GAME button
+
+
+================================================================================
+  20. SESSION 18 — PHASE 8 CONTROL LAYER + HUD VIEW IMPLEMENTATION
+================================================================================
+
+  ── Mục tiêu ─────────────────────────────────────────────────────────────────
+    Implement toàn bộ Phase 8 control layer + TDGameplayHUDView
+    Ghi nhận Container hierarchy, design TDGameplayHUDView, wire tất cả events
+
+  ── Container Hierarchy (Canvas/SafeArea/Container) ──────────────────────────
+    Confirmed via script-execute:
+
+    Container  ← TDGameplayHUDView gắn ở đây
+    ├─ Header
+    │  ├─ HUDButtonRight
+    │  │  ├─ BackButton       [Button, ProceduralImage]  → child: Icon
+    │  │  └─ SettingButton    [Button, ProceduralImage, CanvasGroup]  → child: Icon
+    │  ├─ Blank
+    │  ├─ MapInfo
+    │  │  ├─ Background
+    │  │  ├─ Line
+    │  │  ├─ EnemyCount       [HLG]  → children: IconContent, TxtValue
+    │  │  ├─ Line
+    │  │  ├─ LifePoint        [HLG]  → children: IconContent, TxtValue
+    │  │  └─ Line
+    │  ├─ Blank
+    │  └─ HUDButtonLeft
+    │     ├─ SpeedButton      [Button, VLG] → children: TxtValue, SpeedIcon
+    │     │                                   SpeedIcon/Normal, SpeedIcon/SpeedX2
+    │     └─ PauseButton      [Button]      → child: Icon
+    └─ Bottom
+       ├─ Currency            [HLG]  → children: IconContent, TxtValue ← gold
+       └─ TowerMainView       ← do TDTowerMainView quản lý (KHÔNG phải HUDView)
+
+    FlashScreen: Canvas/SafeArea/FlashScreen (sibling của Container)
+    → cache bằng transform.parent.Find(PATH_GAMEPLAY_SCREEN_FLASH)
+
+  ── HUD Logic Spec ───────────────────────────────────────────────────────────
+    EnemyCount : "{killed}/{total}" — killed tăng khi Die(), total từ LevelConfig
+    LifePoint  : text = lives; color = đỏ nếu lives ≤ CONFIG_LIFE_LOW_THRESHOLD (5)
+    Currency   : passive +1 mỗi CONFIG_GOLD_PASSIVE_RATE=5f giây + kill reward per type
+                 khởi điểm CONFIG_PLAYER_STARTING_GOLD=10
+    SpeedButton: default Normal active + TxtValue="x1"; click → swap Normal/SpeedX2 + "x2"
+    BackButton : SceneManager.LoadScene(SCENE_LOAD_FIRST) → quit game
+    FlashScreen: Time.unscaledDeltaTime (flash hiển thị cả khi pause)
+
+  ── Config Values (TDConstant.cs — session 18) ───────────────────────────────
+    CONFIG_PLAYER_STARTING_GOLD = 10
+    CONFIG_GOLD_PASSIVE_RATE    = 5f     // giây per +1 gold
+    CONFIG_LIFE_LOW_THRESHOLD   = 5      // <= threshold → text đỏ
+    PATH_GAMEPLAY_HUD_BACK_BUTTON       = "Header/HUDButtonRight/BackButton"
+    PATH_GAMEPLAY_HUD_SETTING_BUTTON    = "Header/HUDButtonRight/SettingButton"
+    PATH_GAMEPLAY_HUD_ENEMY_COUNT       = "Header/MapInfo/EnemyCount/TxtValue"
+    PATH_GAMEPLAY_HUD_LIFE_POINT        = "Header/MapInfo/LifePoint/TxtValue"
+    PATH_GAMEPLAY_HUD_SPEED_BUTTON      = "Header/HUDButtonLeft/SpeedButton"
+    PATH_GAMEPLAY_HUD_SPEED_VALUE       = "Header/HUDButtonLeft/SpeedButton/TxtValue"
+    PATH_GAMEPLAY_HUD_SPEED_ICON_NORMAL = "Header/HUDButtonLeft/SpeedButton/SpeedIcon/Normal"
+    PATH_GAMEPLAY_HUD_SPEED_ICON_X2     = "Header/HUDButtonLeft/SpeedButton/SpeedIcon/SpeedX2"
+    PATH_GAMEPLAY_HUD_PAUSE_BUTTON      = "Header/HUDButtonLeft/PauseButton"
+    PATH_GAMEPLAY_HUD_CURRENCY          = "Bottom/Currency/TxtValue"
+    PATH_GAMEPLAY_SCREEN_FLASH          = "FlashScreen"
+
+  ── New Files (Session 18) ────────────────────────────────────────────────────
+
+  Assets/2.Scripts/Control/Gameplay/TDGoldControl.cs          [NEW]
+    Gold { get }; onGoldChanged: Action<int>
+    Initialize(startingGold); Tick(deltaTime) — passive income, pause-aware
+    AddGold(amount); SpendGold(amount) → bool
+
+  Assets/2.Scripts/Control/Gameplay/TDGameStateControl.cs     [NEW]
+    TotalEnemies, KilledEnemies, AllWavesSpawned
+    onEnemyCountChanged: Action<int,int>; onVictory: Action
+    Initialize(totalEnemies); OnEnemyKilled(); OnAllWavesSpawned()
+    CheckVictory(): AllWavesSpawned && KilledEnemies >= TotalEnemies
+
+  Assets/2.Scripts/Control/Gameplay/TDSpeedControl.cs         [NEW]
+    SpeedMultiplier: float (1f default); IsFast: bool
+    onSpeedChanged: Action<float>
+    Initialize() → fire onSpeedChanged(1f)
+    ToggleSpeed() → swap 1f/2f; chỉ apply timeScale nếu không pause
+
+  Assets/2.Scripts/View/GamePlay/TDGameplayHUDView.cs          [NEW]
+    Gắn vào: Canvas/SafeArea/Container
+    Awake: CacheReferences() — tất cả via transform.Find(PATH_xxx)
+    Start: SubscribeEvents() → InitControls() → SetupButtons()
+           (subscribe TRƯỚC init để nhận event sync đầu tiên)
+    Update: TDGoldControl.api.Tick(Time.deltaTime)
+    OnDestroy: UnsubscribeEvents()
+    Handlers: OnLifeChanged (text + color + flash), OnGoldChanged, OnEnemyCountChanged,
+              OnVictory (stub), OnGameOver (stub), OnPauseChanged (stub), OnSpeedChanged
+    FlashScreen: coroutine với Time.unscaledDeltaTime
+
+  ── Modified Files (Session 18) ───────────────────────────────────────────────
+
+  Assets/2.Scripts/Model/Config/Constant/TDConstant.cs
+    ← 13 PATH_GAMEPLAY_HUD_xxx constants added
+    ← CONFIG_PLAYER_STARTING_GOLD=10, CONFIG_GOLD_PASSIVE_RATE=5f, CONFIG_LIFE_LOW_THRESHOLD=5
+
+  Assets/2.Scripts/Model/Config/TDEnemyDataSettings.cs
+    ← EnemyData: ADDED int goldReward
+    ← ⚠️ Inspector pending: set goldReward trong Enemy Data Config.asset per type
+
+  Assets/2.Scripts/Control/Gameplay/TDPauseControl.cs
+    ← Resume(): Time.timeScale = 1f → TDSpeedControl.api?.SpeedMultiplier ?? 1f
+    ← Fix: resume sau khi speed=2x sẽ restore đúng 2x thay vì reset về 1x
+
+  Assets/2.Scripts/Control/TDControl.cs
+    ← InitOtherControl(): thêm TDGoldControl.api, TDGameStateControl.api, TDSpeedControl.api
+
+  Assets/2.Scripts/View/GamePlay/TDGameplayMainView.cs
+    ← STRIPPED: bỏ m_LifeText, m_ScreenFlash, m_PausePanel, FlashScreen(), tất cả event sub
+    ← CHỈ GIỮ: CheckSceneLoaded(), TDPlayerLifeControl.api.Initialize(), InitGameplay()
+
+  Assets/2.Scripts/View/GamePlay/Enemy/TDEnemyView.cs
+    ← ADDED: private int m_GoldReward
+    ← Initialize(): thêm param int goldReward → m_GoldReward = goldReward
+    ← Die(): TDGoldControl.api?.AddGold(m_GoldReward) + TDGameStateControl.api?.OnEnemyKilled()
+
+  Assets/2.Scripts/Control/PathControl/TDEnemyPathMainControl.cs
+    ← SpawnBatch: enemy.Initialize(..., data?.goldReward ?? 0, type)
+    ← StartWaveLoop: sau khi loop xong → TDGameStateControl.api?.OnAllWavesSpawned()
+
+  Assets/2.Scripts/View/GamePlay/EnemyPath/TDEnemyPathMainView.cs
+    ← OnGetAllPaths: TDGameStateControl.api?.Initialize(config.totalEnemies) trước StartWaveLoop
+
+  ── Bug Fix (Session 18) ─────────────────────────────────────────────────────
+    Speed UI "2x" khi start game:
+    Root cause: InitControls() chạy trước SubscribeEvents() → onSpeedChanged fire nhưng
+                không ai lắng nghe → icon giữ state mặc định trong scene (SpeedX2 active)
+    Fix: đổi thứ tự trong TDGameplayHUDView.Start():
+         SubscribeEvents() → InitControls() → SetupButtons()
+
+  ── Inspector Actions Pending ────────────────────────────────────────────────
+    ⚠️ Gắn TDGameplayHUDView component vào Canvas/SafeArea/Container trong DTGamePlay.unity
+    ⚠️ Set EnemyData.goldReward trong Enemy Data Config.asset (Normal=5, Fast=8, Tank=15, Boss=50)
 
 
 ================================================================================

@@ -141,6 +141,8 @@ public class TDEnemyPathMainView : MonoBehaviour
         LevelConfig config = m_LevelConfigSettings.GetLevel(k_CurrentLevelIndex);
         if (config == null) return;
 
+        TDGameStateControl.api?.Initialize(config.totalEnemies);
+
         m_WaveCts = new CancellationTokenSource();
         TDEnemyPathMainControl.api.StartWaveLoop(m_SpawnPos, m_AllPaths, config, m_WaveCts.Token);
     }

@@ -893,6 +893,7 @@ GameObject:
   m_Component:
   - component: {fileID: 6265206175713501824}
   - component: {fileID: 5162232971360506}
+  - component: {fileID: 2412276896409426670}
   m_Layer: 0
   m_Name: TurtleTank
   m_TagString: Untagged
@@ -927,7 +928,7 @@ Animator:
   m_GameObject: {fileID: 6753617674297473082}
   m_Enabled: 1
   m_Avatar: {fileID: 9000000, guid: 942e6d5330e147fe84c5ab6ab2193ca1, type: 3}
-  m_Controller: {fileID: 9100000, guid: 1f68948a5bb74f2fa9e9087a872750e9, type: 2}
+  m_Controller: {fileID: 9100000, guid: 9e1f013026ac751408afaa1419beaf9b, type: 2}
   m_CullingMode: 1
   m_UpdateMode: 0
   m_ApplyRootMotion: 0
@@ -938,6 +939,23 @@ Animator:
   m_AllowConstantClipSamplingOptimization: 1
   m_KeepAnimatorStateOnDisable: 0
   m_WriteDefaultValuesOnDisable: 0
+--- !u!114 &2412276896409426670
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6753617674297473082}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c463ad0a4c934549a7a63d8d4c01e397, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_Animator: {fileID: 5162232971360506}
+  m_TriggerWalk: Walk
+  m_TriggerGetHit: GetHit
+  m_TriggerDie: Die
+  m_DieDuration: 2
 --- !u!1 &6861681153245785469
 GameObject:
   m_ObjectHideFlags: 0

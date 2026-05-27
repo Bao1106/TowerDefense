@@ -33,6 +33,9 @@ public class TDControl
         //Init main control
         TDPauseControl.api            = new TDPauseControl();
         TDPlayerLifeControl.api       = new TDPlayerLifeControl();
+        TDGoldControl.api             = new TDGoldControl();
+        TDGameStateControl.api        = new TDGameStateControl();
+        TDSpeedControl.api            = new TDSpeedControl();
         TDGameplayMainControl.api     = new TDGameplayMainControl();
         TDEnemyPathMainControl.api    = new TDEnemyPathMainControl();
         TDTowerMainControl.api        = new TDTowerMainControl();

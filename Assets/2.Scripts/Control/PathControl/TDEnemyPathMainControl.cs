@@ -158,6 +158,7 @@ public class TDEnemyPathMainControl
             }
 
             Debug.Log($"<color=green>All {waveBatches.Count} waves completed!</color>");
+            TDGameStateControl.api?.OnAllWavesSpawned();
         }
         catch (OperationCanceledException)
         {
@@ -189,7 +190,7 @@ public class TDEnemyPathMainControl
             enemy.transform.rotation = Quaternion.identity;
 
             string key = $"w{waveIdx}-{type}-e{i}-{enemy.gameObject.GetInstanceID()}";
-            enemy.Initialize(key, hp, speed, type);
+            enemy.Initialize(key, hp, speed, data.dieDuration, data?.goldReward ?? 0, type);
             enemy.SetPath(path);
 
             await PauseAwareDelay(spawnInterval, ct);

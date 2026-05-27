@@ -9,6 +9,8 @@ public class EnemyData
     public EnemyType  type;
     public float      baseHP;
     public float      baseSpeed;
+    public float      dieDuration;   // giây chờ animation Die trước khi return pool
+    public int        goldReward;    // gold thưởng khi kill enemy loại này
     public GameObject prefab;
 }
 

@@ -32,7 +32,21 @@ public static class TDConstant
     public const string GAMEPLAY_ENEMY_PATH_CREATE_POINT = "PathView/CreatePoint";
     public const string GAMEPLAY_ENEMY_PATH_VIEW = "PathView";
     public const string GAMEPLAY_MAP_VISUALIZE = "GameMapVisualize";
-    
+
+    // HUD paths — relative to Canvas/SafeArea/Container (dùng bởi TDGameplayHUDView)
+    public const string PATH_GAMEPLAY_HUD_BACK_BUTTON       = "Header/HUDButtonRight/BackButton";
+    public const string PATH_GAMEPLAY_HUD_SETTING_BUTTON    = "Header/HUDButtonRight/SettingButton";
+    public const string PATH_GAMEPLAY_HUD_ENEMY_COUNT       = "Header/MapInfo/EnemyCount/TxtValue";
+    public const string PATH_GAMEPLAY_HUD_LIFE_POINT        = "Header/MapInfo/LifePoint/TxtValue";
+    public const string PATH_GAMEPLAY_HUD_SPEED_BUTTON      = "Header/HUDButtonLeft/SpeedButton";
+    public const string PATH_GAMEPLAY_HUD_SPEED_VALUE       = "Header/HUDButtonLeft/SpeedButton/TxtValue";
+    public const string PATH_GAMEPLAY_HUD_SPEED_ICON_NORMAL = "Header/HUDButtonLeft/SpeedButton/SpeedIcon/Normal";
+    public const string PATH_GAMEPLAY_HUD_SPEED_ICON_X2     = "Header/HUDButtonLeft/SpeedButton/SpeedIcon/SpeedX2";
+    public const string PATH_GAMEPLAY_HUD_PAUSE_BUTTON      = "Header/HUDButtonLeft/PauseButton";
+    public const string PATH_GAMEPLAY_HUD_CURRENCY          = "Bottom/Currency/TxtValue";
+    // FlashScreen nằm ở SafeArea (cha của Container) → dùng transform.parent.Find()
+    public const string PATH_GAMEPLAY_SCREEN_FLASH          = "FlashScreen";
+
     //Config Values
     public static readonly float[] CONFIG_TOWER_ROTATIONS = { 0f, 90f, 180f, 270f };
     // Grid 20×12 (plane scale 4×2.4, cellSize 2 → world 40×24, position Z=28)
@@ -71,7 +85,10 @@ public static class TDConstant
     public const int CONFIG_OBSTACLE_EXCLUSION_RADIUS = 2;
     // Khoảng cách tối thiểu (Manhattan) giữa 2 obstacle centers
     public const int CONFIG_OBSTACLE_SPACING          = 3;
-    public const int CONFIG_PLAYER_STARTING_LIVES  = 20;
+    public const int   CONFIG_PLAYER_STARTING_LIVES  = 20;
+    public const int   CONFIG_PLAYER_STARTING_GOLD   = 10;
+    public const float CONFIG_GOLD_PASSIVE_RATE       = 5f;   // giây/+1 gold passive
+    public const int   CONFIG_LIFE_LOW_THRESHOLD      = 5;    // <= 5 life → text đỏ
     public const int CONFIG_ENEMIES_NUMBER        = 5;
     public const int CONFIG_ENEMY_SPAWN_DELAY_MS  = 2000;
     public const int CONFIG_WAVE_INTERVAL_MS      = 10000;
