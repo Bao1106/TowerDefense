@@ -19,6 +19,10 @@ public class TDEnemyView : MonoBehaviour
     private bool   m_HasBeenReturned;
     private bool   m_IsDying;
 
+    // Melee blocking state
+    private bool       m_IsBlocked;
+    private Vector2Int m_BlockerCell;
+
     public EnemyType EnemyType { get; private set; }
 
     // Progress 0→1 (0 = vừa spawn, 1 = đến GateEnd)
@@ -36,6 +40,8 @@ public class TDEnemyView : MonoBehaviour
         m_HasBeenReturned  = false;
         m_HasReachedEnd    = false;
         m_IsDying          = false;
+        m_IsBlocked        = false;
+        m_BlockerCell      = Vector2Int.zero;
         m_CurrentPathIndex = 0;
         m_PathsPosition.Clear();
         m_EnemyHealth  = hp;
@@ -83,16 +89,26 @@ public class TDEnemyView : MonoBehaviour
             TriggerSafe(TRIGGER_GET_HIT);
     }
 
+    // Giải phóng blocking slot nếu enemy đang bị chặn bởi melee operator
+    private void UnblockFromMelee()
+    {
+        if (!m_IsBlocked) return;
+        TDMeleeRegistry.api?.OnEnemyUnblocked(m_BlockerCell);
+        m_IsBlocked   = false;
+        m_BlockerCell = Vector2Int.zero;
+    }
+
     private void Die()
     {
         if (m_HasBeenReturned) return;
         m_IsDying = true;
 
+        UnblockFromMelee(); // giải phóng melee slot trước để enemy kế tiếp vào được
         TDEnemyControl.api.onGetEnemyPathPos -= OnGetEnemyPathPos;
         TDEnemyRegistry.api.Unregister(this);
 
         TDGoldControl.api?.AddGold(m_GoldReward);
-        TDGameStateControl.api?.OnEnemyKilled();
+        TDGameStateControl.api?.OnEnemyRemoved();
 
         TriggerSafe(TRIGGER_DIE);
 
@@ -119,6 +135,7 @@ public class TDEnemyView : MonoBehaviour
     {
         if (m_HasBeenReturned) return;
         m_HasBeenReturned = true;
+        UnblockFromMelee();
         TDEnemyControl.api.onGetEnemyPathPos -= OnGetEnemyPathPos;
         TDEnemyRegistry.api.Unregister(this);
         TDEnemyPathMainControl.api.ReturnEnemy(this);
@@ -139,6 +156,9 @@ public class TDEnemyView : MonoBehaviour
     {
         if (m_PathsPosition == null || m_PathsPosition.Count == 0 || m_HasReachedEnd || m_IsDying) return;
 
+        // Nếu đang bị chặn bởi melee operator → đứng yên, đợi operator giết
+        if (m_IsBlocked) return;
+
         if (m_CurrentPathIndex < m_PathsPosition.Count)
         {
             Vector3 targetPosition = m_PathsPosition[m_CurrentPathIndex];
@@ -149,12 +169,28 @@ public class TDEnemyView : MonoBehaviour
                 transform.rotation = Quaternion.LookRotation(dir);
 
             if (Vector3.Distance(transform.position, targetPosition) < 0.1f)
-                m_CurrentPathIndex++;
+            {
+                // Khi vừa đến waypoint — kiểm tra xem có melee operator đang chặn không
+                Vector2Int arrivedCell = TDGridMainModel.api.WorldToCell(targetPosition);
+                if (TDMeleeRegistry.api != null && TDMeleeRegistry.api.CanBlock(arrivedCell))
+                {
+                    // Snap đúng vào trung tâm ô để IsInRange của operator hoạt động chính xác
+                    transform.position = new Vector3(targetPosition.x, transform.position.y, targetPosition.z);
+                    m_IsBlocked   = true;
+                    m_BlockerCell = arrivedCell;
+                    TDMeleeRegistry.api.OnEnemyBlocked(arrivedCell);
+                }
+                else
+                {
+                    m_CurrentPathIndex++;
+                }
+            }
         }
         else
         {
             m_HasReachedEnd = true;
             TDPlayerLifeControl.api.LoseLife();
+            TDGameStateControl.api?.OnEnemyRemoved(); // enemy thoát cũng tính là removed
             ReturnToPool();
         }
     }

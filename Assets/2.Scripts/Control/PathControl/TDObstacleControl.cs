@@ -2,56 +2,84 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
-// Đặt random obstacles lên grid — visual decoration only
-// Path cells được loại trừ hoàn toàn (obstacles không đặt lên path)
-// isWalkable=false trên obstacle cell giúp tower placement biết cell bị chiếm
+// Đặt obstacles lên grid với multi-cell footprint
+// Visual decoration + grid blocking (isWalkable=false trên toàn footprint)
+// footprintRadii[i] = radius của prefab thứ i:
+//   radius=0 → 1×1 (1 cell)
+//   radius=1 → 3×3 (9 cells) symmetric quanh center — dùng cho prefab lớn có random rotation
 public class TDObstacleControl
 {
     public static TDObstacleControl api;
 
-    // Trả về list vị trí grid (x, y) các cell đã được đặt obstacle
-    public Action<List<Vector2Int>> onObstaclesPlaced;
+    // centers      : vị trí grid center mỗi obstacle (dùng để spawn visual)
+    // prefabIndices: index trong m_ObstaclePrefabs tương ứng với mỗi center
+    // allBlocked   : TẤT CẢ cells bị chiếm (center + footprint) — dùng để mark grid + exclude valid tower cells
+    public Action<List<Vector2Int>, List<int>, List<Vector2Int>> onObstaclesPlaced;
 
-    // pathCells: tập hợp tất cả cells thuộc bất kỳ path nào → obstacles không được đặt lên đây
-    public void PlaceObstacles(IGridDTO gridDTO, Vector2Int start, Vector2Int end, HashSet<Vector2Int> pathCells)
+    // prefabCount     : số lượng prefab trong m_ObstaclePrefabs (để random index)
+    // footprintRadii  : mảng radius theo prefab index (length = prefabCount)
+    public void PlaceObstacles(IGridDTO gridDTO, Vector2Int start, Vector2Int end,
+                                HashSet<Vector2Int> pathCells, int prefabCount, int[] footprintRadii)
     {
         List<Vector2Int> candidates = GetCandidateCells(gridDTO, start, end, pathCells);
         Shuffle(candidates);
 
-        List<Vector2Int> placed = new List<Vector2Int>();
+        List<Vector2Int>    centers       = new List<Vector2Int>();
+        List<int>           prefabIndices = new List<int>();
+        HashSet<Vector2Int> blockedSet    = new HashSet<Vector2Int>();
         int spacing = TDConstant.CONFIG_OBSTACLE_SPACING;
 
         foreach (Vector2Int cell in candidates)
         {
-            if (placed.Count >= TDConstant.CONFIG_OBSTACLE_COUNT) break;
+            if (centers.Count >= TDConstant.CONFIG_OBSTACLE_COUNT) break;
+            if (IsTooCloseToExisting(cell, centers, spacing)) continue;
 
-            // Check minimum spacing so large prefabs don't visually overlap
-            if (IsTooCloseToExisting(cell, placed, spacing)) continue;
+            // Chọn ngẫu nhiên prefab, lấy footprint radius tương ứng
+            int pIdx   = prefabCount > 0 ? UnityEngine.Random.Range(0, prefabCount) : 0;
+            int radius = (footprintRadii != null && pIdx < footprintRadii.Length)
+                ? footprintRadii[pIdx] : 0;
 
-            // Mark cell non-walkable (tower placement sẽ check isWalkable)
-            IGridCellDTO gridCell = gridDTO.GetCell(cell.x, cell.y);
-            gridCell.isWalkable = false;
+            // Mark toàn bộ footprint cells là non-walkable
+            foreach (Vector2Int fc in GetFootprintCells(cell, radius, gridDTO))
+            {
+                gridDTO.GetCell(fc.x, fc.y).isWalkable = false;
+                blockedSet.Add(fc);
+            }
 
-            placed.Add(cell);
+            centers.Add(cell);
+            prefabIndices.Add(pIdx);
         }
 
-        Debug.Log($"<color=yellow>PlaceObstacles: placed {placed.Count}/{TDConstant.CONFIG_OBSTACLE_COUNT} obstacles</color>");
-        onObstaclesPlaced?.Invoke(placed);
+        Debug.Log($"<color=yellow>PlaceObstacles: {centers.Count} obstacles, {blockedSet.Count} blocked cells</color>");
+        onObstaclesPlaced?.Invoke(centers, prefabIndices, new List<Vector2Int>(blockedSet));
     }
 
-    // Kiểm tra cell có quá gần bất kỳ obstacle nào đã đặt không (Manhattan distance)
+    // Trả về tất cả cells trong footprint (2*radius+1)×(2*radius+1) quanh center, clamp vào bounds
+    private List<Vector2Int> GetFootprintCells(Vector2Int center, int radius, IGridDTO gridDTO)
+    {
+        var cells = new List<Vector2Int>();
+        for (int dx = -radius; dx <= radius; dx++)
+            for (int dz = -radius; dz <= radius; dz++)
+            {
+                int nx = center.x + dx;
+                int nz = center.y + dz;
+                if (nx >= 0 && nx < gridDTO.width && nz >= 0 && nz < gridDTO.height)
+                    cells.Add(new Vector2Int(nx, nz));
+            }
+        return cells;
+    }
+
+    // Manhattan distance spacing giữa các obstacle centers
     private bool IsTooCloseToExisting(Vector2Int candidate, List<Vector2Int> placed, int minSpacing)
     {
         foreach (Vector2Int p in placed)
-        {
             if (Mathf.Abs(candidate.x - p.x) + Mathf.Abs(candidate.y - p.y) < minSpacing)
                 return true;
-        }
         return false;
     }
 
-    // Lấy candidates: trong grid, trên HUD zone, không quá gần start/end, không phải path cell
-    private List<Vector2Int> GetCandidateCells(IGridDTO gridDTO, Vector2Int start, Vector2Int end, HashSet<Vector2Int> pathCells)
+    private List<Vector2Int> GetCandidateCells(IGridDTO gridDTO, Vector2Int start, Vector2Int end,
+                                                HashSet<Vector2Int> pathCells)
     {
         int radius = TDConstant.CONFIG_OBSTACLE_EXCLUSION_RADIUS;
         List<Vector2Int> candidates = new List<Vector2Int>();
@@ -60,19 +88,14 @@ public class TDObstacleControl
         {
             for (int y = TDConstant.CONFIG_PATH_MIN_GRID_Y; y < gridDTO.height; y++)
             {
-                // Skip buffer quanh start và end
                 bool nearStart = Mathf.Abs(x - start.x) <= radius && Mathf.Abs(y - start.y) <= radius;
                 bool nearEnd   = Mathf.Abs(x - end.x)   <= radius && Mathf.Abs(y - end.y)   <= radius;
                 if (nearStart || nearEnd) continue;
-
-                // Skip cells thuộc path → obstacles không chặn enemy route
                 if (pathCells != null && pathCells.Contains(new Vector2Int(x, y))) continue;
-
                 if (gridDTO.GetCell(x, y).isWalkable)
                     candidates.Add(new Vector2Int(x, y));
             }
         }
-
         return candidates;
     }
 

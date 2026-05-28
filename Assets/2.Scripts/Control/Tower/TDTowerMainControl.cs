@@ -16,6 +16,7 @@ public class TDTowerMainControl
         (TDConstant.PREFAB_FATTY_MISSILE_G02,   TowerType.MissileG02),
         (TDConstant.PREFAB_FATTY_MISSILE_G03,   TowerType.MissileG03),
         (TDConstant.PREFAB_FATTY_MORTAR_G02,    TowerType.Mortar),
+        (TDConstant.PREFAB_MELEE_OPERATOR,      TowerType.Melee),   // slot 5 — Arknights-style guard
     };
 
     public void OnSelectTowerHolder(int index)
@@ -40,13 +41,13 @@ public class TDTowerMainControl
         }
     }
 
-    public void OnPlaceTower(GameObject currentTower)
+    public void OnPlaceTower(GameObject currentTower, TowerType towerType = TowerType.Cannon)
     {
         if (currentTower == null) return;
 
         // Dùng transform.position của ghost tower (đã snap vào grid qua OnSelectTower)
         // Không raycast lại từ Input.mousePosition để tránh sai khi bấm UI button (Confirm)
-        TDPlaceTowerControl.api.CheckPlaceTower(currentTower.transform.position, currentTower);
+        TDPlaceTowerControl.api.CheckPlaceTower(currentTower.transform.position, currentTower, towerType);
     }
     
     public void RotateTowerClockwise(GameObject currentTower, int currentRotationIndex)

@@ -20,7 +20,8 @@
         Catapult,
         MissileG02,
         MissileG03,
-        Mortar
+        Mortar,
+        Melee      // Arknights-style: đặt trên path, chặn enemy, đánh melee
     }
 
     public enum AttackType

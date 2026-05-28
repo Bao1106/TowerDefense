@@ -1,6 +1,6 @@
 ================================================================================
   TOWER DEFENSE — GAME DESIGN, TECHNICAL REFERENCE & DEVELOPMENT ROADMAP
-  Last updated: 2026-05-27  (session 16 — Phase 13 DONE: Enemy Animation System)
+  Last updated: 2026-05-28  (session 20 — TowerZone, obstacle footprint, grid 22×13 CityGround align)
 ================================================================================
 
 
@@ -14,25 +14,30 @@ File: Assets/3.Scenes/DTGamePlay.unity
   GameObject         : Main Camera
   Projection         : Orthographic  ← switched from Perspective (session 4)
   orthographicSize   : 14
-  Position           : (23.3, 15, 2.02)
+  Position           : (24.5, 15, 3.0)    ← updated session 20 (was 23.3,15,2.02)
   Rotation Euler     : X=30°, Y=0°, Z=0°   ← pitch 30°
   Aspect target      : 16:9 (1920×1080)
 
   Visible area on ground plane (Y=0):
-    Width  X : 2 × 14 × (16/9) ≈ 49.8 world units  → grid 42u fits with buffer
-    Depth  Z : camera sees Z ≈ 4..52 at ground
-    Camera center on ground: Z = 2.02 + 15/tan(30°) ≈ 28
+    Width  X : 2 × 14 × (16/9) ≈ 49.8 world units  → grid 44u fits with ~3u buffer each side
+    Depth  Z : camera sees Z ≈ 5..53 at ground
+    Camera center on ground: Z = 3.0 + 15/tan(30°) ≈ 29
 
 ── Ground / Playable area ──────────────────────────────────────────────────────
   GameMapVisualize
     Type       : Unity Plane mesh (native 10×10)
-    Scale      : (4.2, 5, 2.4)  → 42u × 24u world
-    Position   : (23.3, 0, 28)
-    Bounds X   : [2.3, 44.3]
-    Bounds Z   : [16, 40]
+    Scale      : (4.4, 5, 2.6)  → 44u × 26u world   ← updated session 20 (was 4.2×2.4)
+    Position   : (23.3, 0, 27.7)                     ← updated session 20 (was 23.3,0,28)
+    Bounds X   : [1.3, 45.3]    ← aligned with CityGround tile boundaries [s20]
+    Bounds Z   : [14.7, 40.7]   ← aligned with CityGround tile boundaries [s20]
+    MeshRenderer : enabled (material: ground2)
+    TDGridVisualizerView : disabled (gizmos hidden) [s20]
 
 ── Environment objects (ArkEnvironment children) ───────────────────────────────
-  CityGround   : large plaza floor (~100×72u) — NOT touched, base layer
+  CityGround   : 322+ mesh tiles in gameplay zone, 2u×2u each, boundaries at
+                 X = 1.3 + n×2  (→ 1.3, 3.3, 5.3, ..., 45.3)
+                 Z = 14.7 + n×2 (→ 14.7, 16.7, ..., 40.7)
+                 → GameMapVisualize edges now align EXACTLY with tile boundaries [s20]
   Sky          : skybox — NOT touched
   Buildings    : moved closer via EnvironmentContractor (factor 0.5 from grid center)
   Cliffs       : moved closer via EnvironmentContractor
@@ -42,13 +47,13 @@ File: Assets/3.Scenes/DTGamePlay.unity
   Pipes/Beams  : contracted by EnvironmentContractor
 
 ── Spawn / PathView ────────────────────────────────────────────────────────────
-  PathView/CreatePoint  : pos (2, 0, 29)
-    → Just outside plane left edge (plane X starts at 2.3)
-    → Z=29 aligned with START row world Z = 6×2 + 17 = 29
+  PathView/CreatePoint  : pos (1, 0, 27.7)    ← updated session 20 (was 2,0,29)
+    → Just outside plane left edge (plane X starts at 1.3)
+    → Z=27.7 aligned with START row world Z = cell(0,6) center
 
 ── Gates (Phase 4.5 + 4.6 — DONE) ─────────────────────────────────────────────
-  GateStart  : spawned at world (3.3, 0, 29) = grid (0,6) on game start
-  GateEnd    : spawned at world (43.3, 0, 29) = grid (20,6) on game start
+  GateStart  : spawned at world (2.3, 0, 27.7)  = grid (0,6)   ← updated s20 (was 3.3,0,29)
+  GateEnd    : spawned at world (44.3, 0, 27.7) = grid (21,6)  ← updated s20 (was 43.3,0,29)
   → Instantiated runtime bởi TDEnemyPathMainView.SpawnGates()
   → Visual: 3D wireframe box (Arknights-style), redesigned session 6 (Phase 4.6)
 
@@ -58,20 +63,26 @@ File: Assets/3.Scenes/DTGamePlay.unity
 ════════════════════════════════════════════════════════════════════════════════
 
   CONFIG_GRID_CELL_SIZE = 2f                  (TDConstant.cs)
-  Plane bounds         = (42, 24) world units (scale 4.2×2.4 × Unity plane 10)
-  Grid width  = Floor(42 / 2f) = 21           (TDGridMainModel.cs runtime)
-  Grid height = Floor(24 / 2f) = 12           (TDGridMainModel.cs runtime)
-  Total cells = 252
+  Plane bounds         = (44, 26) world units (scale 4.4×2.6 × Unity plane 10)  [updated s20]
+  Grid width  = Floor(44 / 2f) = 22           (TDGridMainModel.cs runtime)       [updated s20]
+  Grid height = Floor(26 / 2f) = 13           (TDGridMainModel.cs runtime)       [updated s20]
+  Total cells = 286                                                               [updated s20]
 
   Offset calculation (TDGridMainModel.cs):
-    offsetX = planePos.x - (mapSize.x/2) + (cellSize/2) = 23.3 - 21 + 1 = 3.3
-    offsetZ = planePos.z - (mapSize.z/2) + (cellSize/2) = 28   - 12 + 1 = 17
+    offsetX = planePos.x - (mapSize.x/2) + (cellSize/2) = 23.3 - 22 + 1 = 2.3  [updated s20]
+    offsetZ = planePos.z - (mapSize.z/2) + (cellSize/2) = 27.7 - 13 + 1 = 15.7 [updated s20]
 
-  Cell (x,y) → world = (x*2 + 3.3,  0,  y*2 + 17)
-    Cell (0,  0)  → world (3.3,  0, 17)   ← bottom-left
-    Cell (20, 11) → world (43.3, 0, 39)   ← top-right
-    Cell (0,  6)  → world (3.3,  0, 29)   ← START / GateStart
-    Cell (20, 6)  → world (43.3, 0, 29)   ← END   / GateEnd
+  Cell (x,y) → world = (x*2 + 2.3,  0,  y*2 + 15.7)
+    Cell (0,  0)  → world (2.3,  0, 15.7)   ← bottom-left
+    Cell (21, 12) → world (44.3, 0, 39.7)   ← top-right
+    Cell (0,  6)  → world (2.3,  0, 27.7)   ← START / GateStart  [updated s20]
+    Cell (21, 6)  → world (44.3, 0, 27.7)   ← END   / GateEnd    [updated s20]
+
+  CityGround tile alignment (verified s20):
+    GameMapVisualize edges land EXACTLY on CityGround 2u-tile boundaries:
+    X: left=1.3, right=45.3  ←→  CityGround X boundaries 1.3+n×2
+    Z: bot=14.7, top=40.7    ←→  CityGround Z boundaries 14.7+n×2
+    → Each game cell (2u×2u) corresponds to exactly 1 CityGround floor tile
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -104,13 +115,20 @@ File: Assets/3.Scenes/DTGamePlay.unity
   TDGameplayMainControl.cs   ← thin orchestrator
   TDPauseControl.cs          ← Toggle/Pause/Resume + Time.timeScale; onPauseChanged [Phase 8.5 NEW]
   TDPlayerLifeControl.cs     ← LoseLife(), onLifeChanged, onGameOver [Phase 4.5]
+  TDGoldControl.cs           ← Gold, Tick() passive income, AddGold, SpendGold; onGoldChanged [Phase 8]
+  TDGameStateControl.cs      ← TotalEnemies/KilledEnemies/AllWavesSpawned/IsGameEnded;
+                                OnEnemyRemoved (killed+escaped), OnAllWavesSpawned, OnGameOver;
+                                onEnemyCountChanged, onVictory [Phase 8]
+  TDSpeedControl.cs          ← 1×/2× toggle, pause-aware timeScale; onSpeedChanged [Phase 8]
   TDEnemyPathMainControl.cs  ← InitEnemyPath, GenerateAllPaths, ComputeValidTowerCells,
                                 InitEnemyPool (ObjectPool), ReturnEnemy, PauseAwareDelay,
                                 StartWaveLoop, SpawnWave, onValidTowerCellsReady,
                                 onWaveStart events [Phase 4.5 + 8.5]
   TDaStarPathControl.cs      ← ComputePath (A*), BuildDefinedPath (straight segments)
   TDPathGeneratorControl.cs  ← random waypoint generator per Y-zone
-  TDObstacleControl.cs       ← place obstacles on non-path cells with spacing
+  TDObstacleControl.cs       ← place obstacles on non-path cells with spacing;
+                                multi-cell footprint (radius auto-computed from prefab bounds);
+                                onObstaclesPlaced(centers, prefabIndices, allBlocked) [s20]
   TDEnemyPathControl.cs      ← CreatePath() → instantiate Plane tiles on grid
   TDEnemyControl.cs          ← convert IGridCellDTO path → Vector3 world positions
   TDEnemyRegistry.cs         ← centralized enemy list; Register/Unregister/GetAll [Phase 6.1 NEW]
@@ -122,8 +140,14 @@ File: Assets/3.Scenes/DTGamePlay.unity
   TDUserInputControl.cs      ← mobile/desktop input event dispatching
 
   ── View ────────────────────────────────────────────────────────────────────
-  TDGameplayMainView.cs      ← scene entry, init grid + life system, screen flash
-                               [Phase 4.5: Initialize life, subscribe onLifeChanged/onGameOver]
+  TDGameplayMainView.cs      ← scene entry, init grid + life system
+                               [Phase 4.5: Initialize life]
+                               [Phase 8: STRIPPED — life text + flash moved to TDGameplayHUDView]
+  TDGameplayHUDView.cs       ← HUD display (trừ TowerMainView); gắn Canvas/SafeArea/Container
+                               [Phase 8 NEW]: cache tất cả via transform.Find() + PATH_xxx constants
+                               subscribe: onLifeChanged, onGoldChanged, onEnemyCountChanged,
+                               onVictory, onGameOver, onPauseChanged, onSpeedChanged
+                               Update: TDGoldControl.api.Tick(deltaTime)
   TDEnemyPathMainView.cs     ← path events + obstacle wiring + SpawnGates()
                                [Phase 4.5: m_GateStartPrefab/EndPrefab, OnWaveStart]
   TDEnemyPathView.cs         ← Plane tile pool
@@ -138,7 +162,7 @@ File: Assets/3.Scenes/DTGamePlay.unity
                                AttackTargets với rangeDTO + towerRotation [Phase 7]
   TDAttackVFX.cs             ← [NEW Phase 7] thay TDBulletsView; homing → OnImpact → Single/AOE damage
   [DELETED] TDBulletsView.cs ← removed Phase 7 (replaced by TDAttackVFX)
-  TDTowerHolderView.cs       ← HUD slot (button + cost)
+  TDTowerHolderView.cs       ← HUD slot (button + cost); Cost property; SetInteractable() [Phase 8]
   TDGateView.cs              ← GateStart MonoBehaviour: PlaySpawnEffect() per wave [Phase 4.5]
   TDGateEndView.cs           ← GateEnd MonoBehaviour: trigger visual + life text [Phase 4.5]
   [DELETED] TDEnemyDetector.cs ← removed Phase 6.1 (replaced by Registry+tick scan)
@@ -388,6 +412,37 @@ File: Assets/3.Scenes/DTGamePlay.unity
     CONFIG_OBSTACLE_SPACING          = 3
   Inspector: TDEnemyPathMainView.m_ObstaclePrefabs[5]
 
+  ── Multi-cell Footprint System (Session 20) ─────────────────────────────────
+
+  Each obstacle has a footprint radius (0 = 1×1 cell, 1 = 3×3 cells, etc.)
+  Auto-computed at runtime by ComputeFootprintRadii() in TDEnemyPathMainView:
+    1. Instantiate each prefab briefly (inactive)
+    2. Encapsulate all Renderer bounds in a single Bounds
+    3. radius = max(0, CeilToInt(max(size.x, size.z) / (2 × cellSize) - 0.5f))
+    4. Destroy temp instance
+
+  Formula results for current 5 prefabs (cellSize=2):
+    Rock_01  → radius=1 (3×3 blocked)
+    Rock_05  → radius=1 (3×3 blocked)
+    Bush_02  → radius=1 (3×3 blocked)
+    Shrub_03 → radius=0 (1×1 blocked)
+    Tree_01  → radius=1 (3×3 blocked)
+
+  PlaceObstacles() pre-assigns a random prefab index at selection time so
+  the visual spawned and the blocked footprint always match.
+
+  onObstaclesPlaced signature (Session 20):
+    Action<List<Vector2Int> centers, List<int> prefabIndices, List<Vector2Int> allBlocked>
+    centers      → where to Instantiate the visual
+    prefabIndices → which m_ObstaclePrefabs[] index per center
+    allBlocked    → ALL grid cells blocked (center + footprint cells)
+                   used to SetOccupiedCell AND exclude from valid tower cells
+
+  Flow after PlaceObstacles:
+    OnObstaclesPlaced → spawn visuals + SetOccupiedCell(allBlocked)
+                      → ComputeValidTowerCells(allBlocked excluded)
+    OnValidTowerCellsReady → spawn TowerZone tiles on valid cells
+
 
 ════════════════════════════════════════════════════════════════════════════════
  10. WAVE SYSTEM
@@ -460,6 +515,7 @@ File: Assets/3.Scenes/DTGamePlay.unity
     else:
       m_HasReachedEnd = true
       TDPlayerLifeControl.api.LoseLife()
+      TDGameStateControl.api?.OnEnemyRemoved()  ← [Phase 8: escape cũng là removed → Victory check]
       ReturnToPool()   ← [Phase 8.5: không Destroy — pool release]
 
 
@@ -470,11 +526,11 @@ File: Assets/3.Scenes/DTGamePlay.unity
   ── Grid ─────────────────────────────────────────────────────────────────
   CONFIG_GRID_CELL_SIZE          = 2f
   CONFIG_PATH_MIN_GRID_Y         = 0
-  CONFIG_ENEMY_START_POINT       = (0,  6)  → world (3.3,  0, 29)
-  CONFIG_ENEMY_END_POINT         = (20, 6)  → world (43.3, 0, 29)
+  CONFIG_ENEMY_START_POINT       = (0,  6)  → world (2.3,  0, 27.7)  [updated s20]
+  CONFIG_ENEMY_END_POINT         = (21, 6)  → world (44.3, 0, 27.7)  [updated s20 — was (20,6)]
 
   ── Path generation ──────────────────────────────────────────────────────
-  CONFIG_PATH_Y_ZONES            = [(7,11), (0,5), (2,9)]
+  CONFIG_PATH_Y_ZONES            = [(7,12), (0,5), (2,10)]            [updated s20 — was (7,11),(0,5),(2,9)]
   CONFIG_PATH_MIN_STEP_X         = 2
   CONFIG_PATH_MAX_STEP_X         = 5
   CONFIG_PATH_MIN_VERTICAL_DELTA = 2
@@ -508,14 +564,31 @@ File: Assets/3.Scenes/DTGamePlay.unity
   ── Tower ─────────────────────────────────────────────────────────────────
   CONFIG_TOWER_ROTATIONS         = {0°, 90°, 180°, 270°}
   CONFIG_TOWER (ScriptableObject) = "Tower Bullet Config"
+  CONFIG_TOWER_ZONE_TILE_HEIGHT  = 0.12f  ← TowerZone cube scale.y; top face at y=0.06 [s20]
+  CONFIG_TOWER_PLACE_Y           = 0.6f   ← tower base placed 0.6u above ground [s20 updated]
+                                            (above TowerZone top face at 0.06; allows tower base to clear zone tile)
 
   ── Misc ─────────────────────────────────────────────────────────────────
   CONFIG_PATH_OFFSET_Y           = 0.1f
   CONFIG_NUM_PATHS               = 3   (legacy, use CONFIG_PATH_Y_ZONES.Length)
 
-  ── Win/Lose (Phase 8 — TODO) ────────────────────────────────────────────
-  CONFIG_PLAYER_STARTING_GOLD    = 100  ← TODO
-  CONFIG_ENEMY_REWARD_GOLD       = 10   ← TODO
+  ── HUD / Win/Lose (Phase 8 — DONE session 18+19) ────────────────────────
+  CONFIG_PLAYER_STARTING_GOLD       = 10     ← khởi điểm gold
+  CONFIG_GOLD_PASSIVE_RATE          = 5f     ← giây per +1 gold passive
+  CONFIG_LIFE_LOW_THRESHOLD         = 5      ← <= threshold → life text đỏ
+  PATH_GAMEPLAY_HUD_BACK_BUTTON     = "Header/HUDButtonRight/BackButton"
+  PATH_GAMEPLAY_HUD_SETTING_BUTTON  = "Header/HUDButtonRight/SettingButton"
+  PATH_GAMEPLAY_HUD_ENEMY_COUNT     = "Header/MapInfo/EnemyCount/TxtValue"
+  PATH_GAMEPLAY_HUD_LIFE_POINT      = "Header/MapInfo/LifePoint/TxtValue"
+  PATH_GAMEPLAY_HUD_SPEED_BUTTON    = "Header/HUDButtonLeft/SpeedButton"
+  PATH_GAMEPLAY_HUD_SPEED_VALUE     = "Header/HUDButtonLeft/SpeedButton/TxtValue"
+  PATH_GAMEPLAY_HUD_SPEED_ICON_NORMAL = "Header/HUDButtonLeft/SpeedButton/SpeedIcon/Normal"
+  PATH_GAMEPLAY_HUD_SPEED_ICON_X2   = "Header/HUDButtonLeft/SpeedButton/SpeedIcon/SpeedX2"
+  PATH_GAMEPLAY_HUD_PAUSE_BUTTON    = "Header/HUDButtonLeft/PauseButton"
+  PATH_GAMEPLAY_HUD_CURRENCY        = "Bottom/Currency/TxtValue"
+  PATH_GAMEPLAY_HUD_PAUSE_PANEL     = "PausePanel"
+  PATH_GAMEPLAY_HUD_RESUME_BUTTON   = "PausePanel/ResumeButton"
+  PATH_GAMEPLAY_SCREEN_FLASH        = "FlashScreen"  ← child của Container (session 19)
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -532,11 +605,14 @@ File: Assets/3.Scenes/DTGamePlay.unity
     Step6: orthoSize=11 (too small) → grid resize 20×12→14×8, cellSize 2→3
     Step7: orthoSize=12, pitch 35→30°, Y 22→15, Z→2
     Step8: 14×8 cellSize=3 → 21×12 cellSize=2, orthoSize 12→14
-    FINAL: pos (23.3,15,2.02), pitch=30°, orthoSize=14
+    Step9 (session 20): pos adjusted (23.3,15,2.02) → (24.5,15,3.0) for better view framing
+    FINAL: pos (24.5,15,3.0), pitch=30°, orthoSize=14
 
   ── Plane evolution ────────────────────────────────────────────────────────
   Session 2-3: (5,5,5)→(3,5,3)→(4,5,3)→(4,5,2.4) pos (23.3,0,28) → 40×24
-  Session 4: (6,5,3.6)→(4.2,5,2.4) → world 42×24, grid 21×12  (FINAL)
+  Session 4: (6,5,3.6)→(4.2,5,2.4) → world 42×24, grid 21×12
+  Session 20: (4.2,5,2.4) pos(23.3,0,28) → (4.4,5,2.6) pos(23.3,0,27.7) → 44×26, grid 22×13
+              CityGround alignment achieved; edges at X[1.3,45.3] Z[14.7,40.7] (FINAL)
 
   ── Tower ghost scale history ──────────────────────────────────────────────
   0.5f → 1.5f (session 4) → 1.0f (session 4 final)
@@ -585,6 +661,9 @@ File: Assets/3.Scenes/DTGamePlay.unity
   ║  PHASE 3.5 — Obstacles Decoration                       [✅ DONE]        ║
   ╚══════════════════════════════════════════════════════════════════════════╝
     ✅ 12 obstacles, tránh path/exclusion zone, 5 prefab variants
+    ✅ Multi-cell footprint: auto-computed radius per prefab from Renderer bounds [s20]
+    ✅ Correct footprint blocking: SetOccupiedCell trên toàn bộ footprint cells [s20]
+    ✅ TowerZone tiles NOT spawned on obstacle footprint cells [s20]
 
   ─────────────────────────────────────────────────────────────────────────────
 
@@ -699,6 +778,33 @@ File: Assets/3.Scenes/DTGamePlay.unity
     ✅ URP transparency rules documented:
        • _EMISSION keyword completely overrides alpha — must disable on all mats
        • Opaque materials (_Surface=0) ignore alpha — must use _Surface=1 (Transparent)
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 3.8 — TowerZone Visual + Grid-CityGround Alignment [✅ DONE]     ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+    Goal: Arknights-style "gờ" — bright elevated tile marks where towers can go.
+    Dark ground = enemy path; bright cube = valid placement zone.
+    Grid cells align perfectly with CityGround floor tiles.
+
+    ✅ TowerZone.mat: URP/Unlit, Opaque, light gray (0.85,0.85,0.85)
+    ✅ TowerZone.prefab: 2×2×0.12 cube, center y=0 → top face at y=0.06
+    ✅ TDEnemyPathMainView.m_TowerZonePrefab: Inspector assigned ✓
+    ✅ ComputeValidTowerCells excludes: path cells + obstacle footprint cells + gate cells
+    ✅ OnValidTowerCellsReady: Instantiate TowerZone at each valid cell (y=0, x/z from grid)
+    ✅ CONFIG_TOWER_PLACE_Y = 0.6f: ghost + placed towers elevated 0.6u above ground
+    ✅ TDTowerMainView.UpdateGhostTransform(): ghost y = CONFIG_TOWER_PLACE_Y (both mobile+desktop)
+    ✅ TDPlaceTowerControl.CheckPlaceTower(): placedPosition.y = CONFIG_TOWER_PLACE_Y
+    ✅ GameMapVisualize scale (4.4, 5, 2.6) → 44u×26u → grid 22×13 [s20]
+    ✅ GameMapVisualize pos (23.3, 0, 27.7): edges X[1.3,45.3] Z[14.7,40.7] [s20]
+       → perfectly aligned with CityGround 2u tile boundaries
+    ✅ TDGridVisualizerView disabled (no more misaligned gizmo overlay) [s20]
+    ✅ GameMapVisualize MeshRenderer re-enabled (material: ground2) [s20]
+    ✅ PathView/CreatePoint: (1, 0, 27.7) — just left of new grid left edge [s20]
+    ✅ CONFIG_ENEMY_END_POINT: (21, 6) — matches new 22-wide grid [s20]
+    ✅ CONFIG_PATH_Y_ZONES: [(7,12),(0,5),(2,10)] — uses full 13-row height [s20]
+    ✅ Camera pos: (24.5, 15, 3.0) — adjusted for new grid framing [s20]
 
   ─────────────────────────────────────────────────────────────────────────────
 
@@ -1138,10 +1244,10 @@ File: Assets/3.Scenes/DTGamePlay.unity
   ─────────────────────────────────────────────────────────────────────────────
 
   ╔══════════════════════════════════════════════════════════════════════════╗
-  ║  PHASE 8 — Win/Lose Conditions + HUD                    [⚠️ PARTIAL]      ║
+  ║  PHASE 8 — Win/Lose Conditions + HUD           [⚠️ PARTIAL — UI stubs only] ║
   ╚══════════════════════════════════════════════════════════════════════════╝
 
-  ── Trạng thái sau session 17+18 ─────────────────────────────────────────────
+  ── Trạng thái sau session 17+18+19 ──────────────────────────────────────────
 
     ✅ HUD Top Bar (scene DTGamePlay.unity):
          [Far-left]  BackButton    → QUIT → SceneManager.LoadScene(SCENE_LOAD_FIRST)
@@ -1151,41 +1257,47 @@ File: Assets/3.Scenes/DTGamePlay.unity
          [Far-right] SpeedButton   → toggle x1/x2 (TDSpeedControl)
                                      SpeedIcon/Normal ↔ SpeedIcon/SpeedX2
                      PauseButton   → TDPauseControl.Toggle()
+                     PausePanel    → SetActive(isPaused); ResumeButton → Resume()
 
     ✅ Gold Counter (Bottom/Currency/TxtValue):
          Passive: +1 gold mỗi 5 giây (CONFIG_GOLD_PASSIVE_RATE = 5f)
-         Kill reward: +data.goldReward mỗi khi enemy die
+         Kill reward: +data.goldReward mỗi khi enemy die (set trong SO)
          Khởi điểm: 10 gold (CONFIG_PLAYER_STARTING_GOLD = 10)
 
-    ✅ Tower Bar (Bottom/TowerMainView): 5 cards — do TDTowerMainView quản lý
+    ✅ Tower Bar (Bottom/TowerMainView):
+         SpendGold(cost) khi đặt tower thành công
+         TowerHolder disable khi gold < cost (RefreshHolderInteractability)
+         Sync ngay lúc init + mỗi khi onGoldChanged fire
 
     ✅ Control layer DONE (session 18):
          TDGoldControl.cs       — gold, passive income Tick(), SpendGold()
-         TDGameStateControl.cs  — killed/total count, victory detection
+         TDGameStateControl.cs  — OnEnemyRemoved (killed + escaped), IsGameEnded guard
          TDSpeedControl.cs      — 1×/2× toggle, pause-aware
 
-    ✅ View layer DONE (session 18):
-         TDGameplayHUDView.cs   — gắn Canvas/SafeArea/Container
+    ✅ View layer DONE (session 18+19):
+         TDGameplayHUDView.cs   — gắn Canvas/SafeArea/Container (Inspector ✅)
                                    cache qua transform.Find() + PATH_GAMEPLAY_HUD_xxx
-                                   subscribe tất cả events, drive Tick()
-                                   FlashScreen dùng Time.unscaledDeltaTime
+                                   PausePanel + ResumeButton wired
+                                   FlashScreen (child của Container) dùng Time.unscaledDeltaTime
 
-    ✅ Wiring DONE (session 18):
-         TDEnemyView.Die()         → AddGold(goldReward) + OnEnemyKilled()
-         TDEnemyPathMainControl    → OnAllWavesSpawned() sau khi loop xong
-         TDEnemyPathMainView       → TDGameStateControl.Initialize(totalEnemies)
-         TDPauseControl.Resume()   → Time.timeScale = SpeedMultiplier (fix hardcode 1f)
+    ✅ Win/Lose logic DONE (session 19):
+         Victory: AllWavesSpawned && EnemyRemoved >= TotalEnemies
+                  IsGameEnded guard → không fire nhiều lần
+         Defeat:  TDPlayerLifeControl.onGameOver → OnGameOver() → TDGameStateControl.OnGameOver()
+                  IsGameEnded = true → Victory không fire sau khi thua
+         Enemy escape: ReturnToPool() khi reach end → cũng gọi OnEnemyRemoved()
 
-    ✅ Bug fix (session 18):
-         Speed UI hiển thị "2x" lúc start → fix bằng cách SubscribeEvents() trước
-         InitControls() → TDSpeedControl.Initialize() fire onSpeedChanged → sync UI
+    ✅ Inspector DONE:
+         TDGameplayHUDView gắn vào Canvas/SafeArea/Container ✅
+         EnemyData.goldReward set trong Enemy Data Config.asset ✅
+
+    ✅ Material fix (session 19):
+         Stone_normal.mat: Transparent → Opaque, ZWrite=1, RenderQueue=-1
+         Lý do: path tile không cần alpha → transparent gây sorting conflict
 
     ⬜ CÒN LẠI:
-         - VictoryPanel UI  (TODO Phase 8 — OnVictory stub đã có)
-         - GameOverPanel UI (TODO Phase 8 — OnGameOver stub đã có)
-         - PausePanel wiring trong TDGameplayHUDView.OnPauseChanged()
-         - Gắn TDGameplayHUDView component vào Container trong scene (Inspector)
-         - Set EnemyData.goldReward trong Enemy Data Config.asset
+         - VictoryPanel UI  (OnVictory stub đã có)
+         - GameOverPanel UI (OnGameOver stub đã có)
 
     ── Quit Button ──────────────────────────────────────────────────────────
       PATH: Canvas/SafeArea/Container/Header/HUDButtonRight/BackButton
@@ -1257,6 +1369,83 @@ File: Assets/3.Scenes/DTGamePlay.unity
     - StartWaveLoop signature đổi: bỏ TDEnemyView prefab param (pool tự quản lý)
 
   ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 14 — Melee Operator (Session 21)                 [✅ DONE]          ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+
+  Concept: Arknights-style melee guard — đặt lên PATH cells, chặn enemy,
+           tấn công melee (range offset 0,0 = cùng ô), không có HP.
+
+  ── Kiến trúc ────────────────────────────────────────────────────────────────
+    TDMeleeRegistry (NEW singleton):
+      m_ValidMeleeCells: HashSet<Vector2Int> — path cells (không gồm gate)
+      m_Operators: Dictionary<Vector2Int, (capacity, count)>
+      RegisterPathCell(cell)        — gọi từ TDEnemyPathView.VisualizeAllPaths
+      RegisterOperator(cell, cap)   — gọi khi đặt operator
+      HasOperatorAt(cell), CanBlock(cell)
+      OnEnemyBlocked/Unblocked(cell) — tăng/giảm block count
+
+    TDEnemyPathView.VisualizeAllPaths:
+      Gọi TDMeleeRegistry.RegisterPathCell cho mỗi non-gate path cell (i>0, i<last)
+      HashSet đảm bảo không đăng ký trùng khi 3 paths share cells
+
+    TDEnemyView.Update:
+      Khi arrive tại waypoint → check TDMeleeRegistry.CanBlock(arrivedCell)
+      YES → m_IsBlocked=true, snap to cell center, OnEnemyBlocked(cell)
+      → Update returns early khi m_IsBlocked
+      Die()/ReturnToPool() → UnblockFromMelee() trước khi return to pool
+
+    TDPlaceTowerControl:
+      CheckPlaceTower(pos, go, TowerType) — new signature
+      Melee → CheckPlaceMeleeOperator: validate IsValidMeleeCell + !HasOperatorAt
+               → RegisterOperator(cell, SO.maxTargets)
+
+    TDTowerMainView:
+      m_TdTowerHolderView5 (slot 5 = Melee)
+      OnCreateTower: if Melee → ShowMeleeHighlights() (blue quads trên path cells)
+                     else → ShowHighlights() (green quads trên TowerZone)
+      RefreshRangeHighlights: skip nếu Melee (range = own cell, không cần viz)
+      ShowMeleeHighlights(): iterate TDMeleeRegistry.GetValidMeleeCells()
+      CreateMeleeHighlightTile(): blue Quad (0.1, 0.45, 1.0, 0.75)
+
+    TDTowerMainControl:
+      k_TowerDefs[5] = (PREFAB_MELEE_OPERATOR, TowerType.Melee)
+      OnPlaceTower(go, TowerType) — new signature
+
+  ── SO Config (Tower Bullet Config.asset) ────────────────────────────────────
+    Melee:
+      cost = 5
+      damage = 20f
+      attackSpeed = 0.8f
+      attackType = Multiple  ← attacks all blocked enemies simultaneously
+      maxTargets = 2         ← block count = 2 enemies per operator
+      rangeOffsets = {(0,0)} ← attack enemies on own cell
+
+  ── Prefab ───────────────────────────────────────────────────────────────────
+    MeleeOperator.prefab (Assets/1.Assets/Resources/Prefabs/MeleeOperator.prefab)
+      Visual: HumanSpecies_01 (Synty SidekickCharacters), scale 0.6
+      SpawnBullet: child at (0, 0.8, 0.5) — chest height, forward
+      TDTowerWeaponView: type = Melee
+
+  ── HUD ──────────────────────────────────────────────────────────────────────
+    TowerHolder (5) added to TowerMainView HLG
+    All 6 holders resized: preferredWidth 195→160, preferredHeight 225→215
+    Container sizeDelta.x: 1029→1023
+
+  ── Enemy blocking UX ────────────────────────────────────────────────────────
+    Enemies bị block: di chuyển đến operator's cell rồi dừng lại
+    Operator attacks: TDTowerWeaponView scan (0.2s), target = enemy cùng ô
+    Bullet flies từ SpawnBullet → enemy → immediate impact (dist ~0.5u at 15u/s)
+    Enemy chết → UnblockFromMelee → slot mở cho enemy kế tiếp
+    Block capacity (maxTargets=2): tối đa 2 enemy bị chặn cùng lúc
+
+  ── Notes ─────────────────────────────────────────────────────────────────────
+    ⚠️  Nếu operator chặn full (2/2): enemy thứ 3 sẽ bước vào ô và CanBlock = false
+        → tiếp tục di chuyển bình thường (bypass). Đây là behavior đúng Arknights-style.
+    ⚠️  Melee visual (HumanSpecies_01) là placeholder — cần assign proper warrior model/animation
+    ⚠️  TowerHolder (5) icon cần update để khác với Mortar (slot 4)
+    ⬜  Retreat mechanic (thu hồi operator) — để sau
 
   ╔══════════════════════════════════════════════════════════════════════════╗
   ║  PHASE 9 — Polish & Performance                         [TODO]            ║
@@ -2240,8 +2429,10 @@ File: Assets/3.Scenes/DTGamePlay.unity
        ├─ Currency            [HLG]  → children: IconContent, TxtValue ← gold
        └─ TowerMainView       ← do TDTowerMainView quản lý (KHÔNG phải HUDView)
 
-    FlashScreen: Canvas/SafeArea/FlashScreen (sibling của Container)
-    → cache bằng transform.parent.Find(PATH_GAMEPLAY_SCREEN_FLASH)
+    FlashScreen: Canvas/SafeArea/Container/FlashScreen (child của Container)
+    → cache bằng transform.Find(PATH_GAMEPLAY_SCREEN_FLASH)
+    ⚠️ Session 19 update: user đã di chuyển FlashScreen từ SafeArea → Container
+       (TDConstant.PATH_GAMEPLAY_SCREEN_FLASH = "FlashScreen" vẫn đúng)
 
   ── HUD Logic Spec ───────────────────────────────────────────────────────────
     EnemyCount : "{killed}/{total}" — killed tăng khi Die(), total từ LevelConfig
@@ -2276,10 +2467,11 @@ File: Assets/3.Scenes/DTGamePlay.unity
     AddGold(amount); SpendGold(amount) → bool
 
   Assets/2.Scripts/Control/Gameplay/TDGameStateControl.cs     [NEW]
-    TotalEnemies, KilledEnemies, AllWavesSpawned
+    TotalEnemies, KilledEnemies, AllWavesSpawned, IsGameEnded
     onEnemyCountChanged: Action<int,int>; onVictory: Action
-    Initialize(totalEnemies); OnEnemyKilled(); OnAllWavesSpawned()
-    CheckVictory(): AllWavesSpawned && KilledEnemies >= TotalEnemies
+    Initialize(totalEnemies); OnEnemyRemoved() [renamed from OnEnemyKilled — covers escaped too]
+    OnAllWavesSpawned(); OnGameOver() → IsGameEnded=true (ngăn victory sau defeat)
+    CheckVictory(): AllWavesSpawned && KilledEnemies >= TotalEnemies (guard IsGameEnded)
 
   Assets/2.Scripts/Control/Gameplay/TDSpeedControl.cs         [NEW]
     SpeedMultiplier: float (1f default); IsFast: bool
@@ -2322,10 +2514,12 @@ File: Assets/3.Scenes/DTGamePlay.unity
   Assets/2.Scripts/View/GamePlay/Enemy/TDEnemyView.cs
     ← ADDED: private int m_GoldReward
     ← Initialize(): thêm param int goldReward → m_GoldReward = goldReward
-    ← Die(): TDGoldControl.api?.AddGold(m_GoldReward) + TDGameStateControl.api?.OnEnemyKilled()
+    ← Die(): TDGoldControl.api?.AddGold(m_GoldReward) + TDGameStateControl.api?.OnEnemyRemoved()
+    ← [Session 19] Update() reach-end block: thêm TDGameStateControl.api?.OnEnemyRemoved()
+       (enemy thoát vào gate cũng tính là removed → Victory có thể trigger đúng)
 
   Assets/2.Scripts/Control/PathControl/TDEnemyPathMainControl.cs
-    ← SpawnBatch: enemy.Initialize(..., data?.goldReward ?? 0, type)
+    ← SpawnBatch: enemy.Initialize(key, hp, speed, data.dieDuration, data?.goldReward ?? 0, type)
     ← StartWaveLoop: sau khi loop xong → TDGameStateControl.api?.OnAllWavesSpawned()
 
   Assets/2.Scripts/View/GamePlay/EnemyPath/TDEnemyPathMainView.cs
@@ -2338,9 +2532,226 @@ File: Assets/3.Scenes/DTGamePlay.unity
     Fix: đổi thứ tự trong TDGameplayHUDView.Start():
          SubscribeEvents() → InitControls() → SetupButtons()
 
-  ── Inspector Actions Pending ────────────────────────────────────────────────
-    ⚠️ Gắn TDGameplayHUDView component vào Canvas/SafeArea/Container trong DTGamePlay.unity
-    ⚠️ Set EnemyData.goldReward trong Enemy Data Config.asset (Normal=5, Fast=8, Tank=15, Boss=50)
+  ── Inspector Actions (DONE — confirmed session 19) ──────────────────────────
+    ✅ Gắn TDGameplayHUDView component vào Canvas/SafeArea/Container trong DTGamePlay.unity
+    ✅ Set EnemyData.goldReward trong Enemy Data Config.asset per type
+
+
+================================================================================
+  21. SESSION 19 — PHASE 8 COMPLETION: GOLD SPEND, PAUSE PANEL, WIN/LOSE BUGS
+================================================================================
+
+  ── Mục tiêu ─────────────────────────────────────────────────────────────────
+    Hoàn thiện Phase 8: gold deduction khi đặt tower, disable holder khi thiếu gold,
+    PausePanel wiring, fix win/lose logic bugs, fix Stone_normal.mat material,
+    xác nhận inspector actions đã xong, di chuyển FlashScreen vào Container.
+
+  ── Modified Files (Session 19) ──────────────────────────────────────────────
+
+  Assets/2.Scripts/Model/Config/Constant/TDConstant.cs
+    ← ADDED: PATH_GAMEPLAY_HUD_PAUSE_PANEL    = "PausePanel"
+    ← ADDED: PATH_GAMEPLAY_HUD_RESUME_BUTTON  = "PausePanel/ResumeButton"
+    ← NOTE: PATH_GAMEPLAY_SCREEN_FLASH = "FlashScreen" vẫn dùng được
+            vì FlashScreen đã được di chuyển thành child của Container
+
+  Assets/2.Scripts/View/GamePlay/TDGameplayHUDView.cs
+    ← ADDED cache: m_PausePanel  (PATH_GAMEPLAY_HUD_PAUSE_PANEL) → SetActive(false) in CacheReferences
+    ← ADDED cache: m_ResumeButton (PATH_GAMEPLAY_HUD_RESUME_BUTTON)
+    ← SetupButtons(): wired m_ResumeButton.onClick → OnResumeClicked()
+    ← OnPauseChanged(isPaused): m_PausePanel?.SetActive(isPaused)
+    ← FlashScreen path: đổi từ transform.parent.Find() → transform.Find()
+      (user di chuyển FlashScreen từ SafeArea xuống Container)
+    ← OnGameOver(): TDGameStateControl.api?.OnGameOver() trước Debug.Log
+      (ngăn victory fire sau khi game đã thua)
+
+  Assets/2.Scripts/Control/Gameplay/TDGameStateControl.cs
+    ← RENAMED: OnEnemyKilled() → OnEnemyRemoved()
+      (killed + escaped đều là "removed" → tránh nhầm logic)
+    ← ADDED: IsGameEnded bool guard trong CheckVictory() + OnEnemyRemoved()
+    ← ADDED: OnGameOver() → IsGameEnded = true
+      (cross-check: nếu đã thua thì victory không bao giờ fire)
+
+  Assets/2.Scripts/View/GamePlay/Enemy/TDEnemyView.cs
+    ← UPDATED: Die(): OnEnemyKilled() → OnEnemyRemoved()
+    ← ADDED: Update() reach-end block → TDGameStateControl.api?.OnEnemyRemoved()
+      Bug fix: enemy thoát qua gate trước đây không được đếm vào KilledEnemies
+      → Victory không bao giờ trigger nếu có enemy thoát.
+      Fix: gọi OnEnemyRemoved() cả ở Die() và ở reach-end ReturnToPool()
+
+  Assets/2.Scripts/View/GamePlay/Tower/TDTowerHolderView.cs
+    ← ADDED: public int Cost { get; private set; }
+    ← SetupTowerCost(int cost): thêm Cost = cost
+    ← ADDED: public void SetInteractable(bool interactable)
+                towerSelectButton.interactable = interactable
+
+  Assets/2.Scripts/View/GamePlay/Tower/TDTowerMainView.cs
+    ← Subscribe OnGoldChanged → RefreshHolderInteractability(int gold)
+    ← Unsubscribe in OnDestroy
+    ← ADDED: RefreshHolderInteractability(int gold):
+               foreach holder → holder.SetInteractable(gold >= holder.Cost)
+    ← After InitTowerHolder: RefreshHolderInteractability(TDGoldControl.api.Gold)
+      (initial sync: disable holders khi start gold < cost)
+    ← OnPlaceTowerSuccess(true): TDGoldControl.api.SpendGold(
+                TDFlyweightBulletFactoryModel.api.Setting.GetCost(m_CurrentTowerType))
+
+  Assets/1.Assets/UnityStore Resources/Hand Painted Stone Texture/Material/Stone_normal.mat
+    ← Surface Type: Transparent (1) → Opaque (0)
+    ← _ZWrite: 0 → 1
+    ← RenderType tag: Transparent → Opaque
+    ← RenderQueue: 3000 → -1 (default, geometry queue)
+    ← disabledShaderPasses: [] (DepthOnly + SHADOWCASTER đã re-enable)
+    ← keywords removed: _SURFACE_TYPE_TRANSPARENT, _ALPHAPREMULTIPLY_ON
+    Lý do: path tile plane không cần alpha → transparent sorting gây conflict
+            với range highlight (y=0.12), gate faces, và UI overlay
+
+  ── Scene Changes (Session 19) ───────────────────────────────────────────────
+    Canvas/SafeArea/FlashScreen    →    Canvas/SafeArea/Container/FlashScreen
+    (user tự di chuyển trong Inspector — không cần code change vì path = "FlashScreen")
+
+  ── Bug Fixes (Session 19) ───────────────────────────────────────────────────
+
+    Bug A — Victory không trigger nếu enemy thoát gate:
+    Root cause: ReturnToPool() (reach-end path) không gọi OnEnemyRemoved()
+    Fix: thêm TDGameStateControl.api?.OnEnemyRemoved() trước ReturnToPool() trong
+         TDEnemyView.Update() else-block
+
+    Bug B — Victory fire nhiều lần:
+    Root cause: CheckVictory() không có guard → mỗi OnEnemyRemoved đều trigger
+    Fix: IsGameEnded = true ngay trong CheckVictory() trước khi invoke onVictory
+
+    Bug C — Victory fire sau GameOver (sau khi đã thua):
+    Root cause: TDGameStateControl không biết game đã over
+    Fix: TDGameplayHUDView.OnGameOver() gọi TDGameStateControl.api?.OnGameOver()
+         → set IsGameEnded = true → CheckVictory() luôn return early
+
+    Bug D — PausePanel không hiện khi bấm Pause:
+    Root cause: m_PausePanel và m_ResumeButton chưa được cache/wire trong HUDView
+    Fix: thêm PATH constants + cache + OnPauseChanged + SetupButtons wiring
+
+    Bug E — TDPauseControl.Resume() reset timeScale về 1× dù đang ở 2×:
+    Root cause: Resume() hardcode Time.timeScale = 1f
+    Fix: Time.timeScale = TDSpeedControl.api?.SpeedMultiplier ?? 1f
+    (Fixed session 18, documented here for completeness)
+
+  ── Inspector Actions (Session 19 — CONFIRMED DONE) ─────────────────────────
+    ✅ TDGameplayHUDView gắn vào Canvas/SafeArea/Container
+    ✅ EnemyData.goldReward set trong Enemy Data Config.asset
+
+  ── Còn lại (Phase 8 — chưa làm) ────────────────────────────────────────────
+    ⬜ VictoryPanel UI  — OnVictory() stub đã có trong TDGameplayHUDView
+    ⬜ GameOverPanel UI — OnGameOver() stub đã có trong TDGameplayHUDView
+
+
+================================================================================
+  22. SESSION 20 — TOWERZONE VISUAL + OBSTACLE FOOTPRINT + TOWER Y-OFFSET
+================================================================================
+
+  ── Mục tiêu ─────────────────────────────────────────────────────────────────
+    1. TowerZone tile: Arknights-style "gờ" cho valid placement zones
+    2. Obstacle multi-cell footprint: block đúng số grid theo kích thước visual
+    3. Tower y-offset: ghost + placed tower ngồi đúng trên TowerZone top face
+
+  ── New Assets (Session 20) ──────────────────────────────────────────────────
+
+  Assets/1.Assets/Resources/Materials/TowerZone.mat          [NEW]
+    URP/Lit, Opaque, light gray (0.85, 0.85, 0.85, 1.0)
+    → màu sáng để tương phản với dark ground của path
+
+  Assets/1.Assets/Resources/Prefabs/TowerZone.prefab          [NEW]
+    Cube scale (2, 0.12, 2) — khớp cellSize 2u, cao 0.12u
+    center y=0 → top face tại y=0.06 (= CONFIG_TOWER_PLACE_Y)
+    BoxCollider disabled (không cần physics)
+
+  ── New Constants (Session 20) ───────────────────────────────────────────────
+
+  Assets/2.Scripts/Model/Config/Constant/TDConstant.cs
+    ← ADDED: CONFIG_TOWER_ZONE_TILE_HEIGHT = 0.12f
+    ← ADDED: CONFIG_TOWER_PLACE_Y          = CONFIG_TOWER_ZONE_TILE_HEIGHT * 0.5f  // = 0.06f
+
+  ── Modified Files (Session 20) ──────────────────────────────────────────────
+
+  Assets/2.Scripts/Control/PathControl/TDObstacleControl.cs
+    ← COMPLETE REWRITE for multi-cell footprint support
+    ← onObstaclesPlaced signature changed:
+       OLD: Action<List<Vector2Int> centers, List<Vector2Int> allBlocked>
+       NEW: Action<List<Vector2Int> centers, List<int> prefabIndices, List<Vector2Int> allBlocked>
+    ← PlaceObstacles(gridDTO, start, end, pathCells, prefabCount, footprintRadii[]):
+       - pre-assigns random prefab index per obstacle at selection time
+       - looks up footprintRadii[pIdx] for that prefab
+       - marks all (2r+1)×(2r+1) footprint cells isWalkable=false
+       - emits centers + prefabIndices + allBlocked
+    ← GetFootprintCells(center, radius, gridDTO):
+       - returns all cells in (2r+1)×(2r+1) square, clamped to grid bounds
+    ← IsTooCloseToExisting, GetCandidateCells, Shuffle: unchanged
+
+  Assets/2.Scripts/View/GamePlay/EnemyPath/TDEnemyPathMainView.cs
+    ← REMOVED: [SerializeField] m_ObstacleFootprintRadii (was hardcoded array — removed s20)
+    ← ADDED: [SerializeField] m_TowerZonePrefab : GameObject (Inspector assigned)
+    ← ADDED: m_TowerZoneTiles : List<GameObject>
+    ← ADDED: ComputeFootprintRadii() → int[]:
+       Instantiate each prefab briefly (inactive), encapsulate Renderer bounds,
+       radius = max(0, CeilToInt(max(size.x, size.z) / (2 × cellSize) - 0.5f))
+       Destroy temp instance. Logs result to Console.
+    ← ImplementPath(): removed hardcoded radii array;
+       now calls ComputeFootprintRadii() then passes to PlaceObstacles
+    ← OnObstaclesPlaced signature updated to match new Action:
+       (List<Vector2Int> centers, List<int> prefabIndices, List<Vector2Int> allBlocked)
+       - spawns visual using pre-assigned prefabIndices[i] (not random at spawn time)
+       - calls SetOccupiedCell on ALL allBlocked cells (center + footprint)
+       - calls ComputeValidTowerCells(m_GridDTO, m_AllPaths, allBlocked, start, end)
+    ← OnValidTowerCellsReady(List<Vector3> validPositions):
+       Instantiate m_TowerZonePrefab at (pos.x, 0, pos.z) per valid cell
+       Stores in m_TowerZoneTiles list
+
+  Assets/2.Scripts/Control/Tower/PlaceTower/TDPlaceTowerControl.cs
+    ← CheckPlaceTower(): placed tower y corrected:
+       OLD: CreateTower(currentTower, nearestPosition, rotation)  ← y=0
+       NEW: placedPosition = (nearestPosition.x, CONFIG_TOWER_PLACE_Y, nearestPosition.z)
+            CreateTower(currentTower, placedPosition, rotation)   ← y=0.06
+       SetOccupiedCell still uses nearestPosition (y=0) for correct grid index
+
+  Assets/2.Scripts/View/GamePlay/Tower/TDTowerMainView.cs
+    ← UpdateGhostTransform() — BOTH mobile and desktop paths:
+       OLD: m_CurrentTower.transform.position = new Vector3(x, 0f, z)
+       NEW: m_CurrentTower.transform.position = new Vector3(x, CONFIG_TOWER_PLACE_Y, z)
+       m_LastSnappedPos still stores y=0 for direction computation (unchanged)
+
+  ── Scene Changes (Session 20) ───────────────────────────────────────────────
+
+  Assets/3.Scenes/DTGamePlay.unity
+    ← TDEnemyPathMainView.m_TowerZonePrefab = TowerZone.prefab (Inspector assigned via script)
+    ← TDEnemyPathMainView.m_ObstacleFootprintRadii field REMOVED
+       (field no longer exists — auto-computed at runtime)
+
+  ── Scene Changes (Session 20 — continued) ───────────────────────────────────
+
+    GameMapVisualize:
+      scale   : (4.2,5,2.4) → user adjusted → (4.39,5,2.60) → final (4.4,5,2.6)
+      position: (23.3,0,28) → user adjusted → (23.3,0,27.68) → final (23.3,0,27.7)
+      MeshRenderer: disabled (s20 initial) → re-enabled (material: ground2)
+      TDGridVisualizerView: disabled (gizmo lines no longer show in Scene View)
+      Final bounds: 44u × 26u → grid 22×13, edges align with CityGround tile boundaries
+
+    PathView/CreatePoint: (2,0,29) → (1, 0, 27.7)
+    Camera: (23.3, 15, 2.02) → (24.5, 15, 3.0)
+
+  ── Code Changes (Session 20 — continued) ────────────────────────────────────
+
+  Assets/2.Scripts/Model/Config/Constant/TDConstant.cs
+    ← CONFIG_ENEMY_END_POINT  : (20,6) → (21,6)   [grid is now 22 wide]
+    ← CONFIG_PATH_Y_ZONES[0]  : (7,11) → (7,12)   [use new top row]
+    ← CONFIG_PATH_Y_ZONES[2]  : (2,9)  → (2,10)   [mid sweep extended]
+    ← CONFIG_TOWER_PLACE_Y    : CONFIG_TOWER_ZONE_TILE_HEIGHT*0.5f → 0.6f
+                                  [tower base 0.6u above ground, clears TowerZone tile]
+    ← Comment grid: 21×12 → 22×13 | grid comment updated
+
+  ── Inspector Actions (Session 20 — CONFIRMED DONE) ─────────────────────────
+    ✅ TDEnemyPathMainView.m_TowerZonePrefab = TowerZone.prefab (DTGamePlay.unity saved)
+    ✅ m_ObstacleFootprintRadii field removed from component (field deleted from code)
+    ✅ GameMapVisualize: scale (4.4,5,2.6) pos (23.3,0,27.7) — CityGround aligned
+    ✅ PathView/CreatePoint: (1, 0, 27.7)
+    ✅ Camera: (24.5, 15, 3.0)
+    ✅ TDGridVisualizerView: disabled
 
 
 ================================================================================

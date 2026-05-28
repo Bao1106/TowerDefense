@@ -17,10 +17,12 @@ public class TDGameplayHUDView : MonoBehaviour
     private TextMeshProUGUI m_CurrencyText;
     private TextMeshProUGUI m_SpeedText;
 
-    private Button m_BackButton;
-    private Button m_SettingButton;
-    private Button m_SpeedButton;
-    private Button m_PauseButton;
+    private Button     m_BackButton;
+    private Button     m_SettingButton;
+    private Button     m_SpeedButton;
+    private Button     m_PauseButton;
+    private Button     m_ResumeButton;
+    private GameObject m_PausePanel;
 
     private GameObject m_SpeedIconNormal;
     private GameObject m_SpeedIconX2;
@@ -64,11 +66,13 @@ public class TDGameplayHUDView : MonoBehaviour
         m_SettingButton   = transform.Find(TDConstant.PATH_GAMEPLAY_HUD_SETTING_BUTTON) ?.GetComponent<Button>();
         m_SpeedButton     = transform.Find(TDConstant.PATH_GAMEPLAY_HUD_SPEED_BUTTON)   ?.GetComponent<Button>();
         m_PauseButton     = transform.Find(TDConstant.PATH_GAMEPLAY_HUD_PAUSE_BUTTON)   ?.GetComponent<Button>();
+        m_ResumeButton    = transform.Find(TDConstant.PATH_GAMEPLAY_HUD_RESUME_BUTTON)  ?.GetComponent<Button>();
+        m_PausePanel      = transform.Find(TDConstant.PATH_GAMEPLAY_HUD_PAUSE_PANEL)    ?.gameObject;
+        m_PausePanel?.SetActive(false);
 
         m_SpeedIconNormal = transform.Find(TDConstant.PATH_GAMEPLAY_HUD_SPEED_ICON_NORMAL)?.gameObject;
         m_SpeedIconX2     = transform.Find(TDConstant.PATH_GAMEPLAY_HUD_SPEED_ICON_X2)   ?.gameObject;
 
-        // FlashScreen là con của SafeArea (cha của Container) → đi lên 1 cấp
         m_ScreenFlash = transform.Find(TDConstant.PATH_GAMEPLAY_SCREEN_FLASH)?.GetComponent<Image>();
 
         if (m_LifeText != null)
@@ -118,6 +122,7 @@ public class TDGameplayHUDView : MonoBehaviour
         m_SettingButton?.onClick.AddListener(OnSettingClicked);
         m_SpeedButton  ?.onClick.AddListener(OnSpeedClicked);
         m_PauseButton  ?.onClick.AddListener(OnPauseClicked);
+        m_ResumeButton ?.onClick.AddListener(OnResumeClicked);
     }
 
     // ── Event handlers ────────────────────────────────────────────────────────
@@ -130,11 +135,12 @@ public class TDGameplayHUDView : MonoBehaviour
                 ? Color.red
                 : m_LifeColorNormal;
         }
-        StartCoroutine(FlashScreen());
+        StartCoroutine(FlashScreen(lives));
     }
 
     private void OnGameOver()
     {
+        TDGameStateControl.api?.OnGameOver(); // ngăn victory fire sau khi đã thua
         Debug.Log("<color=red>GAME OVER</color>");
         // TODO Phase 8: show GameOverPanel
     }
@@ -159,7 +165,7 @@ public class TDGameplayHUDView : MonoBehaviour
 
     private void OnPauseChanged(bool isPaused)
     {
-        // TODO: show/hide PausePanel khi có
+        m_PausePanel?.SetActive(isPaused);
     }
 
     private void OnSpeedChanged(float multiplier)
@@ -194,10 +200,16 @@ public class TDGameplayHUDView : MonoBehaviour
         TDPauseControl.api.Toggle();
     }
 
-    // ── Screen flash ──────────────────────────────────────────────────────────
-    private IEnumerator FlashScreen()
+    private void OnResumeClicked()
     {
-        if (m_ScreenFlash == null) yield break;
+        TDPauseControl.api.Resume();
+    }
+
+    // ── Screen flash ──────────────────────────────────────────────────────────
+    private IEnumerator FlashScreen(int lives)
+    {
+        if (m_ScreenFlash == null || lives == TDConstant.CONFIG_PLAYER_STARTING_LIVES) 
+            yield break;
         m_ScreenFlash.color = new Color(1f, 0f, 0f, 0.35f);
         float elapsed = 0f;
         while (elapsed < 0.35f)

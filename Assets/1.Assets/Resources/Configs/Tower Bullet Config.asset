@@ -86,3 +86,12 @@ MonoBehaviour:
     - {x: 3, y: 0}
     - {x: 3, y: 1}
     - {x: 4, y: 0}
+  - type: 5
+    bulletPrefab: {fileID: 1833988619539146, guid: 9318a11cd670f3d4f924ff92fe7b0c77, type: 3}
+    cost: 5
+    damage: 20
+    attackSpeed: 0.8
+    attackType: 1
+    maxTargets: 2
+    rangeOffsets:
+    - {x: 0, y: 0}

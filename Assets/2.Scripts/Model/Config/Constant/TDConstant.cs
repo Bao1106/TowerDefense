@@ -18,6 +18,7 @@ public static class TDConstant
     public const string GAMEPLAY_TOWER_HOLDER_2 = "TowerHolder (2)";
     public const string GAMEPLAY_TOWER_HOLDER_3 = "TowerHolder (3)";
     public const string GAMEPLAY_TOWER_HOLDER_4 = "TowerHolder (4)";
+    public const string GAMEPLAY_TOWER_HOLDER_5 = "TowerHolder (5)"; // Melee operator slot
 
     public const string GAMEPLAY_TEXT_COST_TOWER_HOLDER = "CostBg/Cost";
     public const string GAMEPLAY_BUTTON_TOWER_HOLDER = "ButtonSelector";
@@ -44,35 +45,45 @@ public static class TDConstant
     public const string PATH_GAMEPLAY_HUD_SPEED_ICON_X2     = "Header/HUDButtonLeft/SpeedButton/SpeedIcon/SpeedX2";
     public const string PATH_GAMEPLAY_HUD_PAUSE_BUTTON      = "Header/HUDButtonLeft/PauseButton";
     public const string PATH_GAMEPLAY_HUD_CURRENCY          = "Bottom/Currency/TxtValue";
+    public const string PATH_GAMEPLAY_HUD_PAUSE_PANEL       = "PausePanel";
+    public const string PATH_GAMEPLAY_HUD_RESUME_BUTTON     = "PausePanel/ResumeButton";
     // FlashScreen nằm ở SafeArea (cha của Container) → dùng transform.parent.Find()
     public const string PATH_GAMEPLAY_SCREEN_FLASH          = "FlashScreen";
 
+    // Result popups — children of Container (inactive by default, shown by TDGameplayHUDView)
+    public const string PATH_GAMEPLAY_GAMEOVER_PANEL        = "GameOverPanel";
+    public const string PATH_GAMEPLAY_GAMEOVER_RETRY_BTN    = "GameOverPanel/PopupWindow/RetryButton";
+    public const string PATH_GAMEPLAY_VICTORY_PANEL         = "VictoryPanel";
+    public const string PATH_GAMEPLAY_VICTORY_RETRY_BTN     = "VictoryPanel/PopupWindow/RetryButton";
+    public const string PATH_GAMEPLAY_VICTORY_NEXT_BTN      = "VictoryPanel/PopupWindow/NextButton";
+
     //Config Values
     public static readonly float[] CONFIG_TOWER_ROTATIONS = { 0f, 90f, 180f, 270f };
-    // Grid 20×12 (plane scale 4×2.4, cellSize 2 → world 40×24, position Z=28)
-    // Plane Z range 16..40 → bottom edge above HUD-clear line ~16.4 → toàn bộ grid visible
+    // Grid 22×13 (plane scale 4.4×2.6, cellSize 2 → world 44×26, position Z=27.7)
+    // Plane X range 1.3..45.3, Z range 14.7..40.7 → aligns perfectly with CityGround 2u tiles [s20]
     // → không cần buffer Y → PATH_MIN_GRID_Y = 0
     public const int CONFIG_PATH_MIN_GRID_Y = 0;
 
-    // START/END cùng Y=4 (giữa grid 8 tall) → 3 paths đi vòng trên/dưới đối xứng
+    // START/END tại Y=6 (giữa grid 13 tall, rows 0-12)
+    // Grid 22 wide (0..21): start col=0, end col=21
     public static readonly Vector2Int CONFIG_ENEMY_START_POINT = new Vector2Int(0,  6);
-    public static readonly Vector2Int CONFIG_ENEMY_END_POINT   = new Vector2Int(20, 6);
+    public static readonly Vector2Int CONFIG_ENEMY_END_POINT   = new Vector2Int(21, 6);
 
     // Paths được gen RANDOM mỗi game qua TDPathGeneratorControl
     // → mỗi path nằm trong 1 Y-zone riêng để 3 paths không đè chaos
     //
-    // Grid 21×12, start/end tại Y=6. Zones (yMin, yMax inclusive):
-    //   Path 0 — Top zone     Y= 7..11 (5 rows trên start.y=6)
+    // Grid 22×13, start/end tại Y=6. Zones (yMin, yMax inclusive):
+    //   Path 0 — Top zone     Y= 7..12 (6 rows trên start.y=6, dùng hết row mới)
     //   Path 1 — Bottom zone  Y= 0..5  (6 rows dưới start.y=6)
-    //   Path 2 — Mid sweep    Y= 2..9  (spans most rows)
+    //   Path 2 — Mid sweep    Y= 2..10 (spans most rows)
     public static readonly Vector2Int[] CONFIG_PATH_Y_ZONES =
     {
-        new Vector2Int(7, 11), // Path 0: top
+        new Vector2Int(7, 12), // Path 0: top   (extended to row 12 — new row [s20])
         new Vector2Int(0, 5),  // Path 1: bottom
-        new Vector2Int(2, 9),  // Path 2: mid sweep
+        new Vector2Int(2, 10), // Path 2: mid sweep (extended from 9→10 [s20])
     };
 
-    // Tunables cho random waypoint generator (grid 21 wide)
+    // Tunables cho random waypoint generator (grid 22 wide)
     public const int CONFIG_PATH_MIN_STEP_X         = 2;  // horizontal segment ngắn nhất
     public const int CONFIG_PATH_MAX_STEP_X         = 5;  // horizontal segment dài nhất
     public const int CONFIG_PATH_MIN_VERTICAL_DELTA = 2;  // |dY| tối thiểu giữa 2 vertical strokes liên tiếp
@@ -99,6 +110,10 @@ public static class TDConstant
     public const float CONFIG_ENEMY_HEALTH = 300f;
     public const float CONFIG_GRID_CELL_SIZE = 2f;
     public const float CONFIG_ENEMY_VISUAL_SCALE = 1.5f;
+    // TowerZone tile: scale.y = 0.12, center tại y=0 → top face tại y=0.06
+    // Tower ghost và placed tower đều dùng offset này để ngồi trên zone tile
+    public const float CONFIG_TOWER_ZONE_TILE_HEIGHT = 0.12f;
+    public const float CONFIG_TOWER_PLACE_Y          = 0.6f;  // tower base placed 0.6u above ground (above TowerZone top face 0.06)
     public const string CONFIG_TOWER = "Tower Bullet Config";
 
     #endregion
@@ -107,6 +122,7 @@ public static class TDConstant
 
     public const string PREFAB_GATE_START        = "GateStart";
     public const string PREFAB_GATE_END          = "GateEnd";
+    public const string PREFAB_MELEE_OPERATOR    = "MeleeOperator"; // Arknights-style melee guard
     public const string PREFAB_FATTY_CANNON_G02 = "FattyCannonG02";
     public const string PREFAB_FATTY_CATAPULT_G02 = "FattyCatapultG02";
     public const string PREFAB_FATTY_MISSILE_G02 = "FattyMissileG02";

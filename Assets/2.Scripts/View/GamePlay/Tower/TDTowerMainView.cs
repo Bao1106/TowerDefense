@@ -16,7 +16,8 @@ public class TDTowerMainView : MonoBehaviour
     private const float k_DirectionThresholdRatio = 0.35f;
 
     private readonly List<TDTowerHolderView> m_TowerHolders = new List<TDTowerHolderView>();
-    private TDTowerHolderView m_TdTowerHolderView0, m_TdTowerHolderView1, m_TdTowerHolderView2, m_TdTowerHolderView3, m_TdTowerHolderView4;
+    private TDTowerHolderView m_TdTowerHolderView0, m_TdTowerHolderView1, m_TdTowerHolderView2,
+                              m_TdTowerHolderView3, m_TdTowerHolderView4, m_TdTowerHolderView5;
     private GameObject m_CurrentTower;
     private TowerType  m_CurrentTowerType;
 
@@ -88,7 +89,7 @@ public class TDTowerMainView : MonoBehaviour
         Vector3 snappedPosMobile = TDGridMainModel.api.GetNearestGridPosition(fingerWorld);
         if (snappedPosMobile != m_LastSnappedPos)
             m_LastSnappedPos = snappedPosMobile;
-        m_CurrentTower.transform.position = m_LastSnappedPos;
+        m_CurrentTower.transform.position = new Vector3(m_LastSnappedPos.x, TDConstant.CONFIG_TOWER_PLACE_Y, m_LastSnappedPos.z);
 
         Vector3 dirMobile = fingerWorld - m_LastSnappedPos;
         dirMobile.y = 0f;
@@ -106,7 +107,7 @@ public class TDTowerMainView : MonoBehaviour
         Vector3 snappedPos = TDGridMainModel.api.GetNearestGridPosition(fingerWorld);
         if (snappedPos != m_LastSnappedPos)
             m_LastSnappedPos = snappedPos;
-        m_CurrentTower.transform.position = m_LastSnappedPos;
+        m_CurrentTower.transform.position = new Vector3(m_LastSnappedPos.x, TDConstant.CONFIG_TOWER_PLACE_Y, m_LastSnappedPos.z);
 
         // Direction luôn follow chuột — không cần threshold
         // Chuột ở phía nào của cell center thì tower quay về phía đó
@@ -235,6 +236,8 @@ public class TDTowerMainView : MonoBehaviour
         TDUserInputControl.api.onMouseButtonQClicked      += OnMouseButtonQClicked;
 
         TDEnemyPathMainControl.api.onValidTowerCellsReady += OnValidTowerCellsReady;
+
+        TDGoldControl.api.onGoldChanged                   += RefreshHolderInteractability;
     }
 
     private void OnDestroy()
@@ -250,6 +253,9 @@ public class TDTowerMainView : MonoBehaviour
         TDUserInputControl.api.onMouseButtonQClicked      -= OnMouseButtonQClicked;
 
         TDEnemyPathMainControl.api.onValidTowerCellsReady -= OnValidTowerCellsReady;
+
+        if (TDGoldControl.api != null)
+            TDGoldControl.api.onGoldChanged               -= RefreshHolderInteractability;
     }
 
     // ─── Tower Holders ───────────────────────────────────────────────────────
@@ -276,12 +282,33 @@ public class TDTowerMainView : MonoBehaviour
         m_TdTowerHolderView4.SetupTowerHolderVariables();
         m_TdTowerHolderView4.SetupTowerCost(TDFlyweightBulletFactoryModel.api.Setting.GetCost(TowerType.Mortar));
 
+        // Slot 5 — Melee operator (null-safe: có thể chưa có TowerHolder (5) trong scene)
+        var holder5T = transform.Find(TDConstant.GAMEPLAY_TOWER_HOLDER_5);
+        if (holder5T != null)
+        {
+            m_TdTowerHolderView5 = holder5T.GetComponent<TDTowerHolderView>();
+            m_TdTowerHolderView5.SetupTowerHolderVariables();
+            m_TdTowerHolderView5.SetupTowerCost(TDFlyweightBulletFactoryModel.api.Setting.GetCost(TowerType.Melee));
+        }
+
         m_TowerHolders.AddRange(new List<TDTowerHolderView>
         {
-            m_TdTowerHolderView0, m_TdTowerHolderView1, m_TdTowerHolderView2, m_TdTowerHolderView3, m_TdTowerHolderView4
+            m_TdTowerHolderView0, m_TdTowerHolderView1, m_TdTowerHolderView2,
+            m_TdTowerHolderView3, m_TdTowerHolderView4
         });
+        if (m_TdTowerHolderView5 != null)
+            m_TowerHolders.Add(m_TdTowerHolderView5);
 
         SetupOnSelectTower();
+
+        // Sync trạng thái disable/enable ngay lúc init
+        RefreshHolderInteractability(TDGoldControl.api.Gold);
+    }
+
+    private void RefreshHolderInteractability(int gold)
+    {
+        foreach (var holder in m_TowerHolders)
+            holder.SetInteractable(gold >= holder.Cost);
     }
 
     private void SetupOnSelectTower()
@@ -319,7 +346,13 @@ public class TDTowerMainView : MonoBehaviour
         m_LastRangeCell        = new Vector2Int(int.MinValue, int.MinValue);
         m_LastRangeRotIndex    = -1;
 
-        ShowHighlights();
+        // Melee operator: highlight path cells (màu xanh dương)
+        // Regular tower:  highlight TowerZone cells (màu xanh lá)
+        if (towerType == TowerType.Melee)
+            ShowMeleeHighlights();
+        else
+            ShowHighlights();
+
         ShowPlacementPanel();
     }
 
@@ -327,6 +360,9 @@ public class TDTowerMainView : MonoBehaviour
 
     private void RefreshRangeHighlights()
     {
+        // Melee operator không cần range visualization — "range" chính là ô đang đứng
+        if (m_CurrentTowerType == TowerType.Melee) { HideRangeHighlights(); return; }
+
         if (m_CurrentTower == null || m_RangeHighlightPrefab == null) return;
 
         Vector2Int cell   = TDGridMainModel.api.WorldToCell(m_CurrentTower.transform.position);
@@ -393,6 +429,44 @@ public class TDTowerMainView : MonoBehaviour
         }
     }
 
+    // ─── Melee Highlights (path cells — màu xanh dương) ─────────────────────
+
+    private void ShowMeleeHighlights()
+    {
+        HideHighlights();
+        if (TDMeleeRegistry.api == null) return;
+
+        var cells = TDMeleeRegistry.api.GetValidMeleeCells();
+        foreach (var cell in cells)
+        {
+            // Skip cells đã có operator
+            if (TDMeleeRegistry.api.HasOperatorAt(cell)) continue;
+
+            Vector3    world = TDGridMainModel.api.CellToWorld(cell);
+            GameObject go    = CreateMeleeHighlightTile(world);
+            m_HighlightTiles.Add(go);
+        }
+    }
+
+    private GameObject CreateMeleeHighlightTile(Vector3 worldPos)
+    {
+        var go = GameObject.CreatePrimitive(PrimitiveType.Quad);
+        go.transform.position = new Vector3(worldPos.x, 0.06f, worldPos.z);
+        go.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+
+        float size = TDGridMainModel.api.cellSize * 0.88f;
+        go.transform.localScale = new Vector3(size, size, 1f);
+
+        Object.Destroy(go.GetComponent<MeshCollider>());
+
+        var rend = go.GetComponent<MeshRenderer>();
+        var mat  = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+        mat.color = new Color(0.1f, 0.45f, 1f, 0.75f); // xanh dương — melee placement
+        rend.material = mat;
+
+        return go;
+    }
+
     // Fallback tile (nếu chưa assign prefab) — Quad xanh lá nằm ngang
     private GameObject CreateHighlightTile(Vector3 worldPos)
     {
@@ -431,6 +505,9 @@ public class TDTowerMainView : MonoBehaviour
     {
         if (isPlaced)
         {
+            int cost = TDFlyweightBulletFactoryModel.api.Setting.GetCost(m_CurrentTowerType);
+            TDGoldControl.api.SpendGold(cost);
+
             Destroy(m_CurrentTower);
             m_CurrentTower = null;
             TDPlaceTowerControl.api.onPlaceTowerSuccess?.Invoke(false);
@@ -475,7 +552,7 @@ public class TDTowerMainView : MonoBehaviour
     {
         if (isClicked)
         {
-            TDTowerMainControl.api.OnPlaceTower(m_CurrentTower);
+            TDTowerMainControl.api.OnPlaceTower(m_CurrentTower, m_CurrentTowerType);
             TDUserInputControl.api.onMouseButton0Clicked(false);
         }
     }
