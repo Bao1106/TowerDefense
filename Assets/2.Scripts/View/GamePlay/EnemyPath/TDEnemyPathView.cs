@@ -11,7 +11,7 @@ public class TDEnemyPathView : MonoBehaviour
 
     public void RegistryValues()
     {
-        m_PathPrefab = RepResourceObject.GetResource<GameObject>(TDConstant.PREFAB_PATH);
+        m_PathPrefab = TDResourceObject.GetResource<GameObject>(TDConstant.PREFAB_PATH);
         TDEnemyPathControl.api.onGetPaths += OnGetPaths;
     }
 
@@ -36,11 +36,11 @@ public class TDEnemyPathView : MonoBehaviour
     // Path tile đã bị bỏ — enemy đi trực tiếp trên GameMapVisualize (ground).
     // Tower zone tile (cube sáng) sẽ được spawn trên non-path cells trong TDEnemyPathMainView.
     // Chỉ cần đánh dấu các path cells là occupied để grid system hoạt động đúng.
-    // Đồng thời đăng ký non-gate path cells vào TDMeleeRegistry để melee operator có thể đặt ở đó.
+    // Đồng thời đăng ký non-gate path cells vào TDOperatorRegistry để operator có thể đặt ở đó.
     public void VisualizeAllPaths(List<List<IGridCellDTO>> allPaths)
     {
         // Dùng HashSet để tránh đăng ký cell trùng lặp (3 paths có thể share cells)
-        var registeredMeleeCells = new HashSet<Vector2Int>();
+        var registeredOperatorCells = new HashSet<Vector2Int>();
 
         foreach (var path in allPaths)
         {
@@ -55,8 +55,8 @@ public class TDEnemyPathView : MonoBehaviour
                 if (i > 0 && i < path.Count - 1)
                 {
                     var gridCell = new Vector2Int(cell.position.x, cell.position.y);
-                    if (registeredMeleeCells.Add(gridCell))
-                        TDMeleeRegistry.api?.RegisterPathCell(gridCell);
+                    if (registeredOperatorCells.Add(gridCell))
+                        TDOperatorRegistry.api?.RegisterPathCell(gridCell);
                 }
             }
         }

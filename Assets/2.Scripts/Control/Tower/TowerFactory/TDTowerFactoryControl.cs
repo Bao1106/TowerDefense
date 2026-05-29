@@ -1,18 +1,32 @@
 using System;
+using TDEnums;
 using UnityEngine;
 using Object = UnityEngine.Object;
+using Random = UnityEngine.Random;
 
 public class TDTowerFactoryControl : ITowerFactoryControl
 {
     public static TDTowerFactoryControl api;
 
-    public Action<TDTowerWeaponView> onCreateTowerSuccess;
-    
-    public void CreateTower(GameObject prefab, Vector3 position, Quaternion rotation)
+    public Action<IPlacedUnit> onCreateUnitSuccess;
+    public Action<TDTowerWeaponView> onCreateTowerSuccess; // backward-compat
+
+    public void CreateUnit(GameObject prefab, Vector3 position, Quaternion rotation, TDTowerSlotInfo slotInfo)
     {
-        TDTowerWeaponView tower = Object
-            .Instantiate(prefab, position, rotation)
-            .GetComponent<TDTowerWeaponView>();
-        onCreateTowerSuccess?.Invoke(tower);
+        var instance = Object.Instantiate(prefab, position, rotation);
+        var unit = instance.GetComponent<IPlacedUnit>();
+        if (unit == null)
+        {
+            Debug.LogError($"[TDTowerFactoryControl] Prefab '{prefab.name}' has no IPlacedUnit component");
+            return;
+        }
+
+        string key = $"{Random.Range(1000, 9999)}-{prefab.name}";
+        unit.Init(key, slotInfo);
+
+        onCreateUnitSuccess?.Invoke(unit);
+
+        if (unit is TDTowerWeaponView weapon)
+            onCreateTowerSuccess?.Invoke(weapon);
     }
 }

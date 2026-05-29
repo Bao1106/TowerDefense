@@ -14,7 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   towers:
   - type: 0
-    bulletPrefab: {fileID: 1833988619539146, guid: 9318a11cd670f3d4f924ff92fe7b0c77, type: 3}
+    towerPrefab: {fileID: 1875090778556656, guid: 7191a0df8b6695d449a0f18a361bc311, type: 3}
+    ammoPrefab: {fileID: 1833988619539146, guid: 9318a11cd670f3d4f924ff92fe7b0c77, type: 3}
     cost: 5
     damage: 5
     attackSpeed: 3
@@ -24,8 +25,10 @@ MonoBehaviour:
     - {x: 1, y: 0}
     - {x: 2, y: 0}
     - {x: 3, y: 0}
+    icon: {fileID: 21300000, guid: 017ec9e6155133446a90aa7b5b4ef541, type: 3}
   - type: 1
-    bulletPrefab: {fileID: 1833988619539146, guid: 9318a11cd670f3d4f924ff92fe7b0c77, type: 3}
+    towerPrefab: {fileID: 1791165765685050, guid: 16356cdf71fc4b0499d0b7fd3d6c0cd9, type: 3}
+    ammoPrefab: {fileID: 1833988619539146, guid: 9318a11cd670f3d4f924ff92fe7b0c77, type: 3}
     cost: 10
     damage: 20
     attackSpeed: 1
@@ -38,8 +41,10 @@ MonoBehaviour:
     - {x: 2, y: -1}
     - {x: 2, y: 0}
     - {x: 2, y: 1}
+    icon: {fileID: 21300000, guid: 1bf69e58b239c5746852539b6ec2807a, type: 3}
   - type: 2
-    bulletPrefab: {fileID: 1552339098034316, guid: c13874774436a6a4c85449cab6e14fa4, type: 3}
+    towerPrefab: {fileID: 1498501323785604, guid: def8b52e5e3714e43adcb23d43073949, type: 3}
+    ammoPrefab: {fileID: 1552339098034316, guid: c13874774436a6a4c85449cab6e14fa4, type: 3}
     cost: 15
     damage: 10
     attackSpeed: 1
@@ -52,8 +57,10 @@ MonoBehaviour:
     - {x: 2, y: 1}
     - {x: 3, y: 0}
     - {x: 4, y: 0}
+    icon: {fileID: 21300000, guid: aee5ed11f09ddfa42901a119314f5a31, type: 3}
   - type: 3
-    bulletPrefab: {fileID: 1162392375372998, guid: 3e5b0980d9cc7a94bbb93263b9c6228d, type: 3}
+    towerPrefab: {fileID: 1370505811353800, guid: 5abcbaa4c20adb04895a997e3d70772d, type: 3}
+    ammoPrefab: {fileID: 1162392375372998, guid: 3e5b0980d9cc7a94bbb93263b9c6228d, type: 3}
     cost: 15
     damage: 20
     attackSpeed: 1
@@ -71,8 +78,10 @@ MonoBehaviour:
     - {x: 3, y: -1}
     - {x: 3, y: 0}
     - {x: 3, y: 1}
+    icon: {fileID: 21300000, guid: dcbf80359af4c874c8622f0527002c32, type: 3}
   - type: 4
-    bulletPrefab: {fileID: 1162392375372998, guid: 3e5b0980d9cc7a94bbb93263b9c6228d, type: 3}
+    towerPrefab: {fileID: 1591110490357510, guid: d4af3966dba2cd746ab019083640eb8c, type: 3}
+    ammoPrefab: {fileID: 1162392375372998, guid: 3e5b0980d9cc7a94bbb93263b9c6228d, type: 3}
     cost: 20
     damage: 15
     attackSpeed: 2
@@ -86,12 +95,4 @@ MonoBehaviour:
     - {x: 3, y: 0}
     - {x: 3, y: 1}
     - {x: 4, y: 0}
-  - type: 5
-    bulletPrefab: {fileID: 1833988619539146, guid: 9318a11cd670f3d4f924ff92fe7b0c77, type: 3}
-    cost: 5
-    damage: 20
-    attackSpeed: 0.8
-    attackType: 1
-    maxTargets: 2
-    rangeOffsets:
-    - {x: 0, y: 0}
+    icon: {fileID: 21300000, guid: 043b9b6ca40613f44b9469eaa1ad8580, type: 3}

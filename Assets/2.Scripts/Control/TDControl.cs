@@ -44,7 +44,7 @@ public class TDControl
         TDPathGeneratorControl.api    = new TDPathGeneratorControl();
         
         //Init sub control
-        TDMeleeRegistry.api    = new TDMeleeRegistry();
+        TDOperatorRegistry.api    = new TDOperatorRegistry();
         TDEnemyRegistry.api    = new TDEnemyRegistry();
         TDEnemyPathControl.api = new TDEnemyPathControl();
         TDEnemyControl.api     = new TDEnemyControl();

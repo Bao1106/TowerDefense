@@ -21,7 +21,7 @@
         MissileG02,
         MissileG03,
         Mortar,
-        Melee      // Arknights-style: đặt trên path, chặn enemy, đánh melee
+        Operator   // Arknights-style: đặt trên path, chặn enemy, đánh cận chiến
     }
 
     public enum AttackType
@@ -46,6 +46,11 @@
         Hard,
         Extreme,
         Nightmare
+    }
+
+    public enum OperatorType
+    {
+        Knight
     }
 
 }

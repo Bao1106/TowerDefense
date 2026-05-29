@@ -28,7 +28,7 @@ public class TowerDataDrawer : PropertyDrawer
         if (!prop.isExpanded) return LH + 2f;
 
         bool isMultiple = IsMultiple(prop);
-        float standardFields = (LH + 2f) * (isMultiple ? 8f : 7f); // +attackType +maxTargets(cond)
+        float standardFields = (LH + 2f) * (isMultiple ? 10f : 9f); // +ammoPrefab +icon +attackType +maxTargets(cond)
 
         return LH + 4f              // foldout header
              + standardFields
@@ -60,7 +60,9 @@ public class TowerDataDrawer : PropertyDrawer
 
         // ── Standard fields ──────────────────────────────────────────────────
         DrawField(ref y, x, w, prop, "type");
-        DrawField(ref y, x, w, prop, "bulletPrefab");
+        DrawField(ref y, x, w, prop, "towerPrefab");
+        DrawField(ref y, x, w, prop, "ammoPrefab");
+        DrawField(ref y, x, w, prop, "icon");
         DrawField(ref y, x, w, prop, "cost");
         DrawField(ref y, x, w, prop, "damage");
         DrawField(ref y, x, w, prop, "attackSpeed");

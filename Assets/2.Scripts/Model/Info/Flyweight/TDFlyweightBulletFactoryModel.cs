@@ -20,7 +20,7 @@ public class TDFlyweightBulletFactoryModel
         = new Dictionary<TowerType, IObjectPool<TDAttackVFX>>();
 
     public TDFlyweightTowerDataSettings Setting
-        => m_Setting ??= RepResourceObject.GetResource<TDFlyweightTowerDataSettings>(TDConstant.CONFIG_TOWER);
+        => m_Setting ??= TDResourceObject.GetResource<TDFlyweightTowerDataSettings>(TDConstant.CONFIG_TOWER);
 
     // ── Public API ────────────────────────────────────────────────────────────
 
@@ -47,7 +47,8 @@ public class TDFlyweightBulletFactoryModel
         if (m_Pools.TryGetValue(type, out var pool))
             return pool;
 
-        GameObject prefab = Setting.GetPrefab(type);
+        GameObject prefab = Setting.GetAmmoPrefab(type);
+
         if (prefab == null)
         {
             Debug.LogError($"[TDFlyweightBulletFactoryModel] No prefab for TowerType.{type}");

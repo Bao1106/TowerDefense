@@ -1,0 +1,52 @@
+using System;
+using TDEnums;
+using UnityEngine;
+
+/// <summary>
+/// Event bus tập trung cho các cross-cutting concerns: VFX, Audio, Camera shake.
+/// Gameplay code raise event — audio/VFX system subscribe độc lập, không coupling ngược lại.
+/// </summary>
+public static class TDGameEventBus
+{
+    // ── Enemy ─────────────────────────────────────────────────────────────────
+    public static event Action<Vector3, EnemyType> OnEnemyDied;
+    public static event Action<Vector3, EnemyType> OnEnemySpawned;
+
+    // ── Tower / Operator ──────────────────────────────────────────────────────
+    public static event Action<Vector3, TowerType> OnTowerAttacked;
+    public static event Action<Vector2Int> OnOperatorDied;
+
+    // ── Player ────────────────────────────────────────────────────────────────
+    public static event Action<Vector3> OnLifeLost;
+    public static event Action OnVictory;
+    public static event Action OnGameOver;
+
+    // ── Wave ──────────────────────────────────────────────────────────────────
+    public static event Action<int> OnWaveStarted;
+
+    // ── Raise helpers ─────────────────────────────────────────────────────────
+
+    public static void EnemyDied(Vector3 pos, EnemyType type)
+        => OnEnemyDied?.Invoke(pos, type);
+
+    public static void EnemySpawned(Vector3 pos, EnemyType type)
+        => OnEnemySpawned?.Invoke(pos, type);
+
+    public static void TowerAttacked(Vector3 pos, TowerType type)
+        => OnTowerAttacked?.Invoke(pos, type);
+
+    public static void OperatorDied(Vector2Int cell)
+        => OnOperatorDied?.Invoke(cell);
+
+    public static void LifeLost(Vector3 pos)
+        => OnLifeLost?.Invoke(pos);
+
+    public static void Victory()
+        => OnVictory?.Invoke();
+
+    public static void GameOver()
+        => OnGameOver?.Invoke();
+
+    public static void WaveStarted(int waveIndex)
+        => OnWaveStarted?.Invoke(waveIndex);
+}

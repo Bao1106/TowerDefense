@@ -2,36 +2,49 @@ using System.Collections.Generic;
 using TDEnums;
 using UnityEngine;
 
-public class TDTowerWeaponView : MonoBehaviour
+public class TDTowerWeaponView : MonoBehaviour, IPlacedUnit
 {
     [SerializeField] private TowerType type;
 
-    private ITowerRangeDTO      m_TowerRangeDTO;
-    private Quaternion          m_OriQuaternion;
-    private Transform           m_PosSpawnBullet;
-    private float               m_LastAttackTime;
-    private string              m_TowerKey;
-    private int                 m_MaxTargets;
+    private ITowerRangeDTO m_TowerRangeDTO;
+    private Quaternion m_OriQuaternion;
+    private Transform m_PosSpawnBullet;
+    private float m_LastAttackTime;
+    private string m_TowerKey;
+    private int m_MaxTargets;
 
-    // Tick-based scan — tìm targets 5 lần/giây
-    private float          m_LastScanTime = -999f;
-    private const float    k_ScanInterval = 0.2f;
+    private float m_LastScanTime = -999f;
+    private const float SCAN_INTERVAL = 0.2f;
 
-    // Danh sách target hiện tại (1 với Single/AOE, tối đa maxTargets với Multiple)
-    private readonly List<TDEnemyView> m_Targets         = new List<TDEnemyView>();
+    private readonly List<TDEnemyView> m_Targets = new List<TDEnemyView>();
     private readonly List<TDEnemyView> m_CandidateBuffer = new List<TDEnemyView>();
 
     public TowerType towerType => type;
 
+    // ── IPlacedUnit ───────────────────────────────────────────────────────────
+
+    TowerType IPlacedUnit.UnitType => type;
+
+    void IPlacedUnit.Init(string instanceKey, TDTowerSlotInfo slotInfo)
+        => Init(instanceKey);
+
+    void IPlacedUnit.OnRemove()
+    {
+        if (TDTowerBehaviorMainControl.api != null)
+            TDTowerBehaviorMainControl.api.onGetLastAttackTime -= OnGetLastAttackTime;
+    }
+
+    // ── Init ──────────────────────────────────────────────────────────────────
+
     public void Init(string key)
     {
-        m_TowerKey      = key;
+        m_TowerKey = key;
         m_TowerRangeDTO = TDTowerBehaviorModel.api.GetTowerRange(towerType);
         m_OriQuaternion = transform.rotation;
         m_PosSpawnBullet = transform.Find(TDConstant.GAMEPLAY_TOWER_BULLET_SPAWN);
 
         var attackType = TDTowerBehaviorModel.api.GetAttackType(towerType);
-        m_MaxTargets   = attackType == AttackType.Multiple
+        m_MaxTargets = attackType == AttackType.Multiple
             ? TDTowerBehaviorModel.api.GetMaxTargets(towerType)
             : 1;
 
@@ -40,7 +53,8 @@ public class TDTowerWeaponView : MonoBehaviour
 
     private void OnDestroy()
     {
-        TDTowerBehaviorMainControl.api.onGetLastAttackTime -= OnGetLastAttackTime;
+        if (TDTowerBehaviorMainControl.api != null)
+            TDTowerBehaviorMainControl.api.onGetLastAttackTime -= OnGetLastAttackTime;
     }
 
     private void OnGetLastAttackTime(string key, float time)
@@ -49,17 +63,18 @@ public class TDTowerWeaponView : MonoBehaviour
         m_LastAttackTime = time;
     }
 
+    // ── Update ────────────────────────────────────────────────────────────────
+
     private void Update()
     {
         if (string.IsNullOrEmpty(m_TowerKey)) return;
 
-        if (Time.time - m_LastScanTime >= k_ScanInterval)
+        if (Time.time - m_LastScanTime >= SCAN_INTERVAL)
         {
             m_LastScanTime = Time.time;
             ScanForTargets();
         }
 
-        // Validate targets mỗi frame: xóa null hoặc ra ngoài range giữa 2 lần scan
         for (int i = m_Targets.Count - 1; i >= 0; i--)
         {
             var t = m_Targets[i];
@@ -80,7 +95,6 @@ public class TDTowerWeaponView : MonoBehaviour
         }
     }
 
-    // Sort theo PathProgress giảm dần → pick top m_MaxTargets trong range
     private void ScanForTargets()
     {
         m_Targets.Clear();
@@ -95,7 +109,6 @@ public class TDTowerWeaponView : MonoBehaviour
             m_CandidateBuffer.Add(enemy);
         }
 
-        // Insertion sort nhỏ — enemy count tối đa ~50, không cần LINQ
         m_CandidateBuffer.Sort((a, b) => b.PathProgress.CompareTo(a.PathProgress));
 
         for (int i = 0; i < m_CandidateBuffer.Count && m_Targets.Count < m_MaxTargets; i++)

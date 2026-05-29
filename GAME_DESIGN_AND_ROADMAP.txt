@@ -1,6 +1,6 @@
 ================================================================================
   TOWER DEFENSE — GAME DESIGN, TECHNICAL REFERENCE & DEVELOPMENT ROADMAP
-  Last updated: 2026-05-28  (session 20 — TowerZone, obstacle footprint, grid 22×13 CityGround align)
+  Last updated: 2026-05-29  (session 23 — Phase 16 Interface Refactor, Event Bus, Code Style)
 ================================================================================
 
 
@@ -90,8 +90,20 @@ File: Assets/3.Scenes/DTGamePlay.unity
 ════════════════════════════════════════════════════════════════════════════════
 
   Pattern : MVC-like (Model / Control / View)
-  DI      : ServiceLocator + Injector (Assets/2.Scripts/Services/)
-  Events  : C# Action delegates
+  DI      : Static singleton api (gameplay); Event Bus cho cross-cutting concerns
+  Events  : C# Action delegates + TDGameEventBus (s23)
+
+  Code style (enforced s23):
+    - Allman braces: { luôn trên dòng riêng
+    - 1 space quanh operator (+=, -=, =) — không alignment padding
+
+  ── Interfaces (Tower) ───────────────────────────────────────────────────────
+  IDeployableDTO.cs   ← [NEW s23] Stats chung cho mọi unit đặt lên map (Tower + Operator)
+                         TowerType, Damage, AttackSpeed, AttackType, MaxTargets, RangeOffsets
+  IPlacedUnit.cs      ← [NEW s23] Interface cho unit đang đứng trên map
+                         UnitType, Init(key, slotInfo), OnRemove()
+  ITowerRangeDTO.cs   ← DetectionRadius, IsInRange, GetCellsInRange
+  ITowerFactoryControl.cs ← CreateUnit(prefab, pos, rot, slotInfo) [s23: renamed từ CreateTower]
 
   ── Model ───────────────────────────────────────────────────────────────────
   TDConstant.cs                    ← all config values (grid, path zones, wave timing, prefabs, lives)
@@ -100,12 +112,17 @@ File: Assets/3.Scenes/DTGamePlay.unity
   TDGridDTO.cs                     ← logical width×height IGridCellDTO[,] grid
   TDGridCellDTO.cs                 ← cell data: position(x,y), isWalkable, CellType
   TDaStarPathModel.cs              ← heuristic (Manhattan: dx+dy), GetNeighbors
-  TDFlyweightBulletFactoryModel.cs ← lazy pool per TowerType (Flyweight); pool TDAttackVFX [Phase 7]
-  TDFlyweightTowerDataSettings.cs  ← ScriptableObject; TowerData: bulletPrefab, cost, damage,
-                                      attackSpeed, attackType, maxTargets, rangeOffsets [Phase 6.2+10+7]
-  TDTowerBehaviorModel.cs          ← damage/speed/attackType/maxTargets/range từ SO
-  TDRangeDTO.cs                    ← abstract base; virtual GetCellsInRange (bounding-box) [Phase 10 NEW]
-  TDOffsetRangeDTO.cs              ← Arknights-style explicit cell offsets, O(n), 4-dir auto-rotate [Phase 10 NEW]
+  TDFlyweightBulletFactoryModel.cs ← lazy pool per TowerType; pool TDAttackVFX [Phase 7]
+  TDFlyweightTowerDataSettings.cs  ← ScriptableObject; TowerData : IDeployableDTO
+                                      towerPrefab, ammoPrefab, cost, damage, attackSpeed,
+                                      attackType, maxTargets, rangeOffsets, icon [s23: IDeployableDTO]
+  TDTowerBehaviorModel.cs          ← Dictionary<TowerType, IDeployableDTO>; không còn if/else [s23]
+  TDRangeDTO.cs                    ← abstract base; virtual GetCellsInRange (bounding-box) [Phase 10]
+  TDOffsetRangeDTO.cs              ← Arknights-style explicit cell offsets, O(n), 4-dir auto-rotate [Phase 10]
+  TDFlyweightOperatorDataSettings.cs ← ScriptableObject; OperatorData : IDeployableDTO
+                                       operatorType, cost, hp, damage, attackSpeed, blockCount,
+                                       rangeOffsets, icon [s23: IDeployableDTO + OperatorType]
+  TDTowerSlotInfo.cs (struct)      ← {prefab, towerType, operatorType, cost, icon} [s23: +operatorType]
 
   Platform: Android Mobile (Legacy Input System — activeInputHandler=0)
              → không dùng com.unity.inputsystem package
@@ -133,11 +150,16 @@ File: Assets/3.Scenes/DTGamePlay.unity
   TDEnemyControl.cs          ← convert IGridCellDTO path → Vector3 world positions
   TDEnemyRegistry.cs         ← centralized enemy list; Register/Unregister/GetAll [Phase 6.1 NEW]
   TDTowerMainControl.cs      ← select tower, rotate (E/Q), place
+                                [s23: m_CurrentSlot stored on select; onGetTowerPrefab: Action<TDTowerSlotInfo>]
   TDPlaceTowerControl.cs     ← raycast placement, occupancy check
-  TDTowerFactoryControl.cs   ← factory spawn + init
+                                [s23: nhận TDTowerSlotInfo; xóa RegisterOperator (moved vào OperatorView)]
+  TDTowerFactoryControl.cs   ← [s23] CreateUnit(prefab, pos, rot, slotInfo); GetComponent<IPlacedUnit>;
+                                onCreateUnitSuccess: Action<IPlacedUnit>; backward-compat onCreateTowerSuccess
   TDTowerBehaviorMainControl.cs  ← attack cooldown; AttackTargets(List<TDEnemyView>) [Phase 7]
   TDTowerBehaviorSubControl.cs   ← spawn N TDAttackVFX per target list [Phase 7]
   TDUserInputControl.cs      ← mobile/desktop input event dispatching
+  TDOperatorRegistry.cs      ← [Phase 14 s22] Track valid path cells, operator positions,
+                                blocked enemy refs, ForceUnblock khi operator chết
 
   ── View ────────────────────────────────────────────────────────────────────
   TDGameplayMainView.cs      ← scene entry, init grid + life system
@@ -156,16 +178,36 @@ File: Assets/3.Scenes/DTGamePlay.unity
                                [Phase 6.1: PathProgress property, Register/Unregister registry]
                                [Phase 13: Animator via GetComponent Awake; const triggers;
                                 Die coroutine; m_IsDying guard; Rebind on pool reuse]
+                               [Phase 14 s22: check TDOperatorRegistry.CanBlock on arrive;
+                                m_IsBlocked; attack operator timer; ForceUnblock on Die]
   TDTowerMainView.cs         ← 5 tower holders, input handler, green highlight tiles,
                                range highlight tile pool (Phase 12)
   TDTowerWeaponView.cs       ← m_Targets List, ScanForTargets sort PathProgress, validate per frame
                                AttackTargets với rangeDTO + towerRotation [Phase 7]
+                               [s23: implements IPlacedUnit; OnRemove() unsubscribe]
   TDAttackVFX.cs             ← [NEW Phase 7] thay TDBulletsView; homing → OnImpact → Single/AOE damage
   [DELETED] TDBulletsView.cs ← removed Phase 7 (replaced by TDAttackVFX)
   TDTowerHolderView.cs       ← HUD slot (button + cost); Cost property; SetInteractable() [Phase 8]
+  TDSlotHolderMainView.cs    ← [Phase 15 s22] Dynamic tower slot bar — instantiate SlotHolder prefabs
+                                từ Resources, wire buttons, ghost placement, Arknights 2-phase drag,
+                                highlights (green=tower zone, blue=operator path)
+                                [s23: OnCreateTower(TDTowerSlotInfo); 1-space style fix]
+  TDSlotHolderItemView.cs    ← [Phase 15 s22] Một slot button: SlotIcon (Image), cost text,
+                                select button, disabled overlay
+  TDOperatorView.cs          ← [Phase 14 s22] Operator: attack blocked enemies, TakeDamage() khi
+                                bị enemy phản công, Die() → ForceUnblock all enemies + Destroy
+                               [s23: implements IPlacedUnit; Init(key,slotInfo) tự RegisterOperator;
+                                dùng OperatorType thay m_OperatorDataIndex; raise TDGameEventBus.OperatorDied]
+  TDTowerFactoryView.cs      ← [s23: empty stub — Init logic moved vào TDTowerFactoryControl.CreateUnit]
   TDGateView.cs              ← GateStart MonoBehaviour: PlaySpawnEffect() per wave [Phase 4.5]
   TDGateEndView.cs           ← GateEnd MonoBehaviour: trigger visual + life text [Phase 4.5]
   [DELETED] TDEnemyDetector.cs ← removed Phase 6.1 (replaced by Registry+tick scan)
+
+  ── Event Bus ────────────────────────────────────────────────────────────────
+  TDGameEventBus.cs          ← [NEW s23] Static event hub cho cross-cutting concerns (VFX, Audio)
+                                Events: OnEnemyDied(pos,type), OnEnemySpawned, OnTowerAttacked,
+                                OnOperatorDied(cell), OnLifeLost, OnVictory, OnGameOver, OnWaveStarted
+                                Gameplay raise event; audio/VFX subscribe độc lập — zero coupling
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -1371,81 +1413,373 @@ File: Assets/3.Scenes/DTGamePlay.unity
   ─────────────────────────────────────────────────────────────────────────────
 
   ╔══════════════════════════════════════════════════════════════════════════╗
-  ║  PHASE 14 — Melee Operator (Session 21)                 [✅ DONE]          ║
+  ║  PHASE 14 — Operator System (Session 21 + 22 refactor)  [✅ DONE]         ║
   ╚══════════════════════════════════════════════════════════════════════════╝
 
-  Concept: Arknights-style melee guard — đặt lên PATH cells, chặn enemy,
-           tấn công melee (range offset 0,0 = cùng ô), không có HP.
+  Concept: Arknights-style path guard — đặt lên PATH cells, chặn enemy,
+           bidirectional combat (operator tấn công & nhận damage từ enemy),
+           có HP riêng, chết khi HP về 0 → ForceUnblock tất cả enemy bị chặn.
+
+  Session 21: MVP (TDMeleeRegistry, không HP, bullet-based)
+  Session 22: Refactor → TDOperatorRegistry + TDOperatorView với HP system,
+              enemy phản công operator, ForceUnblock khi operator chết,
+              TDFlyweightOperatorDataSettings SO riêng, OperatorKnight prefab.
 
   ── Kiến trúc ────────────────────────────────────────────────────────────────
-    TDMeleeRegistry (NEW singleton):
-      m_ValidMeleeCells: HashSet<Vector2Int> — path cells (không gồm gate)
-      m_Operators: Dictionary<Vector2Int, (capacity, count)>
-      RegisterPathCell(cell)        — gọi từ TDEnemyPathView.VisualizeAllPaths
-      RegisterOperator(cell, cap)   — gọi khi đặt operator
-      HasOperatorAt(cell), CanBlock(cell)
-      OnEnemyBlocked/Unblocked(cell) — tăng/giảm block count
+    TDOperatorRegistry (singleton):
+      m_ValidPathCells: HashSet<Vector2Int> — path cells (không gồm gate)
+      m_Operators: Dictionary<Vector2Int, (blockCapacity, blockCount, TDOperatorView)>
+      m_BlockedEnemies: Dictionary<Vector2Int, List<TDEnemyView>>
+      RegisterPathCell(cell)           — gọi từ TDEnemyPathView.VisualizeAllPaths
+      RegisterOperator(cell, blockCount) + RegisterOperatorView(cell, view)
+      CanBlock(cell): blockCount < blockCapacity && operator tồn tại tại cell
+      OnEnemyBlocked(cell, enemy)      — thêm vào blocked list
+      GetBlockedEnemies(cell): List<TDEnemyView>
+      GetOperatorView(cell): TDOperatorView
+      UnregisterOperator(cell) → ForceUnblock() all enemies → m_CurrentPathIndex++
 
     TDEnemyPathView.VisualizeAllPaths:
-      Gọi TDMeleeRegistry.RegisterPathCell cho mỗi non-gate path cell (i>0, i<last)
+      Gọi TDOperatorRegistry.RegisterPathCell cho mỗi non-gate cell (i>0, i<last)
       HashSet đảm bảo không đăng ký trùng khi 3 paths share cells
 
     TDEnemyView.Update:
-      Khi arrive tại waypoint → check TDMeleeRegistry.CanBlock(arrivedCell)
-      YES → m_IsBlocked=true, snap to cell center, OnEnemyBlocked(cell)
+      Khi arrive tại waypoint → check TDOperatorRegistry.CanBlock(arrivedCell)
+      YES → m_IsBlocked=true, snap to cell center, OnEnemyBlocked(cell, this)
       → Update returns early khi m_IsBlocked
-      Die()/ReturnToPool() → UnblockFromMelee() trước khi return to pool
+      Every frame blocked → attackTimer (1/attackSpeed); khi timer hit:
+        → GetOperatorView(cell).TakeDamage(m_AttackDamage)
+        → TriggerSafe("Attack")
+      Die()/ReturnToPool() → UnblockFromOperator() trước khi return to pool
+
+    TDOperatorView:
+      Init(cell, operatorData): ghi nhận cell position, set m_HP từ OperatorData
+      Update: attackTimer (1/data.attackSpeed); khi hit:
+        → GetBlockedEnemies(cell) → foreach enemy.TakeDamage(data.damage)
+        → TriggerSafe("Attack") trên Animator
+      TakeDamage(dmg): m_HP -= dmg; TriggerSafe("GetHit"); if m_HP ≤ 0 → Die()
+      Die():
+        → TDOperatorRegistry.UnregisterOperator(cell) → ForceUnblock all enemies
+        → TriggerSafe("Die") → Destroy(gameObject)
+
+    TDTowerFactoryControl:
+      CreateTower(prefab, pos, rot): Instantiate prefab
+      Phát hiện TDOperatorView component:
+        YES → TDOperatorView.Init(cell, operatorData)
+              TDOperatorRegistry.RegisterOperator(cell, data.blockCount)
+              TDOperatorRegistry.RegisterOperatorView(cell, view)
+        NO  → TDTowerWeaponView.Init(towerType) — regular tower pipeline
 
     TDPlaceTowerControl:
-      CheckPlaceTower(pos, go, TowerType) — new signature
-      Melee → CheckPlaceMeleeOperator: validate IsValidMeleeCell + !HasOperatorAt
-               → RegisterOperator(cell, SO.maxTargets)
+      CheckPlaceTower(pos, go, TowerType) — dispatch regular hoặc operator flow
+      Operator → validate IsValidPathCell + !HasOperatorAt(cell)
+               → TDTowerFactoryControl.CreateTower(operatorPrefab, cell, rot)
 
-    TDTowerMainView:
-      m_TdTowerHolderView5 (slot 5 = Melee)
-      OnCreateTower: if Melee → ShowMeleeHighlights() (blue quads trên path cells)
-                     else → ShowHighlights() (green quads trên TowerZone)
-      RefreshRangeHighlights: skip nếu Melee (range = own cell, không cần viz)
-      ShowMeleeHighlights(): iterate TDMeleeRegistry.GetValidMeleeCells()
-      CreateMeleeHighlightTile(): blue Quad (0.1, 0.45, 1.0, 0.75)
+    TDSlotHolderMainView (thay TDTowerMainView slot logic):
+      OnCreateTower(prefab, type):
+        if type == Operator → ShowOperatorHighlights() (blue quads trên path cells)
+        else               → ShowTowerZoneHighlights() (green quads)
+      RefreshRangeHighlights: skip nếu Operator
 
-    TDTowerMainControl:
-      k_TowerDefs[5] = (PREFAB_MELEE_OPERATOR, TowerType.Melee)
-      OnPlaceTower(go, TowerType) — new signature
+  ── TDFlyweightOperatorDataSettings (ScriptableObject) ───────────────────────
+    [CreateAssetMenu] TDFlyweightOperatorDataSettings : ScriptableObject
+    List<OperatorData> m_Operators
+    GetData(int index): OperatorData          ← backward-compat (by index)
+    GetData(OperatorType type): OperatorData  ← NEW preferred lookup
 
-  ── SO Config (Tower Bullet Config.asset) ────────────────────────────────────
-    Melee:
-      cost = 5
-      damage = 20f
-      attackSpeed = 0.8f
-      attackType = Multiple  ← attacks all blocked enemies simultaneously
-      maxTargets = 2         ← block count = 2 enemies per operator
-      rangeOffsets = {(0,0)} ← attack enemies on own cell
+    [Serializable] OperatorData : ITowerDataProvider  ← Phase 16 (planned)
+      operatorType   : OperatorType  ← NEW — dùng để lookup (Knight, Medic, ...)
+      operatorPrefab : GameObject
+      icon           : Sprite
+      cost           : int
+      hp             : float
+      damage         : float
+      attackSpeed    : float
+      blockCount     : int
+      rangeOffsets   : Vector2Int[]  ← {(0,0)} = attack enemies trên own cell
+
+    Inspector path: Assets/1.Assets/Resources/Configs/Melee Operator Config.asset
+
+  ── OperatorDataDrawer (Editor) ──────────────────────────────────────────────
+    Assets/2.Scripts/Editor/OperatorDataDrawer.cs
+    CustomPropertyDrawer cho OperatorData — Grid 5×5 click-to-toggle
+    Operator cell (0,0) = orange, không toggle
+    Tương tự TowerDataDrawer nhưng cho melee range
 
   ── Prefab ───────────────────────────────────────────────────────────────────
-    MeleeOperator.prefab (Assets/1.Assets/Resources/Prefabs/MeleeOperator.prefab)
-      Visual: HumanSpecies_01 (Synty SidekickCharacters), scale 0.6
-      SpawnBullet: child at (0, 0.8, 0.5) — chest height, forward
-      TDTowerWeaponView: type = Melee
+    OperatorKnight.prefab (Assets/1.Assets/Resources/Prefabs/OperatorKnight.prefab)
+      Visual: Synty SidekickCharacters (HumanSpecies_01), Humanoid rig
+      TDOperatorView: m_OperatorDataIndex = 0
+      AnimatorController: OperatorKnight.controller
+        Idle_Battle_SingleSword (loop, default state)
+        Attack01_SingleSword (trigger "Attack", exit 90%, speed 1.2)
+        RPGTinyHero sword animations retargeted to HumanSpecies_01 rig
 
-  ── HUD ──────────────────────────────────────────────────────────────────────
-    TowerHolder (5) added to TowerMainView HLG
-    All 6 holders resized: preferredWidth 195→160, preferredHeight 225→215
-    Container sizeDelta.x: 1029→1023
+    MeleeOperator.prefab → DELETED (replaced by OperatorKnight.prefab)
 
-  ── Enemy blocking UX ────────────────────────────────────────────────────────
-    Enemies bị block: di chuyển đến operator's cell rồi dừng lại
-    Operator attacks: TDTowerWeaponView scan (0.2s), target = enemy cùng ô
-    Bullet flies từ SpawnBullet → enemy → immediate impact (dist ~0.5u at 15u/s)
-    Enemy chết → UnblockFromMelee → slot mở cho enemy kế tiếp
-    Block capacity (maxTargets=2): tối đa 2 enemy bị chặn cùng lúc
+  ── SO Config (Melee Operator Config.asset) ──────────────────────────────────
+    OperatorKnight (index 0):
+      hp           = 600 (approx — set trong Inspector)
+      damage       = 50
+      attackSpeed  = 1.0f
+      blockCount   = 2
+      rangeOffsets = {(0,0)}  ← attack on own cell
+
+  ── Data Flow — Operator Combat ──────────────────────────────────────────────
+    Enemy reaches operator cell:
+      → TDOperatorRegistry.CanBlock(cell) == true
+      → enemy.m_IsBlocked = true, OnEnemyBlocked(cell, enemy)
+
+    Every frame (enemy blocked):
+      → timer 1/enemy.attackSpeed
+      → GetOperatorView(cell).TakeDamage(enemy.attackDamage)
+      → TriggerSafe("Attack")
+
+    Every frame (operator):
+      → timer 1/operator.attackSpeed
+      → GetBlockedEnemies(cell) → foreach → enemy.TakeDamage(operator.damage)
+
+    Operator HP = 0:
+      → TDOperatorView.Die()
+      → TDOperatorRegistry.UnregisterOperator(cell)
+          → ForceUnblock(): all blocked enemies → m_CurrentPathIndex++, resume moving
+      → Destroy(gameObject)
+
+  ── Enums ─────────────────────────────────────────────────────────────────────
+    TowerType:    Cannon | Catapult | MissileG02 | MissileG03 | Mortar | Operator
+    OperatorType: Knight | ...        ← NEW (session 22 design)
+                  Dùng khi TowerType == Operator để chọn loại operator cụ thể
+                  TDTowerSlotInfo.operatorType chỉ meaningful khi towerType == Operator
+                  TDFlyweightOperatorDataSettings.GetData(OperatorType) lookup by type
+                  (TowerType.Melee từ session 21 → renamed bởi TowerType.Operator)
+
+  ── Retreat Mechanic (Phase 17 — Future) ─────────────────────────────────────
+    Concept: User có thể thu hồi operator đang đứng trên path.
+    Flow dự kiến:
+      Click operator đang đứng → hiện Retreat button (UI)
+      Confirm → TDOperatorRegistry.WithdrawOperator(cell)
+               → ForceUnblock() tất cả enemy (giống Die nhưng operator sống)
+               → TDOperatorView.Retreat() → play retreat animation → Destroy
+      Gold refund: một phần cost (50%?) hoặc 0 tuỳ balance
+      Cooldown: operator type đó không dùng lại được X giây (optional)
+    Tách biệt hoàn toàn với Die() — Retreat = chủ động, Die = bị tiêu diệt.
 
   ── Notes ─────────────────────────────────────────────────────────────────────
-    ⚠️  Nếu operator chặn full (2/2): enemy thứ 3 sẽ bước vào ô và CanBlock = false
-        → tiếp tục di chuyển bình thường (bypass). Đây là behavior đúng Arknights-style.
-    ⚠️  Melee visual (HumanSpecies_01) là placeholder — cần assign proper warrior model/animation
-    ⚠️  TowerHolder (5) icon cần update để khác với Mortar (slot 4)
-    ⬜  Retreat mechanic (thu hồi operator) — để sau
+    ✅ MeleeOperator.prefab DELETED — replaced by OperatorKnight.prefab
+    ✅ TDMeleeRegistry DELETED — replaced by TDOperatorRegistry
+    ✅ Operator HP system + bidirectional combat (session 22 refactor)
+    ⬜  OperatorType enum (Phase 16 — planned): Knight | ...
+        Cần thêm OperatorData.operatorType field + GetData(OperatorType) lookup
+    ⬜  IPlacedUnit + ITowerDataProvider interface refactor (Phase 16 — planned)
+    ⚠️  Operator death animation: Destroy ngay sau TriggerSafe("Die")
+        → cần delay (tương tự EnemyData.dieDuration)
+    ⚠️  OperatorKnight icon field cần assign trong Melee Operator Config.asset
+    ⬜  Retreat mechanic (Phase 17 — future, xem design trên)
+    ⬜  Thêm operator types qua OperatorType enum (Phase 16+)
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 15 — Dynamic Slot System (Session 22)            [✅ DONE]          ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+
+  Goal: Thay thế 5 hardcoded TowerHolder slots bằng dynamic instantiation từ
+        ScriptableObject config. Slot bar tự động build từ TowerBulletConfig
+        + OperatorConfig, max 8 slots (random nếu tổng > 8 entries).
+
+  ── TDTowerSlotInfo (struct) ─────────────────────────────────────────────────
+    prefab       : GameObject    ← tower hoặc operator prefab
+    towerType    : TowerType     ← Cannon/Catapult/.../Operator
+    operatorType : OperatorType  ← chỉ meaningful khi towerType == Operator
+                                    (Phase 16: cần thêm field này)
+                                    dùng để TDOperatorView.Init() biết dùng data nào
+    cost         : int           ← từ TowerData.cost hoặc OperatorData.cost
+    icon         : Sprite        ← từ TowerData.icon hoặc OperatorData.icon
+
+  ── TDTowerMainControl.BuildSlots() ──────────────────────────────────────────
+    Đọc TDFlyweightTowerDataSettings: tất cả TowerData entries
+    Đọc TDFlyweightOperatorDataSettings: tất cả OperatorData entries
+    Merge thành 1 list → nếu tổng ≤ 8: dùng tất cả
+                          nếu > 8: random pick 8 không trùng (thuần random, không ưu tiên)
+                          (sau này: UI select trước màn → user chọn slot set)
+    Output: m_ActiveSlots (List<TDTowerSlotInfo>)
+    Phase 16 update: khi add OperatorData → set slotInfo.operatorType = data.operatorType
+
+    OnSelectTowerHolder(index):
+      slot = m_ActiveSlots[index]
+      onGetTowerPrefab?.Invoke(slot.prefab, slot.towerType)
+
+  ── TDSlotHolderMainView ─────────────────────────────────────────────────────
+    [SerializeField] m_SlotHolderPrefab: GameObject (SlotHolder.prefab từ Resources)
+    InitTowerHolder(List<TDTowerSlotInfo> slots):
+      foreach slot → Instantiate SlotHolder prefab
+      TDSlotHolderItemView.SetupIcon(slot.icon)
+      TDSlotHolderItemView.SetupCost(slot.cost)
+      ButtonSelector.onClick → OnSelectTowerHolder(i)
+
+    OnCreateTower(prefab, towerType):
+      Instantiate ghost tower
+      if Operator → ShowOperatorHighlights() (blue path cells)
+      else        → ShowTowerZoneHighlights() (green tower zone)
+
+    Arknights 2-phase drag (mobile): giống TDTowerMainView cũ
+    Desktop: LMB place, E/Q rotate, RMB cancel (giống cũ)
+    RefreshHolderInteractability(gold): disable holder nếu gold < cost
+
+  ── TDSlotHolderItemView ─────────────────────────────────────────────────────
+    SlotIcon       : Image — sprite icon của tower/operator
+    Cost (TMP)     : hiển thị cost
+    ButtonSelector : Button → OnSelectTowerHolder callback
+    DisabledOverlay: Image — SetActive(gold < cost)
+
+  ── SlotHolder.prefab ────────────────────────────────────────────────────────
+    Assets/1.Assets/Resources/Prefabs/SlotHolder.prefab
+    Children: ButtonSelector, SlotIcon(Image), CostBg/Cost(TMP), DisabledOverlay
+    TDSlotHolderItemView component attached
+
+  ── onGetTowerPrefab event ───────────────────────────────────────────────────
+    TDTowerMainControl.onGetTowerPrefab: Action<GameObject, TowerType>
+    → TDSlotHolderMainView subscribes → OnCreateTower(prefab, type)
+    (thay thế onGetTowerName: Action<string, TowerType> — không còn load by string)
+
+  ── Gold deduction ───────────────────────────────────────────────────────────
+    Sau khi đặt tower/operator thành công:
+      TDGoldControl.api.SpendGold(m_ActiveSlots[currentSlotIndex].cost)
+    Không còn hardcode GetCost(towerType) từ SO — lấy từ slot struct
+
+  ── TowerData + OperatorData: icon field ─────────────────────────────────────
+    TowerData: + icon : Sprite (assign trong Tower Bullet Config.asset)
+    OperatorData: + icon : Sprite (assign trong Melee Operator Config.asset)
+    TowerDataDrawer + OperatorDataDrawer: thêm DrawField("icon") + ammoPrefab fields
+
+  ── Setup Checklist (sau khi thêm tower/operator mới) ────────────────────────
+    1. Tower Bullet Config.asset → assign icon Sprite cho mỗi TowerData entry
+    2. Melee Operator Config.asset → add OperatorData entries (prefab, icon, stats)
+    3. OperatorKnight: TDOperatorView.m_OperatorDataIndex = 0
+    4. SlotHolder.prefab → children: ButtonSelector, SlotIcon, CostBg/Cost, DisabledOverlay
+    5. Scene TDSlotHolderMainView → auto-load SlotHolder từ Resources/Prefabs/
+
+  ── Notes ─────────────────────────────────────────────────────────────────────
+    ✅  Icon đã assign trong Tower Bullet Config.asset + Melee Operator Config.asset  [s24]
+    ⚠️  TDSlotHolderMainView.InitTowerHolder() có Debug.LogError dùng test
+        → đổi thành Debug.Log hoặc xóa khi xong
+    ⚠️  TDTowerMainView.cs (file cũ) có thể còn tồn tại → xóa nếu không dùng
+    ⬜  SlotHolder prefab polish (border animation khi select)
+    ⬜  Icon assignment cho tất cả tower + operator (dùng RapidIcon)
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 16 — Interface Refactor + OperatorType           [✅ DONE s23]      ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+
+  Goal: Xóa if/else branches trong TDTowerBehaviorModel, unify factory dispatch,
+        thêm OperatorType enum để hỗ trợ nhiều loại operator.
+
+  ── Naming decisions (s23) ───────────────────────────────────────────────────
+    Interface data: IDeployableDTO  (không phải ITowerDataProvider — "Tower" quá hẹp;
+                                     không phải IDeployableData — "Data" redundant với "DTO";
+                                     convention project: data interface luôn suffix DTO)
+    Interface unit: IPlacedUnit     (không đổi)
+
+  ── Thực hiện (s23) ──────────────────────────────────────────────────────────
+
+  ✅ Enums.cs: + OperatorType { Knight }
+
+  ✅ IDeployableDTO.cs [NEW]
+     TowerType, Damage, AttackSpeed, AttackType, MaxTargets, RangeOffsets
+     Implement bởi TowerData + OperatorData (explicit interface)
+
+  ✅ IPlacedUnit.cs [NEW]
+     UnitType: TowerType; Init(string key, TDTowerSlotInfo slotInfo); OnRemove()
+     Implement bởi TDTowerWeaponView + TDOperatorView
+
+  ✅ TowerData : IDeployableDTO — explicit interface, tất cả fields giữ nguyên
+
+  ✅ OperatorData : IDeployableDTO — + operatorType field; explicit interface
+     GetData(OperatorType) lookup by enum thêm vào TDFlyweightOperatorDataSettings
+
+  ✅ TDTowerBehaviorModel — Dictionary<TowerType, IDeployableDTO>
+     BuildDataMap() lazy-init từ TDFlyweightTowerDataSettings.GetAllTowers()
+     Operator KHÔNG vào map — TDOperatorView đọc SO trực tiếp
+     InvalidateCache() để reset khi scene reload
+
+  ✅ TDTowerSlotInfo struct — + operatorType : OperatorType
+
+  ✅ TDTowerMainControl
+     m_CurrentSlot stored khi OnSelectTowerHolder fires
+     onGetTowerPrefab: Action<TDTowerSlotInfo> (thay Action<GameObject, TowerType>)
+     OnPlaceTower(GameObject ghost) — không cần TowerType param nữa
+
+  ✅ TDTowerWeaponView implements IPlacedUnit
+     IPlacedUnit.Init(key, slot) → delegate Init(key)
+     IPlacedUnit.OnRemove() → unsubscribe onGetLastAttackTime
+
+  ✅ TDOperatorView implements IPlacedUnit
+     m_OperatorDataIndex → m_OperatorType : OperatorType
+     IPlacedUnit.Init(key, slot): set m_OperatorType từ slotInfo; tự RegisterOperator
+     IPlacedUnit.OnRemove(): UnregisterOperator (dùng cho Die + Phase 17 Retreat)
+     Die() gọi OnRemove() + TDGameEventBus.OperatorDied(cell) + Destroy
+
+  ✅ TDTowerFactoryControl.CreateUnit(prefab, pos, rot, slotInfo)
+     GetComponent<IPlacedUnit> — không còn GetComponent<TDOperatorView> branch
+     Key gen nội bộ: $"{Random(1000,9999)}-{prefab.name}"
+     onCreateUnitSuccess: Action<IPlacedUnit> (unified)
+     onCreateTowerSuccess: Action<TDTowerWeaponView> (backward-compat)
+
+  ✅ ITowerFactoryControl.cs — CreateUnit(prefab, pos, rot, slotInfo)
+
+  ✅ TDPlaceTowerControl.CheckPlaceTower(pos, ghost, slotInfo)
+     RegisterOperator đã xóa — TDOperatorView.Init() tự làm
+
+  ✅ TDSlotHolderMainView
+     OnCreateTower(TDTowerSlotInfo slot) — thay (GameObject, TowerType)
+     OnMouseButton0Clicked → OnPlaceTower(ghost) không pass TowerType
+     1-space operator style fix; k_DirectionThresholdRatio → DIRECTION_THRESHOLD_RATIO
+
+  ✅ TDTowerFactoryView — empty stub (Init logic moved vào CreateUnit)
+
+  ✅ TDFlyweightBulletFactoryModel — xóa TowerType.Operator case (operator không dùng bullet pool)
+
+  ── File thay đổi tổng hợp ───────────────────────────────────────────────────
+    NEW : IDeployableDTO.cs, IPlacedUnit.cs, TDGameEventBus.cs
+    MOD : Enums.cs, TDFlyweightTowerDataSettings.cs, TDFlyweightOperatorDataSettings.cs,
+          TDTowerBehaviorModel.cs, TDTowerSlotInfo.cs, TDTowerMainControl.cs,
+          TDTowerWeaponView.cs, TDOperatorView.cs, TDTowerFactoryControl.cs,
+          ITowerFactoryControl.cs, TDPlaceTowerControl.cs, TDSlotHolderMainView.cs,
+          TDTowerFactoryView.cs, TDFlyweightBulletFactoryModel.cs
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 17 — Retreat Mechanic                            [TODO]            ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+
+  Requires Phase 16 (IPlacedUnit.OnRemove()) complete trước.
+
+  ── Design ───────────────────────────────────────────────────────────────────
+    Trigger: Click operator đang đứng trên map → hiện Retreat UI button
+    Flow:
+      User click Retreat
+      → TDOperatorView.Retreat()
+          → play retreat animation
+          → TDOperatorRegistry.WithdrawOperator(cell):
+              ForceUnblock() tất cả enemy (m_CurrentPathIndex++, resume)
+              UnregisterOperator(cell)
+          → IPlacedUnit.OnRemove()
+          → Destroy(gameObject) sau animation
+
+    Tách biệt Die() vs Retreat():
+      Die()     = bị tiêu diệt bởi enemy → unregister → Destroy
+      Retreat() = chủ động của player    → unregister → Destroy
+
+    Gold refund: TBD (0% hoặc 50% tùy balance)
+    Cooldown per operator type: optional
+
+  ── Files cần thêm/sửa ───────────────────────────────────────────────────────
+    TDOperatorView: + Retreat() method, tách logic unregister thành OnRemove()
+    TDOperatorRegistry: + WithdrawOperator(cell) (alias UnregisterOperator với flag)
+    TDSlotHolderMainView: detect click vào placed operator → show Retreat button
+    TDGameplayHUDView: Retreat button UI (hoặc world-space button trên operator)
+
+  ─────────────────────────────────────────────────────────────────────────────
 
   ╔══════════════════════════════════════════════════════════════════════════╗
   ║  PHASE 9 — Polish & Performance                         [TODO]            ║
@@ -1522,11 +1856,39 @@ File: Assets/3.Scenes/DTGamePlay.unity
       Fix: range highlight y=0.12f > path tile y=0.10f
       File: TDTowerMainView.cs line 362
 
+  ✅  TDMeleeRegistry → TDOperatorRegistry refactor              DONE session 22
+      Bidirectional combat: operator nhận damage, có HP, ForceUnblock khi chết
+      MeleeOperator.prefab DELETED; OperatorKnight.prefab thay thế
+
+  ✅  Dynamic Slot System                                        DONE session 22
+      TDSlotHolderMainView + TDSlotHolderItemView + BuildSlots() từ cả 2 configs
+      onGetTowerPrefab(prefab, type) thay onGetTowerName(name, type)
+
+  ✅  Phase 16 — Interface Refactor                              DONE session 23
+      IDeployableDTO + IPlacedUnit interfaces
+      OperatorType enum; TDTowerSlotInfo.operatorType field
+      TDTowerBehaviorModel: Dictionary<TowerType, IDeployableDTO>, xóa if/else
+      TDTowerFactoryControl: GetComponent<IPlacedUnit>, CreateUnit unified
+      TDPlaceTowerControl: RegisterOperator moved vào TDOperatorView.Init()
+      onGetTowerPrefab: Action<TDTowerSlotInfo>; TDTowerFactoryView: empty stub
+
+  ⬜  Phase 17 — Retreat Mechanic (PLANNED, sau Phase 16)
+      TDOperatorView.Retreat() tách riêng với Die()
+      TDOperatorRegistry.WithdrawOperator(cell) → ForceUnblock + unregister
+      Gold refund: TBD; cooldown per OperatorType: optional
+
   ⚠️  PlacementPanel missing trong scene hierarchy
-      TDTowerMainView.InitPlacementPanel(): transform.Find(GAMEPLAY_PLACEMENT_PANEL) = null
+      TDSlotHolderMainView.InitPlacementPanel(): transform.Find(GAMEPLAY_PLACEMENT_PANEL) = null
       → Mobile Cancel button không hiển thị (null-safe → không crash)
       Fix: Thêm PlacementPanel GameObject vào scene DTGamePlay.unity
 
+  ⚠️  TDSlotHolderMainView.InitTowerHolder() có Debug.LogError dùng để test
+      → đổi thành Debug.Log hoặc xóa khi hoàn thiện
+  ✅  Icon field đã assign trong Tower Bullet Config.asset + Melee Operator Config.asset  [s24]
+  ⚠️  TDTowerMainView.cs (file cũ) có thể còn tồn tại sau refactor Phase 15
+      → xóa file nếu không còn sử dụng để tránh compile conflict
+  ⚠️  Operator death animation: Destroy ngay sau TriggerSafe("Die")
+      → cần thêm delay (tương tự EnemyData.dieDuration) để animation play xong
   ⚠️  HUD dùng text symbol thay sprite icon (session 17 review)
       ☠ ♥ ♦ là text character trong TextMeshPro, không phải Image sprites
       → Kém professional, không nhất quán với Arknights style
@@ -1613,7 +1975,40 @@ File: Assets/3.Scenes/DTGamePlay.unity
      │   SwarmFast-Game.controller + TurtleTank-Game.controller (NEW — Trigger-based)
      │   DragonBoarCTRL: "Get Hit" → "GetHit" (renamed để khớp const)
      │   TDEnemyPathMainControl.SpawnBatch: truyền data.dieDuration vào Initialize()
-     │   ⚠️ Inspector pending: Enemy Data Config.asset dieDuration fields
+     │
+  ✅ Phase 14  (Operator System)        ── DONE (session 21 MVP, session 22 refactor)
+     │   TDOperatorRegistry: ValidPathCells, BlockedEnemies, ForceUnblock
+     │   TDOperatorView: HP system, TakeDamage, Die + Destroy
+     │   TDFlyweightOperatorDataSettings SO + OperatorData struct
+     │   TDTowerFactoryControl: detect TDOperatorView vs TDTowerWeaponView
+     │   TDEnemyView: check CanBlock on arrive, attackTimer → operator.TakeDamage
+     │   OperatorKnight.prefab: Humanoid, AnimatorController, sword animations
+     │   MeleeOperator.prefab DELETED; TDMeleeRegistry DELETED
+     │   TowerType.Operator (was TowerType.Melee in s21)
+     │
+  ✅ Phase 15  (Dynamic Slot System)    ── DONE (session 22)
+     │   TDTowerSlotInfo struct; BuildSlots() từ cả 2 configs (max 8, random nếu >8)
+     │   TDSlotHolderMainView: dynamic instantiate SlotHolder prefab × N
+     │   TDSlotHolderItemView: icon, cost, button, disabled overlay
+     │   onGetTowerPrefab: Action<GameObject, TowerType> (thay onGetTowerName)
+     │   TowerData + OperatorData: thêm icon field
+     │   TowerDataDrawer + OperatorDataDrawer: icon + ammoPrefab fields
+     │   ✅ Icon đã assign trong Inspector  [s24]
+     │
+  ✅ Phase 16  (Interface Refactor)     ── DONE (session 23)
+     │   IDeployableDTO (naming: DTO suffix, convention-compliant)
+     │   IPlacedUnit: TDTowerWeaponView + TDOperatorView implement
+     │   OperatorType enum: Knight; TDTowerSlotInfo.operatorType field
+     │   TDTowerBehaviorModel: Dictionary<TowerType, IDeployableDTO>, no if/else
+     │   TDTowerFactoryControl: CreateUnit + GetComponent<IPlacedUnit>
+     │   TDPlaceTowerControl: RegisterOperator moved vào TDOperatorView.Init
+     │   onGetTowerPrefab: Action<TDTowerSlotInfo>
+     │   TDGameEventBus [NEW]: static event hub cho VFX/Audio cross-cutting
+     │
+  ⬜ Phase 17  (Retreat Mechanic)       ── TODO (requires Phase 16 ✓)
+     │   TDOperatorView.Retreat() + TDOperatorRegistry.WithdrawOperator(cell)
+     │   UI: click placed operator → Retreat button
+     │   Tách biệt Die() (forced) vs Retreat() (voluntary)
      │
   ⚠️  Phase 8   (Win/Lose + HUD)         ── PARTIAL (session 17+18)
      │   ✅ HUD scene elements: top bar, gold counter, tower bar (session 17)
@@ -1629,8 +2024,8 @@ File: Assets/3.Scenes/DTGamePlay.unity
      │
   ⬜ Phase 9   (Polish + Perf)          ── final pass
 
-  ── Thứ tự implement đề xuất (cập nhật session 18) ──────────────────────
-  ✅ Phase 10 DONE → ✅ Phase 7 DONE → ✅ Phase 11 DONE → ✅ Phase 12 DONE → ✅ Phase 13 DONE → ⚠️ Phase 8 (control+view DONE, panels pending) → Phase 9
+  ── Thứ tự implement đề xuất (cập nhật session 23) ──────────────────────
+  ✅ Phase 10 → ✅ Phase 7 → ✅ Phase 11 → ✅ Phase 12 → ✅ Phase 13 → ✅ Phase 14 → ✅ Phase 15 → ✅ Phase 16 → ⬜ Phase 17 (Retreat) → ⚠️ Phase 8 (panels pending) → Phase 9
 
   Lý do thứ tự:
     Phase 10 trước Phase 7  : area damage cần grid-cell range → tránh viết lại (DONE)
@@ -1651,14 +2046,25 @@ File: Assets/3.Scenes/DTGamePlay.unity
   Assets/2.Scripts/Model/Info/Grid/TDGridDTO.cs
   Assets/2.Scripts/Model/Info/AStarPath/TDaStarPathModel.cs
 
+  ── Interfaces (Session 23) ──────────────────────────────────────────────────
+  Assets/2.Scripts/Model/Tower/Interfaces/IDeployableDTO.cs     ← [NEW s23] Stats chung Tower + Operator
+  Assets/2.Scripts/Model/Tower/Interfaces/IPlacedUnit.cs        ← [NEW s23] Unit đang đứng trên map
+  Assets/2.Scripts/Model/Tower/Interfaces/ITowerRangeDTO.cs     ← DetectionRadius, IsInRange, GetCellsInRange
+  Assets/2.Scripts/Model/Tower/Interfaces/ITowerFactoryControl.cs ← [s23] CreateUnit(prefab, pos, rot, slotInfo)
+
+  ── Event Bus (Session 23) ───────────────────────────────────────────────────
+  Assets/2.Scripts/Services/TDGameEventBus.cs                   ← [NEW s23] Static event hub
+                                                                   OnEnemyDied, OnTowerAttacked, OnOperatorDied,
+                                                                   OnLifeLost, OnVictory, OnGameOver, OnWaveStarted
+
   ── Tower Range (Session 11) ─────────────────────────────────────────────────
-  Assets/2.Scripts/Model/Tower/Interfaces/ITowerRangeDTO.cs     ← interface (DetectionRadius, IsInRange, GetCellsInRange)
   Assets/2.Scripts/Model/Tower/TowerRange/TDRangeDTO.cs         ← [NEW s11] abstract base; virtual GetCellsInRange (bounding-box scan)
   Assets/2.Scripts/Model/Tower/TowerRange/TDOffsetRangeDTO.cs   ← [NEW s11] Arknights-style; O(n) GetCellsInRange; 4-dir auto-rotate
   Assets/2.Scripts/Editor/TowerDataDrawer.cs                    ← [NEW s11] CustomPropertyDrawer click-to-toggle 8×9 grid (Editor only)
-                                                                   [s12] thêm attackType + maxTargets (conditional)
+                                                                   [s12] attackType + maxTargets; [s22] icon + ammoPrefab
+  Assets/2.Scripts/Editor/OperatorDataDrawer.cs                 ← [NEW s22] CustomPropertyDrawer cho OperatorData; 5×5 grid
   Assets/2.Scripts/View/GamePlay/Projectile/TDAttackVFX.cs      ← [NEW s12] homing VFX; Single/Multiple/AOE OnImpact; AOE splash
-  Assets/1.Assets/Resources/Configs/Tower Bullet Config.asset   ← rangeOffsets + attackType + maxTargets per tower
+  Assets/1.Assets/Resources/Configs/Tower Bullet Config.asset   ← rangeOffsets + attackType + maxTargets + icon per tower
 
   ── Control / Path ──────────────────────────────────────────────────────────
   Assets/2.Scripts/Control/PathControl/TDaStarPathControl.cs
@@ -1672,10 +2078,12 @@ File: Assets/3.Scenes/DTGamePlay.unity
   Assets/2.Scripts/Control/Gameplay/TDPlayerLifeControl.cs      ← [Phase 4.5 NEW]
   Assets/2.Scripts/Control/Enemy/TDEnemyControl.cs
   Assets/2.Scripts/Control/Enemy/TDEnemyRegistry.cs             ← [Phase 6.1 NEW]
+  Assets/2.Scripts/Control/Enemy/TDOperatorRegistry.cs          ← [Phase 14 s22 NEW]
   Assets/2.Scripts/Control/PathControl/TDEnemyPathMainControl.cs ← [Session 8: CancellationToken]
-  Assets/2.Scripts/Control/Tower/TDTowerMainControl.cs
-  Assets/2.Scripts/Control/Tower/PlaceTower/TDPlaceTowerControl.cs
+  Assets/2.Scripts/Control/Tower/TDTowerMainControl.cs           ← [s23: m_CurrentSlot; Action<TDTowerSlotInfo>]
+  Assets/2.Scripts/Control/Tower/PlaceTower/TDPlaceTowerControl.cs ← [s23: nhận TDTowerSlotInfo]
   Assets/2.Scripts/Control/Tower/TowerFactory/TDTowerBehaviorMainControl.cs
+  Assets/2.Scripts/Control/Tower/TowerFactory/TDTowerFactoryControl.cs  ← [s23: CreateUnit + IPlacedUnit]
   Assets/2.Scripts/Control/Tower/TowerBehavior/TDTowerBehaviorSubControl.cs
   Assets/2.Scripts/Control/TDControl.cs
   Assets/2.Scripts/Control/InputHandler/TDUserInputControl.cs
@@ -1684,8 +2092,11 @@ File: Assets/3.Scenes/DTGamePlay.unity
   Assets/2.Scripts/View/GamePlay/TDGameplayMainView.cs           ← [4.5: life+flash]
   Assets/2.Scripts/View/GamePlay/EnemyPath/TDEnemyPathMainView.cs ← [4.5: SpawnGates]
   Assets/2.Scripts/View/GamePlay/EnemyPath/TDEnemyPathView.cs
-  Assets/2.Scripts/View/GamePlay/Enemy/TDEnemyView.cs            ← [4.5: reach-end, 6.1: PathProgress+Registry]
-  Assets/2.Scripts/View/GamePlay/Tower/TDTowerMainView.cs
+  Assets/2.Scripts/View/GamePlay/Enemy/TDEnemyView.cs            ← [4.5: reach-end, 6.1: PathProgress+Registry,
+                                                                    Phase 14 s22: operator blocking + attack timer]
+  Assets/2.Scripts/View/GamePlay/Tower/TDSlotHolderMainView.cs   ← [Phase 15 s22 NEW — dynamic slot bar]
+  Assets/2.Scripts/View/GamePlay/Tower/TDSlotHolderItemView.cs   ← [Phase 15 s22 NEW — slot UI item]
+  Assets/2.Scripts/View/GamePlay/Tower/TDOperatorView.cs         ← [Phase 14 s22 NEW — operator HP + combat]
   Assets/2.Scripts/View/GamePlay/Tower/TDTowerWeaponView.cs      ← [6.1: tick scan + priority]
   Assets/2.Scripts/View/GamePlay/Tower/TDTowerHolderView.cs
   Assets/2.Scripts/View/GamePlay/Tower/TDTowerFactoryView.cs     ← [6.1: removed SetupSubControl]
@@ -1695,9 +2106,9 @@ File: Assets/3.Scenes/DTGamePlay.unity
 
   ── Scene ───────────────────────────────────────────────────────────────────
   Assets/3.Scenes/DTGamePlay.unity
-    Camera: Ortho size=14, pos (23.3,15,2.02), pitch 30°
-    GameMapVisualize: scale (4.2,5,2.4), pos (23.3,0,28) → grid 21×12
-    PathView/CreatePoint: (2,0,29)
+    Camera: Ortho size=14, pos (24.5,15,3.0), pitch 30°  [updated s20]
+    GameMapVisualize: scale (4.4,5,2.6), pos (23.3,0,27.7) → grid 22×13  [updated s20]
+    PathView/CreatePoint: (1,0,27.7)  [updated s20]
 
   ── Prefabs ─────────────────────────────────────────────────────────────────
   Assets/1.Assets/Resources/Prefabs/GateStart.prefab    ← [Phase 4.5 NEW, 4.6 REDESIGN]
@@ -1711,6 +2122,8 @@ File: Assets/3.Scenes/DTGamePlay.unity
   Assets/1.Assets/Resources/Prefabs/SwarmFast.prefab          ← [Phase 11] Fast, scale=0.56; [Phase 13] TDEnemyView+Anim
   Assets/1.Assets/Resources/Prefabs/TurtleTank.prefab         ← [Phase 11] Tank, scale=0.74; [Phase 13] TDEnemyView+Anim
   Assets/1.Assets/Resources/Prefabs/DragonBoarBoss.prefab     ← [Phase 11] Boss, scale=0.32; [Phase 13] TDEnemyView+Anim
+  Assets/1.Assets/Resources/Prefabs/OperatorKnight.prefab     ← [Phase 14 s22 NEW] Humanoid, TDOperatorView, AnimatorController
+  Assets/1.Assets/Resources/Prefabs/SlotHolder.prefab         ← [Phase 15 s22 NEW] UI slot prefab: ButtonSelector, SlotIcon, Cost, DisabledOverlay
   Assets/1.Assets/Resources/Prefabs/Plane.prefab
 
   ── ScriptableObjects (Phase 11 NEW, Phase 13 updated) ──────────────────────
@@ -1722,6 +2135,8 @@ File: Assets/3.Scenes/DTGamePlay.unity
     ⚠️ dieDuration cần set trong Inspector (field mới thêm Phase 13)
   Assets/1.Assets/Resources/Configs/Level Config.asset
     Level 0: Easy, totalEnemies=30, waveCount=5, waveInterval=10, spawnInterval=2
+  Assets/1.Assets/Resources/Configs/Melee Operator Config.asset   ← [Phase 14 s22 NEW] TDFlyweightOperatorDataSettings
+    OperatorKnight (index 0): hp, damage, attackSpeed, blockCount=2, rangeOffsets={(0,0)}
 
   ── Scripts (Phase 11 NEW) ────────────────────────────────────────────────────
   Assets/2.Scripts/Model/Config/TDEnemyDataSettings.cs    ← EnemyData + TDEnemyDataSettings SO
@@ -2752,6 +3167,286 @@ File: Assets/3.Scenes/DTGamePlay.unity
     ✅ PathView/CreatePoint: (1, 0, 27.7)
     ✅ Camera: (24.5, 15, 3.0)
     ✅ TDGridVisualizerView: disabled
+
+
+================================================================================
+  23. SESSION 22 — OPERATOR SYSTEM REFACTOR + DYNAMIC SLOT SYSTEM
+================================================================================
+
+  ── Mục tiêu ─────────────────────────────────────────────────────────────────
+    1. Refactor Phase 14 (Melee Operator): thêm HP system, bidirectional combat,
+       OperatorKnight prefab, TDFlyweightOperatorDataSettings SO riêng
+    2. Phase 15 (Dynamic Slot System): replace 5 hardcoded holders → dynamic
+       BuildSlots() từ TowerBulletConfig + OperatorConfig, max 8 slots
+
+  ── New Files (Session 22) ───────────────────────────────────────────────────
+
+  Assets/2.Scripts/Control/Enemy/TDOperatorRegistry.cs          [NEW]
+    singleton; m_ValidPathCells HashSet; m_Operators Dictionary; m_BlockedEnemies
+    RegisterPathCell / RegisterOperator / RegisterOperatorView
+    CanBlock(cell): slot available; OnEnemyBlocked(cell, enemy)
+    GetBlockedEnemies(cell); GetOperatorView(cell)
+    UnregisterOperator(cell) → ForceUnblock(all enemies) → m_CurrentPathIndex++
+
+  Assets/2.Scripts/Control/Tower/TowerFactory/TDTowerFactoryControl.cs  [NEW]
+    CreateTower(prefab, pos, rot): Instantiate
+    Detect TDOperatorView component on result:
+      YES → TDOperatorView.Init(cell, data); RegisterOperator + RegisterOperatorView
+      NO  → TDTowerWeaponView.Init(towerType) — regular pipeline
+
+  Assets/2.Scripts/View/GamePlay/Tower/TDOperatorView.cs         [NEW]
+    [SerializeField] m_OperatorDataIndex: int (= 0 cho OperatorKnight)
+    private float m_HP, m_Damage, m_AttackSpeed; private int m_BlockCount
+    private Vector2Int m_Cell
+    Init(cell, OperatorData data): set stats, cache cell
+    Update: attackTimer → GetBlockedEnemies → enemy.TakeDamage + TriggerSafe("Attack")
+    TakeDamage(dmg): m_HP -= dmg; TriggerSafe("GetHit"); if ≤ 0 → Die()
+    Die(): UnregisterOperator(m_Cell); TriggerSafe("Die"); Destroy(gameObject)
+
+  Assets/2.Scripts/View/GamePlay/Tower/TDSlotHolderMainView.cs   [NEW]
+    [SerializeField] m_SlotHolderPrefab: GameObject
+    InitTowerHolder(List<TDTowerSlotInfo>): instantiate per slot, SetupIcon/Cost
+    OnCreateTower(GameObject prefab, TowerType type): ghost + highlights
+    RefreshHolderInteractability(int gold): disable if gold < cost
+    ShowOperatorHighlights(): iterate TDOperatorRegistry.GetValidPathCells()
+    ShowTowerZoneHighlights(): iterate valid tower cells (green)
+
+  Assets/2.Scripts/View/GamePlay/Tower/TDSlotHolderItemView.cs   [NEW]
+    SetupIcon(Sprite icon): m_SlotIcon.sprite = icon
+    SetupCost(int cost): m_CostText.text = cost.ToString(); m_Cost = cost
+    SetInteractable(bool): m_Button.interactable; m_DisabledOverlay.SetActive(!val)
+
+  Assets/2.Scripts/Model/Config/TDFlyweightOperatorDataSettings.cs  [NEW]
+    [Serializable] OperatorData: operatorPrefab, icon, cost, hp, damage,
+                                  attackSpeed, blockCount, rangeOffsets
+    TDFlyweightOperatorDataSettings : ScriptableObject
+    List<OperatorData> m_Operators; GetData(int index): OperatorData
+
+  Assets/2.Scripts/Editor/OperatorDataDrawer.cs                  [NEW]
+    CustomPropertyDrawer<OperatorData>
+    5×5 grid (x: -2..2, y: -2..2), center (0,0) = orange (operator), non-toggle
+    Click → toggle rangeOffsets array (similar to TowerDataDrawer 8×9 grid)
+
+  ── Modified Files (Session 22) ──────────────────────────────────────────────
+
+  Assets/2.Scripts/Control/Enemy/TDEnemyView.cs
+    ← Update(): on arrive at waypoint → TDOperatorRegistry.CanBlock(cell)?
+      YES → m_IsBlocked=true, snap to cell center, OnEnemyBlocked(cell, this)
+      Blocked loop: attackTimer → GetOperatorView(cell).TakeDamage(m_AttackDamage)
+                    + TriggerSafe("Attack")
+    ← Die()/ReturnToPool(): UnblockFromOperator(cell) trước khi pool release
+    ← [SerializeField] m_AttackDamage, m_AttackSpeed added (từ EnemyData)
+
+  Assets/2.Scripts/Control/Tower/TDTowerMainControl.cs
+    ← BuildSlots(): merge TowerBulletConfig + OperatorConfig → List<TDTowerSlotInfo>
+      max 8 slots (Fisher-Yates random pick nếu tổng > 8)
+    ← OnSelectTowerHolder(index): invoke onGetTowerPrefab(prefab, towerType)
+    ← onGetTowerPrefab: Action<GameObject, TowerType>
+      (thay onGetTowerName: Action<string, TowerType>)
+
+  Assets/2.Scripts/Control/Tower/PlaceTower/TDPlaceTowerControl.cs
+    ← CheckPlaceTower(pos, go, TowerType): dispatch
+      Operator → validate IsValidPathCell(cell) + !HasOperatorAt(cell)
+               → TDTowerFactoryControl.CreateTower(operatorPrefab, ...)
+      Regular  → TDTowerFactoryControl.CreateTower(towerPrefab, ...)
+
+  Assets/2.Scripts/Model/Config/TDFlyweightTowerDataSettings.cs
+    ← TowerData: ADDED icon : Sprite; ammoPrefab field exposed in Drawer
+
+  Assets/2.Scripts/Editor/TowerDataDrawer.cs
+    ← DrawField("icon") added; DrawField("ammoPrefab") added
+    ← GetPropertyHeight: tính đúng số dòng với 2 fields mới
+
+  Assets/1.Assets/Resources/Prefabs/OperatorKnight.prefab       [NEW]
+    Visual: HumanSpecies_01 (Synty SidekickCharacters), scale (1,1,1)
+    TDOperatorView: m_OperatorDataIndex = 0
+    Animator: OperatorKnight.controller
+      Idle_Battle_SingleSword (loop) → AnyState trigger "Attack" →
+      Attack01_SingleSword (exitTime=0.9, speed=1.2) → back to Idle
+    RPGTinyHero sword clips retargeted to HumanSpecies_01 rig
+
+  Assets/1.Assets/Resources/Prefabs/SlotHolder.prefab           [NEW]
+    HorizontalLayoutGroup root
+    ├─ ButtonSelector  [Button, Image]
+    ├─ SlotIcon        [Image] — sprite icon
+    ├─ CostBg          [Image]
+    │  └─ Cost         [TextMeshProUGUI]
+    └─ DisabledOverlay [Image, alpha ~0.6]
+    TDSlotHolderItemView component attached
+
+  Assets/1.Assets/Resources/Configs/Melee Operator Config.asset [NEW]
+    TDFlyweightOperatorDataSettings SO
+    Entry 0 (OperatorKnight): prefab=OperatorKnight, cost=X, hp=600,
+    damage=50, attackSpeed=1.0, blockCount=2, rangeOffsets={(0,0)}
+
+  [DELETED] Assets/1.Assets/Resources/Prefabs/MeleeOperator.prefab
+    → replaced by OperatorKnight.prefab
+
+  ── Scene Changes (Session 22) ───────────────────────────────────────────────
+    Canvas/SafeArea/Container:
+      PlacementPanel  → Cancel button khi đang drag ghost (mobile)
+      PausePanel      → SetActive khi isPaused
+      GameOverPanel   → stub (OnGameOver)
+      VictoryPanel    → stub (OnVictory)
+      FlashScreen     → child của Container (moved s19)
+    Bottom:
+      TowerMainView   → replaced bởi dynamic SlotHolder instances
+
+  ── Inspector Actions (Session 22 — TODO) ────────────────────────────────────
+    ✅ Tower Bullet Config.asset → icon Sprite đã assign cho mỗi TowerData entry  [s24]
+    ✅ Melee Operator Config.asset → OperatorData entries đã assign (prefab, icon, stats)  [s24]
+    ⬜ TDControl.cs: thêm TDFlyweightOperatorDataSettings.api = new ...
+    ⬜ Scene: TDSlotHolderMainView.m_SlotHolderPrefab = SlotHolder.prefab
+
+  ── Design Decisions Recorded (Session 22) ───────────────────────────────────
+    ✅ Multiple operator types → dùng OperatorType enum riêng (Phase 16)
+       Lý do: TowerType.Operator chỉ là category marker,
+              OperatorType (Knight/Medic/...) xác định data + prefab cụ thể
+       TDTowerSlotInfo.operatorType field chỉ meaningful khi towerType == Operator
+
+    ✅ Random pick khi BuildSlots() > 8 → không có priority
+       Lý do: sau này sẽ có UI select trước màn để user chọn slot set
+
+    ✅ ITowerDataProvider interface → TowerData + OperatorData implement (Phase 16)
+       Lý do: xóa 5 if/else Operator branches trong TDTowerBehaviorModel
+       KEY: Operator KHÔNG dùng TDTowerBehaviorModel → TDOperatorView đọc SO trực tiếp
+
+    ✅ IPlacedUnit interface → TDTowerWeaponView + TDOperatorView implement (Phase 16)
+       Lý do: xóa GetComponent<TDOperatorView> branch trong TDTowerFactoryControl
+       Init(string key, TDTowerSlotInfo slot) — unified signature
+
+    ✅ Retreat mechanic → Phase 17 (sau Phase 16 hoàn thành)
+       Tách biệt Die() (enemy giết) vs Retreat() (player thu hồi)
+       IPlacedUnit.OnRemove() là hook dùng cho cả 2 path
+
+  ── Tech Stack Summary (current state) ───────────────────────────────────────
+    Unity       : 2022.3.55f1 LTS
+    Render      : Universal Render Pipeline (URP 14)
+    Language    : C# (.NET Standard 2.1)
+    UI          : uGUI + TextMeshPro
+    DI          : Custom lightweight ServiceLocator (Services.DependencyInjection)
+    Pooling     : Unity ObjectPool<T>
+    Path        : Custom A* (TDaStarPathControl) + random waypoint generator
+    Assets      : Newtonsoft.Json, DOTween, Odin Inspector (dev), RapidIcon (dev)
+    Input       : Legacy Input System (Android mobile + Editor desktop split)
+
+
+================================================================================
+  24. SESSION 23 — PHASE 16 INTERFACE REFACTOR + EVENT BUS + CODE STYLE
+================================================================================
+
+  ── Mục tiêu ─────────────────────────────────────────────────────────────────
+    1. Phase 16: IDeployableDTO + IPlacedUnit, xóa if/else Operator branches
+    2. Event Bus (TDGameEventBus) cho VFX/Audio cross-cutting concerns
+    3. Code style enforcement: Allman braces, 1-space operators
+
+  ── Design decisions ─────────────────────────────────────────────────────────
+
+    Interface naming (settled):
+      IDeployableDTO — đúng convention (suffix DTO như ITowerRangeDTO, IGridCellDTO, ...)
+      Rejected: ITowerDataProvider, IDeployableData, IGameDeployableData, IDeployableDataDTO
+
+    Event Bus vs ServiceLocator vs DI:
+      VFX/Audio là output-only cross-cutting — không cần bidirectional lookup
+      → Event Bus là pattern đúng; ServiceLocator và DI Container redundant → sẽ xóa
+
+  ── New Files (Session 23) ───────────────────────────────────────────────────
+
+  Assets/2.Scripts/Model/Tower/Interfaces/IDeployableDTO.cs      [NEW]
+    public interface IDeployableDTO
+      TowerType, Damage, AttackSpeed, AttackType, MaxTargets, RangeOffsets
+
+  Assets/2.Scripts/Model/Tower/Interfaces/IPlacedUnit.cs         [NEW]
+    public interface IPlacedUnit
+      UnitType: TowerType; Init(string key, TDTowerSlotInfo slotInfo); OnRemove()
+
+  Assets/2.Scripts/Services/TDGameEventBus.cs                    [NEW]
+    static class — events: OnEnemyDied(Vector3,EnemyType), OnEnemySpawned,
+    OnTowerAttacked(Vector3,TowerType), OnOperatorDied(Vector2Int),
+    OnLifeLost(Vector3), OnVictory, OnGameOver, OnWaveStarted(int)
+    Raise helpers: EnemyDied(), TowerAttacked(), OperatorDied(), LifeLost(), ...
+
+  ── Modified Files (Session 23) ──────────────────────────────────────────────
+
+  Enums.cs
+    ← + OperatorType enum: public enum OperatorType { Knight }
+
+  TDFlyweightTowerDataSettings.cs
+    ← TowerData : IDeployableDTO (explicit interface)
+    ← Style: 1-space operators
+
+  TDFlyweightOperatorDataSettings.cs
+    ← OperatorData : IDeployableDTO (explicit interface)
+    ← + operatorType : OperatorType field
+    ← + GetData(OperatorType type) lookup
+    ← Xóa GetCost/GetHp/GetDamage/GetAttackSpeed/GetBlockCount per-index helpers (dùng GetData)
+
+  TDTowerBehaviorModel.cs
+    ← Dictionary<TowerType, IDeployableDTO> m_DataMap (lazy-init)
+    ← BuildDataMap(): chỉ tower thường; Operator KHÔNG vào map
+    ← 5 methods: không còn if/else; tất cả qua Get(type)?.Property ?? default
+    ← + InvalidateCache() để reset khi scene reload
+
+  TDTowerSlotInfo.cs (struct)
+    ← + operatorType : OperatorType
+
+  TDTowerMainControl.cs
+    ← m_CurrentSlot : TDTowerSlotInfo stored khi OnSelectTowerHolder
+    ← onGetTowerPrefab : Action<TDTowerSlotInfo> (thay Action<GameObject, TowerType>)
+    ← OnPlaceTower(GameObject ghost) — không cần TowerType param
+
+  TDTowerWeaponView.cs
+    ← implements IPlacedUnit
+    ← IPlacedUnit.Init(key, slot) → delegate Init(key)
+    ← IPlacedUnit.OnRemove() → unsubscribe onGetLastAttackTime
+
+  TDOperatorView.cs
+    ← implements IPlacedUnit
+    ← m_OperatorDataIndex (int) → m_OperatorType (OperatorType)
+    ← IPlacedUnit.Init(key, slot): m_OperatorType = slot.operatorType;
+      GetData(m_OperatorType) → m_CurrentHp; tự RegisterOperator + RegisterOperatorView
+    ← IPlacedUnit.OnRemove(): UnregisterOperator (dùng cho Die + future Retreat)
+    ← Die() gọi OnRemove() + TDGameEventBus.OperatorDied(cell) + Destroy
+
+  TDTowerFactoryControl.cs
+    ← CreateUnit(prefab, pos, rot, slotInfo) — thay CreateTower
+    ← GetComponent<IPlacedUnit> — không còn branch GetComponent<TDOperatorView>
+    ← Key gen nội bộ
+    ← onCreateUnitSuccess: Action<IPlacedUnit>; onCreateTowerSuccess: backward-compat
+
+  ITowerFactoryControl.cs
+    ← CreateUnit(prefab, pos, rot, slotInfo) — thay CreateTower
+
+  TDPlaceTowerControl.cs
+    ← CheckPlaceTower(pos, ghost, slotInfo: TDTowerSlotInfo)
+    ← CheckPlaceOperator: xóa RegisterOperator — TDOperatorView.Init() tự làm
+
+  TDSlotHolderMainView.cs
+    ← OnCreateTower(TDTowerSlotInfo slot) — thay (GameObject, TowerType)
+    ← OnMouseButton0Clicked → OnPlaceTower(ghost) không pass TowerType
+    ← RegistryTowerControlEvents: 1-space operators, xóa alignment padding
+    ← k_DirectionThresholdRatio → DIRECTION_THRESHOLD_RATIO (fix compile error)
+
+  TDTowerFactoryView.cs
+    ← Empty stub — Init logic chuyển vào TDTowerFactoryControl.CreateUnit
+
+  TDFlyweightBulletFactoryModel.cs
+    ← Xóa TowerType.Operator case trong GetPoolFor (operator không dùng bullet pool)
+
+  ── Code style fixes (Session 23) ────────────────────────────────────────────
+    Rule 1: Allman braces — { luôn trên dòng riêng
+    Rule 2: 1 space quanh operators (+=, -=, =) — NO alignment padding
+    Applied to: tất cả files modified session 23 + TDSlotHolderMainView
+
+  ── Compile result ───────────────────────────────────────────────────────────
+    ✅ AssetDatabase refresh: Success (0 errors)
+
+  ── TODO còn lại ─────────────────────────────────────────────────────────────
+    ⬜ Xóa ServiceLocator.cs + Injector.cs (chưa dùng, conflict với static singleton)
+    ⬜ Assign OperatorType trong Melee Operator Config.asset Inspector
+    ⬜ Phase 17: Retreat mechanic (IPlacedUnit.OnRemove() đã sẵn sàng)
+    ⬜ State Machine cho TDEnemyView (4 bool flags → EnemyState enum)
+    ⬜ VFX/Audio systems subscribe TDGameEventBus
 
 
 ================================================================================

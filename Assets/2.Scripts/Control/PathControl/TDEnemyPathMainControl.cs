@@ -20,12 +20,12 @@ public class TDEnemyPathMainControl
     // ── Enemy Object Pools (1 per EnemyType) ─────────────────────────────────
     private readonly Dictionary<EnemyType, IObjectPool<TDEnemyView>> m_EnemyPools
         = new Dictionary<EnemyType, IObjectPool<TDEnemyView>>();
-    private TDEnemyDataSettings m_EnemyDataSettings;
+    private TDFlyweightEnemyDataSettings m_FlyweightEnemyDataSettings;
 
-    public void InitEnemyPools(TDEnemyDataSettings settings, Transform parent,
+    public void InitEnemyPools(TDFlyweightEnemyDataSettings settings, Transform parent,
         int defaultCapacity = 10, int maxSize = 30)
     {
-        m_EnemyDataSettings = settings;
+        m_FlyweightEnemyDataSettings = settings;
 
         foreach (EnemyType type in Enum.GetValues(typeof(EnemyType)))
         {
@@ -175,9 +175,11 @@ public class TDEnemyPathMainControl
             ct.ThrowIfCancellationRequested();
 
             EnemyType type  = batch[i];
-            EnemyData data  = m_EnemyDataSettings?.GetData(type);
-            float     hp    = (data?.baseHP    ?? 300f) * ratio.hpMult;
-            float     speed = (data?.baseSpeed ?? 3f)   * ratio.speedMult;
+            EnemyData data  = m_FlyweightEnemyDataSettings?.GetData(type);
+            float     hp          = (data?.baseHP    ?? 300f) * ratio.hpMult;
+            float     speed       = (data?.baseSpeed ?? 3f)   * ratio.speedMult;
+            float     atkDamage   = data?.baseAttackDamage ?? 10f;
+            float     atkSpeed    = data?.baseAttackSpeed  ?? 1f;
 
             if (!m_EnemyPools.TryGetValue(type, out var pool))
             {
@@ -190,7 +192,7 @@ public class TDEnemyPathMainControl
             enemy.transform.rotation = Quaternion.identity;
 
             string key = $"w{waveIdx}-{type}-e{i}-{enemy.gameObject.GetInstanceID()}";
-            enemy.Initialize(key, hp, speed, data.dieDuration, data?.goldReward ?? 0, type);
+            enemy.Initialize(key, hp, speed, atkDamage, atkSpeed, data.dieDuration, data?.goldReward ?? 0, type);
             enemy.SetPath(path);
 
             await PauseAwareDelay(spawnInterval, ct);

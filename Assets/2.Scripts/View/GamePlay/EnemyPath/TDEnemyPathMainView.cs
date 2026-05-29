@@ -3,13 +3,14 @@ using System.Threading;
 using UnityEngine;
 using Object = UnityEngine.Object;
 using System.Linq;
+using UnityEngine.Serialization;
 
 public class TDEnemyPathMainView : MonoBehaviour
 {
     [SerializeField] private GameObject[]          m_ObstaclePrefabs;
     [SerializeField] private GameObject            m_GateStartPrefab;
     [SerializeField] private GameObject            m_GateEndPrefab;
-    [SerializeField] private TDEnemyDataSettings   m_EnemyDataSettings;
+    [FormerlySerializedAs("m_EnemyDataSettings")] [SerializeField] private TDFlyweightEnemyDataSettings   flyweightEnemyDataSettings;
     [SerializeField] private TDLevelConfigSettings m_LevelConfigSettings;
     [SerializeField] private GameObject            m_TowerZonePrefab;
 
@@ -34,7 +35,7 @@ public class TDEnemyPathMainView : MonoBehaviour
         m_EnemyPathView = GameObject.Find(TDConstant.GAMEPLAY_ENEMY_PATH_VIEW).GetComponent<TDEnemyPathView>();
 
         m_GridDTO = initGridDTO;
-        TDEnemyPathMainControl.api.InitEnemyPools(m_EnemyDataSettings, transform);
+        TDEnemyPathMainControl.api.InitEnemyPools(flyweightEnemyDataSettings, transform);
         ImplementPath();
     }
 

@@ -1,77 +1,118 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using TDEnums;
 using UnityEngine;
+using Random = UnityEngine.Random;
 
 public class TDTowerMainControl
 {
     public static TDTowerMainControl api;
 
-    public Action<string, TowerType> onGetTowerName;
-    public Action<int>               onGetCurrentRotationIndex;
+    public Action<TDTowerSlotInfo> onGetTowerPrefab;
+    public Action<int> onGetCurrentRotationIndex;
 
-    private static readonly (string name, TowerType type)[] k_TowerDefs =
+    private const int MAX_SLOTS = 8;
+
+    private readonly List<TDTowerSlotInfo> m_ActiveSlots = new List<TDTowerSlotInfo>();
+    private TDTowerSlotInfo m_CurrentSlot;
+
+    public IReadOnlyList<TDTowerSlotInfo> ActiveSlots => m_ActiveSlots;
+
+    // ── Slot Building ─────────────────────────────────────────────────────────
+
+    public void BuildSlots()
     {
-        (TDConstant.PREFAB_FATTY_CANNON_G02,    TowerType.Cannon),
-        (TDConstant.PREFAB_FATTY_CATAPULT_G02,  TowerType.Catapult),
-        (TDConstant.PREFAB_FATTY_MISSILE_G02,   TowerType.MissileG02),
-        (TDConstant.PREFAB_FATTY_MISSILE_G03,   TowerType.MissileG03),
-        (TDConstant.PREFAB_FATTY_MORTAR_G02,    TowerType.Mortar),
-        (TDConstant.PREFAB_MELEE_OPERATOR,      TowerType.Melee),   // slot 5 — Arknights-style guard
-    };
+        m_ActiveSlots.Clear();
+
+        var all = new List<TDTowerSlotInfo>();
+
+        var towerSetting = TDFlyweightBulletFactoryModel.api?.Setting;
+        if (towerSetting != null)
+        {
+            foreach (var data in towerSetting.GetAllTowers())
+            {
+                if (data.towerPrefab == null) continue;
+                all.Add(new TDTowerSlotInfo
+                {
+                    prefab = data.towerPrefab,
+                    towerType = data.type,
+                    cost = data.cost,
+                    icon = data.icon
+                });
+            }
+        }
+
+        var opSetting = TDFlyweightOperatorDataSettings.api;
+        if (opSetting != null)
+        {
+            foreach (var op in opSetting.GetAllOperators())
+            {
+                if (op.operatorPrefab == null) continue;
+                all.Add(new TDTowerSlotInfo
+                {
+                    prefab = op.operatorPrefab,
+                    towerType = TowerType.Operator,
+                    operatorType = op.operatorType,
+                    cost = op.cost,
+                    icon = op.icon
+                });
+            }
+        }
+
+        if (all.Count > MAX_SLOTS)
+        {
+            for (int i = all.Count - 1; i > 0; i--)
+            {
+                int j = Random.Range(0, i + 1);
+                (all[i], all[j]) = (all[j], all[i]);
+            }
+            m_ActiveSlots.AddRange(all.Take(MAX_SLOTS));
+        }
+        else
+        {
+            m_ActiveSlots.AddRange(all);
+        }
+
+        Debug.Log($"[TDTowerMainControl] BuildSlots: {m_ActiveSlots.Count} slots");
+    }
+
+    // ── Selection ─────────────────────────────────────────────────────────────
 
     public void OnSelectTowerHolder(int index)
     {
-        if (index < 0 || index >= k_TowerDefs.Length) return;
-        var (name, type) = k_TowerDefs[index];
-        onGetTowerName?.Invoke(name, type);
+        if (index < 0 || index >= m_ActiveSlots.Count) return;
+        m_CurrentSlot = m_ActiveSlots[index];
+        onGetTowerPrefab?.Invoke(m_CurrentSlot);
     }
 
-    public void OnSelectTower(GameObject currentTower)
-    {
-        if (currentTower != null)
-        {
-            if (Camera.main == null) return;
-                
-            var ray = Camera.main.ScreenPointToRay(Input.mousePosition);
-            if (Physics.Raycast(ray, out var hit))
-            {
-                Vector3 gridPosition = TDGridMainModel.api.GetNearestGridPosition(hit.point);
-                currentTower.transform.position = gridPosition;
-            }
-        }
-    }
+    // ── Placement ─────────────────────────────────────────────────────────────
 
-    public void OnPlaceTower(GameObject currentTower, TowerType towerType = TowerType.Cannon)
+    public void OnPlaceTower(GameObject currentTower)
     {
         if (currentTower == null) return;
-
-        // Dùng transform.position của ghost tower (đã snap vào grid qua OnSelectTower)
-        // Không raycast lại từ Input.mousePosition để tránh sai khi bấm UI button (Confirm)
-        TDPlaceTowerControl.api.CheckPlaceTower(currentTower.transform.position, currentTower, towerType);
+        TDPlaceTowerControl.api.CheckPlaceTower(
+            currentTower.transform.position, currentTower, m_CurrentSlot);
     }
-    
+
+    // ── Rotation ──────────────────────────────────────────────────────────────
+
     public void RotateTowerClockwise(GameObject currentTower, int currentRotationIndex)
     {
-        if (currentTower != null)
-        {
-            int currentRotation = (currentRotationIndex + 1) % 4;
-            UpdateTowerRotation(currentTower, currentRotation);
-            onGetCurrentRotationIndex?.Invoke(currentRotation);
-        }
+        if (currentTower == null) return;
+        int next = (currentRotationIndex + 1) % 4;
+        UpdateTowerRotation(currentTower, next);
+        onGetCurrentRotationIndex?.Invoke(next);
     }
 
     public void RotateTowerCounterClockwise(GameObject currentTower, int currentRotationIndex)
     {
-        if (currentTower != null)
-        {
-            int currentRotation = (currentRotationIndex - 1 + 4) % 4;
-            UpdateTowerRotation(currentTower, currentRotation);
-            onGetCurrentRotationIndex?.Invoke(currentRotation);
-        }
+        if (currentTower == null) return;
+        int next = (currentRotationIndex - 1 + 4) % 4;
+        UpdateTowerRotation(currentTower, next);
+        onGetCurrentRotationIndex?.Invoke(next);
     }
-    
-    private void UpdateTowerRotation(GameObject currentTower, int currentRotationIndex)
-    {
-        currentTower.transform.rotation = Quaternion.Euler(0f, TDConstant.CONFIG_TOWER_ROTATIONS[currentRotationIndex], 0f);
-    }
+
+    private void UpdateTowerRotation(GameObject currentTower, int index)
+        => currentTower.transform.rotation = Quaternion.Euler(0f, TDConstant.CONFIG_TOWER_ROTATIONS[index], 0f);
 }

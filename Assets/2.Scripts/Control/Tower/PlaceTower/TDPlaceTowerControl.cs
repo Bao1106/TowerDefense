@@ -8,52 +8,46 @@ public class TDPlaceTowerControl
 
     public Action<bool> onPlaceTowerSuccess;
 
-    public void CheckPlaceTower(Vector3 position, GameObject currentTower, TowerType towerType = TowerType.Cannon)
+    public void CheckPlaceTower(Vector3 position, GameObject currentTower, TDTowerSlotInfo slotInfo)
     {
-        if (towerType == TowerType.Melee)
-            CheckPlaceMeleeOperator(position, currentTower);
+        if (slotInfo.towerType == TowerType.Operator)
+            CheckPlaceOperator(position, currentTower, slotInfo);
         else
-            CheckPlaceRegularTower(position, currentTower);
+            CheckPlaceRegularTower(position, currentTower, slotInfo);
     }
 
-    // ── Regular tower — đặt lên TowerZone cells ──────────────────────────────
-    private void CheckPlaceRegularTower(Vector3 position, GameObject currentTower)
+    // ── Regular tower ─────────────────────────────────────────────────────────
+
+    private void CheckPlaceRegularTower(Vector3 position, GameObject currentTower, TDTowerSlotInfo slotInfo)
     {
         if (!TDGridMainModel.api.IsValidPlacement(position)) return;
 
-        Vector3    nearestPosition = TDGridMainModel.api.GetNearestGridPosition(position);
-        Vector3    placedPosition  = new Vector3(nearestPosition.x, TDConstant.CONFIG_TOWER_PLACE_Y, nearestPosition.z);
-        Quaternion rotation        = currentTower.transform.rotation;
+        Vector3 nearestPosition = TDGridMainModel.api.GetNearestGridPosition(position);
+        Vector3 placedPosition = new(nearestPosition.x, TDConstant.CONFIG_TOWER_PLACE_Y, nearestPosition.z);
+        Quaternion rotation = currentTower.transform.rotation;
 
-        TDTowerFactoryControl.api.CreateTower(currentTower, placedPosition, rotation);
-        onPlaceTowerSuccess?.Invoke(true);
+        TDTowerFactoryControl.api.CreateUnit(slotInfo.prefab, placedPosition, rotation, slotInfo);
         TDGridMainModel.api.SetOccupiedCell(nearestPosition);
+        onPlaceTowerSuccess?.Invoke(true);
     }
 
-    // ── Melee operator — đặt lên path cells ──────────────────────────────────
-    private void CheckPlaceMeleeOperator(Vector3 position, GameObject currentTower)
+    // ── Operator ──────────────────────────────────────────────────────────────
+
+    private void CheckPlaceOperator(Vector3 position, GameObject currentTower, TDTowerSlotInfo slotInfo)
     {
-        if (TDMeleeRegistry.api == null) return;
+        if (TDOperatorRegistry.api == null) return;
 
-        Vector3    nearestPos = TDGridMainModel.api.GetNearestGridPosition(position);
-        Vector2Int cell       = TDGridMainModel.api.WorldToCell(nearestPos);
+        Vector3 nearestPos = TDGridMainModel.api.GetNearestGridPosition(position);
+        Vector2Int cell = TDGridMainModel.api.WorldToCell(nearestPos);
 
-        // Chỉ cho phép đặt lên valid path cell chưa có operator
-        if (!TDMeleeRegistry.api.IsValidMeleeCell(cell))  return;
-        if ( TDMeleeRegistry.api.HasOperatorAt(cell))      return;
+        if (!TDOperatorRegistry.api.IsValidOperatorCell(cell)) return;
+        if (TDOperatorRegistry.api.HasOperatorAt(cell)) return;
 
-        // Đặt melee operator tại path cell, cùng độ cao với tower thường
-        Vector3    placedPos = new Vector3(nearestPos.x, TDConstant.CONFIG_TOWER_PLACE_Y, nearestPos.z);
-        Quaternion rotation  = currentTower.transform.rotation;
+        Vector3 placedPos = new(nearestPos.x, TDConstant.CONFIG_OPERATOR_PLACE_Y, nearestPos.z);
+        Quaternion rotation = currentTower.transform.rotation;
 
-        TDTowerFactoryControl.api.CreateTower(currentTower, placedPos, rotation);
-
-        // Đăng ký operator — blockCapacity = maxTargets từ SO
-        int blockCapacity = TDFlyweightBulletFactoryModel.api?.Setting?.GetData(TDEnums.TowerType.Melee)?.maxTargets ?? 1;
-        TDMeleeRegistry.api.RegisterOperator(cell, blockCapacity);
-
+        // RegisterOperator đã chuyển vào TDOperatorView.Init() — không gọi ở đây nữa
+        TDTowerFactoryControl.api.CreateUnit(slotInfo.prefab, placedPos, rotation, slotInfo);
         onPlaceTowerSuccess?.Invoke(true);
-        // Không gọi SetOccupiedCell — path cells đã occupied từ VisualizeAllPaths
-        // TDMeleeRegistry.HasOperatorAt() ngăn double-place
     }
 }

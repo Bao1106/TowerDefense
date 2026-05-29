@@ -5,13 +5,16 @@ using UnityEngine;
 
 public class TDEnemyView : MonoBehaviour
 {
-    private const string TRIGGER_WALK   = "Walk";
+    private const string TRIGGER_WALK    = "Walk";
+    private const string TRIGGER_ATTACK  = "Attack";
     private const string TRIGGER_GET_HIT = "GetHit";
-    private const string TRIGGER_DIE    = "Die";
+    private const string TRIGGER_DIE     = "Die";
 
     private Animator      m_Animator;
     private List<Vector3> m_PathsPosition = new List<Vector3>();
     private float  m_MoveSpeed, m_EnemyHealth, m_DieDuration;
+    private float  m_AttackDamage, m_AttackSpeed;
+    private float  m_LastAttackTime = -999f;
     private int    m_GoldReward;
     private int    m_CurrentPathIndex;
     private string m_EnemyKey;
@@ -19,7 +22,7 @@ public class TDEnemyView : MonoBehaviour
     private bool   m_HasBeenReturned;
     private bool   m_IsDying;
 
-    // Melee blocking state
+    // Operator blocking state
     private bool       m_IsBlocked;
     private Vector2Int m_BlockerCell;
 
@@ -35,7 +38,9 @@ public class TDEnemyView : MonoBehaviour
         m_Animator = GetComponent<Animator>();
     }
 
-    public void Initialize(string key, float hp, float speed, float dieDuration, int goldReward, EnemyType enemyType)
+    public void Initialize(string key, float hp, float speed,
+        float attackDamage, float attackSpeed,
+        float dieDuration, int goldReward, EnemyType enemyType)
     {
         m_HasBeenReturned  = false;
         m_HasReachedEnd    = false;
@@ -46,6 +51,9 @@ public class TDEnemyView : MonoBehaviour
         m_PathsPosition.Clear();
         m_EnemyHealth  = hp;
         m_MoveSpeed    = speed;
+        m_AttackDamage = attackDamage;
+        m_AttackSpeed  = attackSpeed;
+        m_LastAttackTime = -999f;
         m_DieDuration  = dieDuration;
         m_GoldReward   = goldReward;
         EnemyType      = enemyType;
@@ -93,9 +101,18 @@ public class TDEnemyView : MonoBehaviour
     private void UnblockFromMelee()
     {
         if (!m_IsBlocked) return;
-        TDMeleeRegistry.api?.OnEnemyUnblocked(m_BlockerCell);
+        TDOperatorRegistry.api?.OnEnemyUnblocked(m_BlockerCell, this);
         m_IsBlocked   = false;
         m_BlockerCell = Vector2Int.zero;
+    }
+
+    /// Gọi bởi TDOperatorRegistry khi operator tại ô bị chết → enemy tiếp tục di chuyển.
+    public void ForceUnblock()
+    {
+        if (!m_IsBlocked) return;
+        m_IsBlocked   = false;
+        m_BlockerCell = Vector2Int.zero;
+        m_CurrentPathIndex++; // bỏ qua ô operator vừa chết, đi tiếp
     }
 
     private void Die()
@@ -103,7 +120,7 @@ public class TDEnemyView : MonoBehaviour
         if (m_HasBeenReturned) return;
         m_IsDying = true;
 
-        UnblockFromMelee(); // giải phóng melee slot trước để enemy kế tiếp vào được
+        UnblockFromMelee(); // giải phóng operator slot trước để enemy kế tiếp vào được
         TDEnemyControl.api.onGetEnemyPathPos -= OnGetEnemyPathPos;
         TDEnemyRegistry.api.Unregister(this);
 
@@ -156,8 +173,17 @@ public class TDEnemyView : MonoBehaviour
     {
         if (m_PathsPosition == null || m_PathsPosition.Count == 0 || m_HasReachedEnd || m_IsDying) return;
 
-        // Nếu đang bị chặn bởi melee operator → đứng yên, đợi operator giết
-        if (m_IsBlocked) return;
+        // Nếu đang bị chặn bởi melee operator → tấn công lại operator
+        if (m_IsBlocked)
+        {
+            if (m_AttackSpeed > 0f && Time.time - m_LastAttackTime >= 1f / m_AttackSpeed)
+            {
+                TDOperatorRegistry.api?.GetOperatorView(m_BlockerCell)?.TakeDamage(m_AttackDamage);
+                m_LastAttackTime = Time.time;
+                TriggerSafe(TRIGGER_ATTACK);
+            }
+            return;
+        }
 
         if (m_CurrentPathIndex < m_PathsPosition.Count)
         {
@@ -172,13 +198,13 @@ public class TDEnemyView : MonoBehaviour
             {
                 // Khi vừa đến waypoint — kiểm tra xem có melee operator đang chặn không
                 Vector2Int arrivedCell = TDGridMainModel.api.WorldToCell(targetPosition);
-                if (TDMeleeRegistry.api != null && TDMeleeRegistry.api.CanBlock(arrivedCell))
+                if (TDOperatorRegistry.api != null && TDOperatorRegistry.api.CanBlock(arrivedCell))
                 {
                     // Snap đúng vào trung tâm ô để IsInRange của operator hoạt động chính xác
                     transform.position = new Vector3(targetPosition.x, transform.position.y, targetPosition.z);
                     m_IsBlocked   = true;
                     m_BlockerCell = arrivedCell;
-                    TDMeleeRegistry.api.OnEnemyBlocked(arrivedCell);
+                    TDOperatorRegistry.api.OnEnemyBlocked(arrivedCell, this);
                 }
                 else
                 {

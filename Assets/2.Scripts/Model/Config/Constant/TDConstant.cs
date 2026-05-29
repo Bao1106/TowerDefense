@@ -113,8 +113,10 @@ public static class TDConstant
     // TowerZone tile: scale.y = 0.12, center tại y=0 → top face tại y=0.06
     // Tower ghost và placed tower đều dùng offset này để ngồi trên zone tile
     public const float CONFIG_TOWER_ZONE_TILE_HEIGHT = 0.12f;
+    public const float CONFIG_OPERATOR_PLACE_Y          = 0.02f;  // tower base placed 0.6u above ground (above TowerZone top face 0.06)
     public const float CONFIG_TOWER_PLACE_Y          = 0.6f;  // tower base placed 0.6u above ground (above TowerZone top face 0.06)
-    public const string CONFIG_TOWER = "Tower Bullet Config";
+    public const string CONFIG_TOWER          = "Tower Bullet Config";
+    public const string CONFIG_OPERATOR = "Melee Operator Config"; // SO riêng cho melee
 
     #endregion
 
@@ -130,6 +132,8 @@ public static class TDConstant
     public const string PREFAB_FATTY_MORTAR_G02 = "FattyMortarG02";
     public const string PREFAB_SLIME = "Slime";
     public const string PREFAB_PATH = "Plane";
+    public const string PREFAB_SLOT_HOLDER = "SlotHolder";
+    public const string PREFAB_RANGE_HIGH_LIGHT = "RangeHighlight";
 
   #endregion
 }
