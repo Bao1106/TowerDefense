@@ -1,5 +1,5 @@
 ================================================================================
-  TOWER DEFENSE — RECENT SESSIONS CHANGELOG (Sessions 23, 25, 26, 27)
+  TOWER DEFENSE — RECENT SESSIONS CHANGELOG (Sessions 23, 25, 26, 27, 28)
   Generated: 2026-05-30
 ================================================================================
 
@@ -138,6 +138,91 @@
     ✅ 5 prefabs hiển thị Toon cel-shading style
     ✅ Outline feature sẵn sàng, chờ Volume trong gameplay scene
     ✅ HP bar depth bug FIXED — ZTest Always
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 28 — ENEMY ATTACK ANIMATION FIX + OPERATOR KNIGHT WEAPON [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Goal: Fix enemy không có animation attack khi bị block; thêm sword cho OperatorKnight.
+
+  ── Điều tra bug "enemy không attack operator" ───────────────────────────────
+
+  Bug report: Khi enemy bị block bởi operator, enemy không attack lại.
+  Code TDEnemyView.Update() đã có logic đúng (TakeDamage được gọi trước TriggerSafe).
+  Root cause #1 (data): baseAttackDamage, baseAttackSpeed trong EnemyData SO có thể = 0.
+  Root cause #2 (animation): TriggerSafe("Attack") gọi trigger không tồn tại → silent fail.
+
+  ── EnemyData ScriptableObject fix ──────────────────────────────────────────
+
+  File: Assets/1.Assets/Resources/Configs/Enemy Data Config.asset
+  Giá trị được set (qua MCP assets-modify):
+    Normal : attackDamage=10,  attackSpeed=1.0  (1 hit/sec)
+    Fast   : attackDamage=5,   attackSpeed=1.5  (nhanh, yếu)
+    Tank   : attackDamage=25,  attackSpeed=0.5  (chậm, mạnh)
+    Boss   : attackDamage=50,  attackSpeed=0.75 (mạnh, vừa)
+
+  ── Animator Controller fixes (Editor script FixEnemyAnimators) ──────────────
+
+  Vấn đề phát hiện qua đọc raw .controller files:
+
+  Controller                    | Trước              | Sau
+  ─────────────────────────────────────────────────────────────────────────────
+  Animations/Slime/Slime.controller
+    - m_AnimatorParameters: []  | KHÔNG có gì        | Walk, Attack, GetHit, Die
+    - States: WalkFWD only      | → Walk + 3 states mới
+    - Walk clip đổi thành       | WalkFWD (custom)    | Walk_Slime_Anim.fbx
+    - Attack clip (mới)         | —                   | Attack01_Slime_Anim.fbx
+    - GetHit clip (mới)         | —                   | GetHit_Slime_Anim.fbx
+    - Die clip (mới)            | —                   | Die_Slime_Anim.fbx
+
+  Resources/AnimatorControllers/SwarmFast-Game.controller
+    - Thiếu Attack              | Walk, GetHit, Die   | + Attack (Swarm09_Attack.fbx)
+    - Xác nhận dùng Swarm09     | GUID 32eabf87 = Swarm09_MoveFWD ✓
+
+  Resources/AnimatorControllers/TurtleTank-Game.controller
+    - Thiếu Attack              | Walk, GetHit, Die   | + Attack (Attack01_TurtleShell_Anim.fbx)
+
+  UnityStore Resources/FreeDragons/Animators/DragonBoarCTRL.controller
+    - "Attack" ≠ "Basic Attack" | Basic Attack, Get Hit | + trigger "Attack" → "Basic Attack" state
+    - "GetHit" ≠ "Get Hit"      |                     | + trigger "GetHit" → "Get Hit" state
+
+  Mỗi Attack state có:
+    - AnyState → Attack transition (trigger "Attack", hasExitTime=false, canTransitionToSelf=false)
+    - Attack → Walk exit transition (exitTime=0.9, duration=0.1)
+
+  ── OperatorKnight Weapon ────────────────────────────────────────────────────
+
+  Vấn đề: OperatorKnight.prefab không có weapon — animation Attack trông rỗng tay.
+  Bone target: prop_r (right hand weapon attachment point, RPGTinyHero rig convention)
+  Path: root/pelvis/spine_01/spine_02/spine_03/clavicle_r/upperarm_r/lowerarm_r/hand_r/prop_r
+
+  Files mới:
+    Assets/1.Assets/Materials/Toon/Toon_Sword.mat [NEW]
+      Shader: Toon Shaders Pro/URP/Toon
+      MiddleTint: (0.75, 0.8, 0.85)   — silver/steel
+      ShadowTint: (0.2, 0.25, 0.35)   — dark blue-steel
+      RimColor:   (0.7, 0.85, 1.0)    — blue-white rim
+      Smoothness: 0.6
+
+  Thay đổi prefab OperatorKnight.prefab:
+    + Child "Sword" (OHS05_Sword.prefab instantiated) dưới prop_r
+    + localPosition: (0, 0, 0)
+    + localRotation: (0, 0, -90)  ← cần fine-tune trong editor nếu cần
+    + Material: Toon_Sword.mat (thay thế DefaultPBR/Standard shader bị pink)
+
+  ⚠️ Lưu ý: localRotation (0,0,-90) là ước tính cho T-pose.
+     Có thể cần điều chỉnh thêm khi xem animation Attack trong editor.
+
+  ── Phase map update ─────────────────────────────────────────────────────────
+    Phase 13 (Enemy Animation): NÂNG CẤP — thêm Attack state cho tất cả 4 enemy
+    Phase 14 (Operator System): NÂNG CẤP — OperatorKnight có weapon + Toon_Sword.mat
+
+  ── Result ───────────────────────────────────────────────────────────────────
+    ✅ Enemy attack animation hoạt động (Walk/Attack/GetHit/Die đầy đủ)
+    ✅ DragonBoarBoss "Attack"/"GetHit" triggers mapped đúng tên state
+    ✅ OperatorKnight cầm kiếm OHS05_Sword với Toon material bạc/thép
+    ⚠️ Sword rotation có thể cần fine-tune thủ công trong Unity Inspector
 
 
 ================================================================================
