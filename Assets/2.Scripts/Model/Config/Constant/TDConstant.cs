@@ -131,7 +131,7 @@ public static class TDConstant
     public const string PREFAB_FATTY_MISSILE_G03 = "FattyMissileG03";
     public const string PREFAB_FATTY_MORTAR_G02 = "FattyMortarG02";
     public const string PREFAB_SLIME = "Slime";
-    public const string PREFAB_PATH = "Plane";
+    public const string PREFAB_PATH = "PathTile";
     public const string PREFAB_SLOT_HOLDER = "SlotHolder";
     public const string PREFAB_RANGE_HIGH_LIGHT = "RangeHighlight";
 

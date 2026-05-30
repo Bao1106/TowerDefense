@@ -18,22 +18,30 @@ MonoBehaviour:
     baseSpeed: 3
     dieDuration: 0
     goldReward: 2
+    baseAttackDamage: 10
+    baseAttackSpeed: 1
     prefab: {fileID: 2688619744120716531, guid: afc0de1e34a92bf4895a29fe724a795e, type: 3}
   - type: 1
     baseHP: 150
     baseSpeed: 6
     dieDuration: 0.63
     goldReward: 4
+    baseAttackDamage: 5
+    baseAttackSpeed: 1.5
     prefab: {fileID: 61258325561811606, guid: 4a08cac9a7f6a664cb53638736194dcb, type: 3}
   - type: 2
     baseHP: 900
     baseSpeed: 1.5
     dieDuration: 2
     goldReward: 8
+    baseAttackDamage: 25
+    baseAttackSpeed: 0.5
     prefab: {fileID: 6753617674297473082, guid: f8d6c2783ca111044be1b2cb7d6b3829, type: 3}
   - type: 3
     baseHP: 3000
     baseSpeed: 1
     dieDuration: 1.33
     goldReward: 10
+    baseAttackDamage: 50
+    baseAttackSpeed: 0.75
     prefab: {fileID: 166316, guid: f652ee825852bc4409e91294b7fe31c5, type: 3}

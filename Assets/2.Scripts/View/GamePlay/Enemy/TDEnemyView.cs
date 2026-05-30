@@ -10,9 +10,11 @@ public class TDEnemyView : MonoBehaviour
     private const string TRIGGER_GET_HIT = "GetHit";
     private const string TRIGGER_DIE     = "Die";
 
+    [SerializeField] private TDHPBarView m_HPBarView;
+
     private Animator      m_Animator;
     private List<Vector3> m_PathsPosition = new List<Vector3>();
-    private float  m_MoveSpeed, m_EnemyHealth, m_DieDuration;
+    private float  m_MoveSpeed, m_EnemyHealth, m_MaxHealth, m_DieDuration;
     private float  m_AttackDamage, m_AttackSpeed;
     private float  m_LastAttackTime = -999f;
     private int    m_GoldReward;
@@ -50,6 +52,7 @@ public class TDEnemyView : MonoBehaviour
         m_CurrentPathIndex = 0;
         m_PathsPosition.Clear();
         m_EnemyHealth  = hp;
+        m_MaxHealth    = hp;
         m_MoveSpeed    = speed;
         m_AttackDamage = attackDamage;
         m_AttackSpeed  = attackSpeed;
@@ -65,6 +68,7 @@ public class TDEnemyView : MonoBehaviour
             m_Animator.Rebind();
             m_Animator.Update(0f);
         }
+        m_HPBarView?.ResetBar();
         TriggerSafe(TRIGGER_WALK);
 
         TDEnemyControl.api.onGetEnemyPathPos += OnGetEnemyPathPos;
@@ -91,6 +95,8 @@ public class TDEnemyView : MonoBehaviour
     {
         if (m_IsDying) return;
         m_EnemyHealth -= damage;
+        m_HPBarView?.Show();
+        m_HPBarView?.UpdateHP(m_EnemyHealth, m_MaxHealth);
         if (m_EnemyHealth <= 0)
             Die();
         else
@@ -145,6 +151,7 @@ public class TDEnemyView : MonoBehaviour
     {
         if (m_HasBeenReturned) return;
         m_HasBeenReturned = true;
+        m_HPBarView?.ResetBar();
         TDEnemyPathMainControl.api.ReturnEnemy(this);
     }
 

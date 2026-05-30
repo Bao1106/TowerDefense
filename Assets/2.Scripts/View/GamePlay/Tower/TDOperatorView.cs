@@ -8,12 +8,15 @@ using UnityEngine;
 /// </summary>
 public class TDOperatorView : MonoBehaviour, IPlacedUnit
 {
+    [SerializeField] private TDHPBarView m_HPBarView;
+
     private static readonly int HASH_ATTACK = Animator.StringToHash("Attack");
 
     private Animator m_Animator;
     private OperatorType m_OperatorType;
     private Vector2Int m_MyCell;
     private float m_CurrentHp;
+    private float m_MaxHp;
     private float m_LastAttackTime = -999f;
     private bool m_Initialized;
 
@@ -29,8 +32,12 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
 
         var data = TDFlyweightOperatorDataSettings.api.GetData(m_OperatorType);
         m_CurrentHp = data?.hp ?? 100f;
+        m_MaxHp     = m_CurrentHp;
         m_LastAttackTime = -999f;
         m_Initialized = true;
+
+        m_HPBarView?.Show();
+        m_HPBarView?.UpdateHP(m_CurrentHp, m_MaxHp);
 
         int blockCap = Mathf.Clamp(data?.blockCount ?? 1, 1, 3);
         TDOperatorRegistry.api?.RegisterOperator(m_MyCell, blockCap);
@@ -51,6 +58,7 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
     {
         if (!m_Initialized || m_CurrentHp <= 0) return;
         m_CurrentHp -= damage;
+        m_HPBarView?.UpdateHP(m_CurrentHp, m_MaxHp);
         if (m_CurrentHp <= 0) Die();
     }
 

@@ -1,6 +1,6 @@
 ================================================================================
   TOWER DEFENSE — GAME DESIGN, TECHNICAL REFERENCE & DEVELOPMENT ROADMAP
-  Last updated: 2026-05-29  (session 23 — Phase 16 Interface Refactor, Event Bus, Code Style)
+  Last updated: 2026-05-30  (session 27 — Toon Shader + Outline + HP Bar ZTest Always Fix)
 ================================================================================
 
 
@@ -668,158 +668,99 @@ File: Assets/3.Scenes/DTGamePlay.unity
 ════════════════════════════════════════════════════════════════════════════════
 
   ╔══════════════════════════════════════════════════════════════════════════╗
-  ║  PHASE 0 — Cleanup & Grid Sync                          [✅ DONE]        ║
+  ║  PHASE 0 — Cleanup & Grid Sync                          [✅ DONE s1]     ║
   ╚══════════════════════════════════════════════════════════════════════════╝
-    ✅ CONFIG_GRID_CELL_SIZE = 2f synced
-    ✅ Grid runtime dynamic từ Plane bounds
-    ✅ Camera + plane + grid offset match
+    CONFIG_GRID_CELL_SIZE=2f synced; grid runtime từ Plane bounds; camera/plane/offset khớp.
 
   ─────────────────────────────────────────────────────────────────────────────
 
   ╔══════════════════════════════════════════════════════════════════════════╗
-  ║  PHASE 1 — Bug Fixes + A* Refactor                      [✅ DONE]        ║
+  ║  PHASE 1 — Bug Fixes + A* Refactor                      [✅ DONE s1]    ║
   ╚══════════════════════════════════════════════════════════════════════════╝
-    ✅ 5 bugs fixed (A* heuristic, ComputePath, spawn delay, LookRotation,
-       InitEnemyPath round-trip)
+    5 bugs fixed: A* heuristic, ComputePath, spawn delay, LookRotation, InitEnemyPath.
 
   ─────────────────────────────────────────────────────────────────────────────
 
   ╔══════════════════════════════════════════════════════════════════════════╗
-  ║  PHASE 2 — Multi-path Foundation                        [✅ DONE]        ║
+  ║  PHASE 2 — Multi-path Foundation                        [✅ DONE s2]    ║
   ╚══════════════════════════════════════════════════════════════════════════╝
-    ✅ Random waypoints per Y-zone, 3 corridors
+    Random waypoints per Y-zone; 3 corridors gen 1 lần lúc start.
 
   ─────────────────────────────────────────────────────────────────────────────
 
   ╔══════════════════════════════════════════════════════════════════════════╗
-  ║  PHASE 3 — Wave System + Random Path per Wave           [✅ DONE]        ║
+  ║  PHASE 3 — Wave System + Random Path per Wave           [✅ DONE s3]    ║
   ╚══════════════════════════════════════════════════════════════════════════╝
-    ✅ 10 waves, random corridor per wave, 5 enemies stagger 2s
-    ✅ CancellationToken added (session 8) — không còn exception khi scene unload
+    10 waves, random corridor per wave, 5 enemies stagger 2s; CancellationToken (s8).
 
   ─────────────────────────────────────────────────────────────────────────────
 
   ╔══════════════════════════════════════════════════════════════════════════╗
-  ║  PHASE 3.5 — Obstacles Decoration                       [✅ DONE]        ║
+  ║  PHASE 3.5 — Obstacles Decoration                       [✅ DONE s3/s20]║
   ╚══════════════════════════════════════════════════════════════════════════╝
-    ✅ 12 obstacles, tránh path/exclusion zone, 5 prefab variants
-    ✅ Multi-cell footprint: auto-computed radius per prefab from Renderer bounds [s20]
-    ✅ Correct footprint blocking: SetOccupiedCell trên toàn bộ footprint cells [s20]
-    ✅ TowerZone tiles NOT spawned on obstacle footprint cells [s20]
+    12 obstacles, 5 prefab variants; multi-cell footprint auto-computed từ Renderer bounds.
+    SetOccupiedCell trên toàn bộ footprint; TowerZone không spawn trên footprint cells.
 
   ─────────────────────────────────────────────────────────────────────────────
 
   ╔══════════════════════════════════════════════════════════════════════════╗
-  ║  PHASE 3.6 — Camera + Environment Tuning (Perspective)  [✅ DONE]        ║
+  ║  PHASE 3.6 — Camera + Environment Tuning                [✅ DONE s3]    ║
   ╚══════════════════════════════════════════════════════════════════════════╝
-    ✅ EnvironmentContractor, TopEdgePusher, PullBack
-    ✅ Mountains Z=130-140
+    EnvironmentContractor; mountains Z=130-140; buildings/cliffs pulled in.
 
   ─────────────────────────────────────────────────────────────────────────────
 
   ╔══════════════════════════════════════════════════════════════════════════╗
-  ║  PHASE 3.7 — Camera Orthographic + Grid Resize          [✅ DONE]        ║
+  ║  PHASE 3.7 — Camera Orthographic + Grid Resize          [✅ DONE s4]    ║
   ╚══════════════════════════════════════════════════════════════════════════╝
-    ✅ Perspective → Orthographic, orthoSize=14
-    ✅ Pitch 48°→30°, Y=22→15
-    ✅ Grid 20×12 cellSize=2 → 21×12 cellSize=2, plane 42×24
-    ✅ Enemy scale 1.5, tower ghost scale 1.0, path tile scale dynamic 0.2
+    Perspective→Ortho (size=14), pitch 30°, Y=15; grid 21×12 cellSize=2, plane 42×24.
 
   ─────────────────────────────────────────────────────────────────────────────
 
   ╔══════════════════════════════════════════════════════════════════════════╗
-  ║  PHASE 4 — Tower Highlight + Arknights Placement        [✅ DONE]        ║
+  ║  PHASE 4 — Tower Highlight + Arknights Placement        [✅ DONE s4/s8] ║
   ╚══════════════════════════════════════════════════════════════════════════╝
-    ✅ 2-phase placement: drag→cell (P1), swipe→direction (P2), lift=place
-    ✅ m_IsDirectionSelected + m_LastSnappedPos
-    ✅ Mobile: lift chỉ place khi direction đã chọn
-    ✅ Desktop: LMB/RMB; direction auto-follow chuột
-    ✅ ValidTowerCells highlight, obstacles SetOccupiedCell
-
-    ── Direction Selection (Session 8 rewrite) ──────────────────────────────
-    Platform-split logic trong UpdateGhostTransform():
-
-    MOBILE (#if UNITY_ANDROID && !UNITY_EDITOR):
-      Phase 1 — ghost follows ngón tay (snap to grid)
-      Phase 2 — ngón tay > 35% cellSize (0.7f) từ cell center:
-        → ghost ĐÓNG BĂNG tại ô hiện tại
-        → direction lock, tính từ frozen cell center (không phải snapped pos)
-        → direction update theo quadrant khi ngón tay tiếp tục di chuyển
-        → lift ngón tay → place (chỉ khi m_IsDirectionSelected=true)
-      Reset: place hoặc cancel
-
-    DESKTOP / EDITOR (#else):
-      Ghost luôn follow chuột tự do (không đóng băng)
-      Direction luôn follow chuột — cập nhật ngay khi sqrMagnitude > 0.01f
-      Không cần threshold — tower luôn quay về phía chuột đang ở
-      LMB đặt bất kỳ lúc nào, RMB cancel
-
-    Key fix: threshold cũ (1.0f = cellSize/2) = snap boundary → direction
-             không bao giờ lock được trên mobile (reset ngay khi threshold hit).
-             Mới: threshold=0.35f×cellSize=0.7f < snap boundary 1.0f → OK
+    2-phase placement: drag→cell (P1), swipe>35%cellSize→direction (P2), lift=place.
+    Mobile: ghost đóng băng tại ô; direction từ frozen cell; threshold=0.35×cellSize.
+    Desktop: ghost follow chuột tự do; direction luôn update; LMB place, RMB cancel.
+    ValidTowerCells highlight; obstacles SetOccupiedCell.
 
   ─────────────────────────────────────────────────────────────────────────────
 
   ╔══════════════════════════════════════════════════════════════════════════╗
-  ║  PHASE 4.5 — Gate Start / Gate End                      [✅ DONE]        ║
+  ║  PHASE 4.5 — Gate Start / Gate End                      [✅ DONE s5]    ║
   ╚══════════════════════════════════════════════════════════════════════════╝
-    ✅ TDPlayerLifeControl: LoseLife(), onLifeChanged, onGameOver
-    ✅ TDControl: TDPlayerLifeControl.api registered
-    ✅ TDEnemyView: m_HasReachedEnd guard + LoseLife + Destroy khi hết path
-    ✅ TDEnemyPathMainControl: onWaveStart event (fires trước mỗi wave)
-    ✅ TDEnemyPathMainView: SpawnGates() + OnWaveStart → PlaySpawnEffect
-    ✅ TDGameplayMainView: Initialize life, onLifeChanged→text+flash, onGameOver
-    ✅ TDGateView.cs: PlaySpawnEffect() trên GateStart
-    ✅ TDGateEndView.cs: trigger visual + life text update
-
-    ✅ GateStart.prefab (Phase 4.5 original):
-       SM_Gen_Env_Cliff_Arch_01 (scale 0.35) + cyan glow + green arrow
-       + SpawnParticles (cyan burst) + TDGateView (m_SpawnEffect assigned)
-       → Redesigned in Phase 4.6 (see below)
-
-    ✅ GateEnd.prefab (Phase 4.5 original):
-       TowerRoofedKeep (scale 1.0) + red/orange glow
-       + BoxCollider trigger (2,4,2) + HitParticles + CoreGlow (loop)
-       + LifeText TextMeshPro "♥ 20" + TDGateEndView (fields assigned)
-       → Redesigned in Phase 4.6 (see below)
-
-    ✅  Inspector assignments hoàn tất:
-       → TDEnemyPathMainView: m_GateStartPrefab, m_GateEndPrefab
-       → TDGameplayMainView:  m_LifeText (TextMeshProUGUI), m_ScreenFlash (Image)
+    TDPlayerLifeControl: LoseLife/onGameOver; SpawnGates() runtime; onWaveStart→PlaySpawnEffect.
+    TDEnemyView: m_HasReachedEnd guard; onLifeChanged→HUD text+flash.
+    Inspector: m_GateStartPrefab, m_GateEndPrefab, m_LifeText, m_ScreenFlash wired ✅.
 
   ─────────────────────────────────────────────────────────────────────────────
 
   ╔══════════════════════════════════════════════════════════════════════════╗
-  ║  PHASE 4.6 — Gate Visual Redesign (Session 6)           [✅ DONE]        ║
+  ║  PHASE 4.6 — Gate Visual Redesign                       [✅ DONE s6]    ║
   ╚══════════════════════════════════════════════════════════════════════════╝
-    Goal: Arknights-style 3D wireframe box with visible depth from 30° ortho cam.
-    Previous design (Arch prop + flat glow quad) lacked 3D depth cues.
+    Arknights-style 3D wireframe box: 4 posts + 4 bottom/top rings + 5 transparent faces.
+    GateStart = red scheme; GateEnd = blue scheme + BoxCollider trigger + LifeText.
+    7 URP/Unlit materials (Gates/); _EMISSION disabled (emission overrides alpha in URP).
+    Box raised +0.13u; path tiles skip gate cells (GetRange 1..count-2).
 
-    ✅ GateStart.prefab rebuilt — 3D wireframe box, red color scheme:
-       GroundGlow (flat quad) + 4 corner posts + 4 bottom ring bars
-       + 4 top ring bars + 5 transparent face fills + direction Arrow
-       + SpawnParticles (red burst) + TDGateView (m_SpawnEffect preserved)
+  ─────────────────────────────────────────────────────────────────────────────
 
-    ✅ GateEnd.prefab rebuilt — 3D wireframe box, blue color scheme:
-       HQProp (TowerCrystals) + GroundGlow + 12 edge bars + 5 face fills
-       + CoreGlow (loop) + HitParticles (burst) + LifeText (face-camera)
-       + BoxCollider trigger (2,4,2) + TDGateEndView (fields preserved)
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 3.9 — PathTile Visual Restore (Session 25)       [✅ DONE]        ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+    Goal: Khôi phục visual path tile đã bị bỏ — dùng PathTile.prefab thay Plane.prefab cũ.
+    Mỗi tile tự scale theo size thực từ TDGridMainModel (derive từ GameMapVisualize).
 
-    ✅ 7 new URP/Unlit materials — Assets/1.Assets/Resources/Materials/Gates/
-       GS_Edge, GS_Face, GS_Glow, GS_Arrow (red)
-       GE_Edge, GE_Face, GE_Glow (blue)
-       All: _EMISSION disabled, _EmissionColor=black (emission breaks alpha in URP)
-
-    ✅ Box raised +0.13u above ground (path tiles at y=0.1 → no overlap)
-       GateRaiseBox.cs Editor script applied then self-deleted
-
-    ✅ Path tiles skip gate cells:
-       TDEnemyPathView.VisualizeAllPaths → path.GetRange(1, path.Count-2)
-       → cell index 0 (GateStart) and last (GateEnd) excluded from tile rendering
-
-    ✅ URP transparency rules documented:
-       • _EMISSION keyword completely overrides alpha — must disable on all mats
-       • Opaque materials (_Surface=0) ignore alpha — must use _Surface=1 (Transparent)
+    ✅ PREFAB_PATH: "Plane" → "PathTile" (TDConstant.cs)
+    ✅ TDEnemyPathView.VisualizeAllPaths(): thêm spawn PathTile.prefab tại mỗi path cell
+       tileScale = TDGridMainModel.api.cellSize / 10f  (Plane native 10u → 2u per cell)
+       y = CONFIG_PATH_OFFSET_Y (0.1f); parent = view transform
+       HashSet<Vector2Int> deduplicate 3 paths overlapping; skip gate cells (i=0, i=last)
+       Tile tracked trong m_InstantiatedTiles → ClearPreviousPath() dọn sạch
+    ✅ PathTile.prefab material: guid 03eccdb9 (missing) → Stone_mobile.mat (guid 094c8356)
+       Stone_mobile: URP Lit, Opaque, _BaseColor=(1,1,1) full brightness, có normal map,
+       cùng texture với Stone_normal nhưng sáng hơn → nổi trên nền CityGround tối
 
   ─────────────────────────────────────────────────────────────────────────────
 
@@ -872,118 +813,30 @@ File: Assets/3.Scenes/DTGamePlay.unity
   ─────────────────────────────────────────────────────────────────────────────
 
   ╔══════════════════════════════════════════════════════════════════════════╗
-  ║  PHASE 6.1 — Tower Attack System Redesign (Session 7)   [✅ DONE]        ║
+  ║  PHASE 6.1 — Tower Attack System Redesign               [✅ DONE s7]    ║
   ╚══════════════════════════════════════════════════════════════════════════╝
-    Goal: Fix bug pool sai type, thay trigger detection bằng Registry+tick scan.
-
-    ✅ Bug A fix — Bullet pool global state:
-       TDFlyweightBulletFactoryModel: xóa m_TowerType global, 1 pool lazy per TowerType
-       TDFlyweightTowerDataSettings:  xóa m_Prefab/SetPrefab, thêm GetPrefab(type) pure lookup
-       TDBulletsView:                 thêm OwnerType property để ReturnToPool đúng pool
-       TDTowerBehaviorSubControl:     xóa SetupSubControl(), Attack() dùng Spawn(type)
-       TDTowerFactoryView:            xóa SetupSubControl() call
-       TDTowerBehaviorModel:          xóa dead settings property
-       TowerData.prefab → bulletPrefab [FormerlySerializedAs]
-
-    ✅ Enemy Detection redesign — Registry + Tick-based (Hướng 3):
-       TDEnemyRegistry (NEW):  singleton List<TDEnemyView>, Register/Unregister/GetAll
-       TDEnemyView:            + PathProgress = currentIndex/totalCount (0→1)
-                                 Register(this) trong Initialize, Unregister trong OnDestroy
-       TDTowerWeaponView:      tick scan mỗi 0.2s từ Registry
-                                 pick enemy PathProgress cao nhất (gần GateEnd nhất)
-                                 IsInRange check mỗi frame → tự clear target khi out of range
-       ITowerRangeDTO:         + DetectionRadius property (implemented bởi cả 3 DTO)
-       TDEnemyDetector.cs:     DELETED — không còn cần trigger collider trên prefab
-
-    ✅ Lợi ích khi scale:
-       Wave nhiều enemy: O(n) registry iteration × 5 scan/s (không phụ thuộc framerate)
-       Tower mới: chỉ cần TowerType enum + SO entry + model data, không cần setup prefab trigger
-       Multi-tower correct: mỗi tower độc lập, pool không bao giờ cross-contaminate
+    Bullet pool: xóa global m_TowerType, 1 pool lazy per TowerType; TDBulletsView.OwnerType.
+    Enemy detection: TDEnemyRegistry (singleton list) + tick scan 0.2s; PathProgress priority.
+    TDEnemyDetector.cs DELETED; DetectionRadius property thêm vào ITowerRangeDTO.
 
   ─────────────────────────────────────────────────────────────────────────────
 
   ╔══════════════════════════════════════════════════════════════════════════╗
-  ║  PHASE 6.2 — Tower Config SO Refactor (Session 8)       [✅ DONE]        ║
+  ║  PHASE 6.2 — Tower Config SO Refactor                   [✅ DONE s8/s11]║
   ╚══════════════════════════════════════════════════════════════════════════╝
-    Goal: Xóa hardcode damage/attackSpeed/range trong C# switch → đưa vào SO.
-          Thêm tower mới chỉ cần 1 enum line + 1 SO entry, không đụng code.
-
-    ✅ RangeType enum thêm vào Enums.cs: Area | HorizontalCone | VerticalCone
-       ⚠️ REMOVED session 11 (Phase 10) — replaced bởi rangeOffsets approach
-
-    ✅ TowerData struct (TDFlyweightTowerDataSettings.cs) — session 8:
-       + damage       : float
-       + attackSpeed  : float
-       + rangeType    : RangeType  ← REMOVED session 11
-       + rangeValue   : int        ← REMOVED session 11
-       → session 11: REPLACED bởi rangeOffsets : Vector2Int[]
-       GetData(type) pure lookup; GetPrefab/GetCost delegate sang GetData
-
-    ✅ TDTowerBehaviorModel đọc từ SO (bỏ 3 switch hardcode):
-       GetDamage()      → Setting.GetData(type).damage
-       GetAttackSpeed() → Setting.GetData(type).attackSpeed
-       GetTowerRange()  [session 8]  → rangeType switch → new [Area/Horizontal/Vertical]RangeDTO(rangeValue)
-       GetTowerRange()  [session 11] → new TDOffsetRangeDTO(data?.rangeOffsets)  ← 1 dòng
-
-    ✅ SO Resources/Configs/Tower Bullet Config.asset filled (session 8 values, session 11 updated):
-       Cannon:    damage=5,  speed=3 | rangeOffsets: (1,0)(2,0)(3,0)
-       Catapult:  damage=20, speed=1 | rangeOffsets: (1,-1)(1,0)(1,1)(2,-1)(2,0)(2,1)
-       MissileG02:damage=10, speed=1 | rangeOffsets: (1,0)(2,0)(3,0)(4,0)
-       MissileG03:damage=20, speed=1 | rangeOffsets: (1,-1..1)(2,-2..2)(3,-1..1) — 11 cells
-       Mortar:    damage=15, speed=2 | rangeOffsets: (2,-1..1)(3,-1..1)(4,0) — 7 cells
-
-    ✅ SO duplicate xóa: Assets/2.Scripts/Model/Config/SO/Tower Bullet Config.asset
-       DTLoadFirst.unity GUID updated → trỏ đúng Resources/Configs/ file
-
-    ✅ TDVerticalRangeDTO fix (copy-paste bug từ session 7):
-       Cũ: forward cone dot > 0.9 (giống hệt HorizontalCone — sai)
-       Mới: Mathf.Abs(Dot(right, toEnemy)) > 0.7f
-       → Catapult tấn công theo trục NGANG (vuông góc forward) — bao phủ trái+phải
+    TowerData SO: damage, attackSpeed, rangeOffsets (Vector2Int[]) per tower.
+    GetTowerRange() = new TDOffsetRangeDTO(rangeOffsets) — không còn switch.
+    SO duplicate xóa; DTLoadFirst.unity GUID fixed. TDVerticalRangeDTO copyPaste bug fixed.
 
   ─────────────────────────────────────────────────────────────────────────────
 
   ─────────────────────────────────────────────────────────────────────────────
 
   ╔══════════════════════════════════════════════════════════════════════════╗
-  ║  PHASE 6.3 — HUD Scale Fix for 1920×1080 (Session 9)   [✅ DONE]        ║
+  ║  PHASE 6.3 — HUD Scale Fix for 1920×1080                [✅ DONE s9]   ║
   ╚══════════════════════════════════════════════════════════════════════════╝
-    Goal: Sau khi đổi CanvasScaler từ 1125×750 → 1920×1080, HUD quá nhỏ.
-          Scale tất cả elements ×1.5 (= 1080/750) để khôi phục apparent size.
-
-    ── Vấn đề gốc ────────────────────────────────────────────────────────────
-    TowerMainView có HorizontalLayoutGroup (childControlWidth/Height=True).
-    → LayoutElement trên mỗi TowerHolder mới là nguồn kích thước thực tế,
-      không phải RectTransform.sizeDelta trực tiếp.
-    → Manual anchoredPosition set bị ignore hoàn toàn bởi HLG.
-
-    ── Thay đổi (×1.5 so với giá trị cũ) ────────────────────────────────────
-    TxtLifePoint (♥ 20):
-      sizeDelta       : (200, 50)  → (300, 75)
-      anchoredPosition: (0, -36)   → (0, -54)
-      fontSize        : 36         → 54
-
-    TowerMainView container:
-      sizeDelta       : (686, 162) → (1029, 243)
-      anchoredPosition: (20, 20)   → (30, 30)
-
-    TowerMainView / HorizontalLayoutGroup:
-      padding (L/R/T/B): 6        → 9
-      spacing           : 6       → 9
-
-    TowerHolder ×5 (via LayoutElement):
-      minWidth / preferredWidth  : 130 → 195
-      minHeight / preferredHeight: 150 → 225
-
-    TowerHolder inner children (×5, mỗi holder):
-      InnerBox  : sizeDelta (82, 90)  → (123, 135)  | pos (0, -8)   → (0, -12)
-      Tower     : sizeDelta (96, 96)  → (144, 144)  | pos (0,  4)   → (0,   6)
-      CostBg    : sizeDelta (72, 36)  → (108,  54)  | pos (-10, 10) → (-15, 15)
-      Cost (TMP): fontSize ×1.5
-
-    ── Ghi chú kỹ thuật ──────────────────────────────────────────────────────
-    - Với HLG childControlWidth/Height=True: phải set LayoutElement.preferredWidth/
-      minWidth (không set RectTransform.sizeDelta trực tiếp — bị override).
-    - Scale ratio 1.5 ≈ 1080/750 (height-based) vì CanvasScaler Match=Height (slider=1).
+    CanvasScaler 1125×750→1920×1080; toàn bộ HUD elements scale ×1.5 (=1080/750).
+    Key: HLG childControlWidth=True → phải set LayoutElement.preferredWidth, không RectTransform.
 
   ─────────────────────────────────────────────────────────────────────────────
 
@@ -1061,690 +914,146 @@ File: Assets/3.Scenes/DTGamePlay.unity
   ─────────────────────────────────────────────────────────────────────────────
 
   ╔══════════════════════════════════════════════════════════════════════════╗
-  ║  PHASE 7 — Ammo + Combat (Session 12)                   [✅ DONE]         ║
+  ║  PHASE 7 — Ammo + Combat                                [✅ DONE s12]   ║
   ╚══════════════════════════════════════════════════════════════════════════╝
-
-  ── AttackType System ────────────────────────────────────────────────────────
-    AttackType enum (Enums.cs):
-      Single   — 1 projectile homing vào 1 target (PathProgress cao nhất)
-      Multiple — N projectiles homing vào top N targets đồng thời (N = maxTargets [2..5])
-      AOE      — 1 projectile bay đến target pos → OnImpact → splash tất cả enemy trong rangeOffsets
-
-    TowerData SO thêm:
-      attackType : AttackType
-      maxTargets : int  (Clamp 2..5, chỉ đọc khi attackType = Multiple)
-
-    Phân công hiện tại (set trong SO Inspector):
-      Cannon     → Single
-      Catapult   → Multiple, maxTargets=3
-      MissileG02 → Single
-      MissileG03 → AOE
-      Mortar     → AOE
-
-  ── TDAttackVFX (thay TDBulletsView) ─────────────────────────────────────────
-    Pool: TDFlyweightBulletFactoryModel pool TDAttackVFX thay vì TDBulletsView
-          Auto-AddComponent<TDAttackVFX> nếu prefab chưa có → dùng được bulletPrefab cũ
-
-    Init(target, damage, attackType, rangeDTO, towerRotation):
-      m_TargetPos snapshot từ target.position ban đầu
-
-    Update() mỗi frame:
-      Nếu target còn sống → update m_TargetPos (homing)
-      Nếu target chết     → giữ m_TargetPos cuối cùng (fly-to-last-known)
-      MoveTowards(m_TargetPos, 15f * dt)
-      Khi dist < 0.25f → OnImpact()
-
-    OnImpact():
-      Single/Multiple → m_Target?.TakeDamage(damage)   (null-safe: miss nếu target chết)
-      AOE             → ApplyAOEDamage()
-        hitCell = WorldToCell(transform.position)
-        cells   = rangeDTO.GetCellsInRange(hitCell, towerRotation)
-        Copy registry list → foreach enemy: if WorldToCell(enemy.pos) in cellSet → TakeDamage
-      → ReturnToPool(this)
-
-    Không có pool leak: VFX luôn arrive (target chết → fly đến vị trí cuối)
-
-  ── ScanForTargets (TDTowerWeaponView) ───────────────────────────────────────
-    m_Targets: List<TDEnemyView> (thay m_Target: Transform)
-    m_MaxTargets: cache từ SO khi Init()
-      → Single/AOE: 1; Multiple: maxTargets
-
-    ScanForTargets() [mỗi 0.2s]:
-      Collect in-range enemies → Sort by PathProgress giảm dần → take top m_MaxTargets
-
-    Update() validate per frame:
-      RemoveAll từ m_Targets nếu null hoặc IsInRange = false
-      Nếu có targets → RotateTowardsPrimary + AttackTargets(list, rangeDTO, towerRotation)
-
-  ── TowerDataDrawer cập nhật ─────────────────────────────────────────────────
-    Thêm DrawField("attackType") luôn hiện
-    DrawField("maxTargets") chỉ hiện khi attackType == Multiple (enumValueIndex == 1)
-    GetPropertyHeight tính đúng số dòng: 7 fields (+ 1 nếu Multiple)
-
-  ── Còn lại (defer đến khi có VFX package) ───────────────────────────────────
-    ⬜ Swap bulletPrefab → VFX prefab per tower (chỉ đổi SO, không đụng code)
-    ⬜ Mortar arc trajectory visual (logic OnImpact giữ nguyên)
-    ⬜ Beam effect cho linear range tower tương lai
+    AttackType: Single (1 target homing) / Multiple (top N) / AOE (splash rangeOffsets).
+    TDAttackVFX: homing → fly-to-last-known nếu target chết → OnImpact → ReturnToPool.
+    ScanForTargets: 0.2s tick, sort PathProgress desc, top N targets.
+    Cannon=Single; Catapult=Multiple(3); MissileG02=Single; MissileG03/Mortar=AOE.
+    ⬜ VFX prefab swap per tower (SO only, no code change needed)
 
   ─────────────────────────────────────────────────────────────────────────────
 
   ╔══════════════════════════════════════════════════════════════════════════╗
-  ║  PHASE 11 — Multi-Enemy Type + LevelConfig (Session 14) [✅ DONE]       ║
+  ║  PHASE 11 — Multi-Enemy Type + LevelConfig              [✅ DONE s14]   ║
   ╚══════════════════════════════════════════════════════════════════════════╝
-
-  ── Enemy Tiers ──────────────────────────────────────────────────────────────
-    ✅ EnemyType enum: Normal | Fast | Tank | Boss
-    ✅ Difficulty enum: Easy | Normal | Hard | Extreme | Nightmare
-    ✅ TDEnemyDataSettings SO: baseHP, baseSpeed, prefab per type
-    ✅ DifficultyRatioTable: % distribution + HP×/Speed× multiplier per difficulty
-
-  ── 4 Enemy Prefabs ──────────────────────────────────────────────────────────
-    ✅ Slime.prefab          → Normal (scale 1.5 baked, ~0.98u wide)
-    ✅ SwarmFast.prefab      → Fast   (scale 0.56 baked, ~0.74u wide — Swarm09PA)
-    ✅ TurtleTank.prefab     → Tank   (scale 0.74 baked, ~1.15u wide — TurtleShellPolyart)
-    ✅ DragonBoarBoss.prefab → Boss   (scale 0.32 baked, ~1.48u wide — GoldBoarPBR)
-    ✅ CONFIG_ENEMY_VISUAL_SCALE override removed — scale baked per prefab
-
-  ── LevelConfig + Wave Engine ─────────────────────────────────────────────────
-    ✅ LevelConfig SO fields: difficulty, totalEnemies, waveCount, waveInterval, spawnInterval
-       path1Ratio REMOVED — random corridor per wave đã đủ variety
-    ✅ 4 ObjectPool<TDEnemyView> — Dictionary<EnemyType, IObjectPool>
-    ✅ BuildWavePlans(): regular wave + boss event wave (2.5× enemy count)
-    ✅ Boss spawn last trong boss wave (dramatic effect)
-    ✅ Boss distribution: ceil(W×k/B)-1 — spacing đều, last boss = last wave
-    ✅ GetBossParams per difficulty:
-         Easy/Normal: 1 boss wave, ×2.0
-         Hard:        2 boss waves, ×2.5
-         Extreme:     3 boss waves, ×2.5 (waveCount≥15, totalEnemies≥75)
-         Nightmare:   5 boss waves, 2 boss/wave, ×2.5
-
-  ── Inspector Assignments ─────────────────────────────────────────────────────
-    ✅ TDEnemyPathMainView.m_EnemyDataSettings  = Enemy Data Config.asset
-    ✅ TDEnemyPathMainView.m_LevelConfigSettings = Level Config.asset
-    ✅ Enemy Data Config.asset: 4 entries, tất cả prefab assigned
-    ✅ Level Config.asset: Level 0 — Easy, 30 enemy, 5 wave, 10s interval
-
-  ── Còn lại (defer Phase 11+) ────────────────────────────────────────────────
-    ⬜ DEF / RES stats (physical/arts resistance)
-    ⬜ Air Drone tier (DragonSoulEaterPBR — flying)
-    ⬜ BeholderPBR — Elite/Boss wave 2 tier
-    ✅ Animation per enemy type → DONE Phase 13 (session 16)
+    4 EnemyType: Normal(Slime s=1.5), Fast(SwarmFast s=0.56), Tank(TurtleTank s=0.74), Boss(DragonBoar s=0.32).
+    LevelConfig SO: difficulty, totalEnemies, waveCount, waveInterval, spawnInterval.
+    BuildWavePlans(): regular wave + boss event wave 2.5×; boss spawn last; ceil(W×k/B)-1 distribution.
+    4 ObjectPool per EnemyType; DifficultyRatioTable (HP×/Speed× multiplier).
+    ⬜ DEF/RES stats; Air Drone tier; BeholderPBR Elite
 
   ─────────────────────────────────────────────────────────────────────────────
 
   ╔══════════════════════════════════════════════════════════════════════════╗
-  ║  PHASE 12 — Tower Range Visualization (Session 15)      [✅ DONE]        ║
+  ║  PHASE 12 — Tower Range Visualization                   [✅ DONE s15]   ║
   ╚══════════════════════════════════════════════════════════════════════════╝
-
-  Goal: Hiển thị ô range của tower khi user đang giữ ghost tower để đặt.
-
-  ── TDTowerMainControl ────────────────────────────────────────────────────────
-    ✅ onGetTowerName: Action<string> → Action<string, TowerType>
-       (cần pass TowerType để lookup rangeOffsets từ SO)
-    ✅ k_TowerDefs[]: static readonly (name, TowerType) tuple lookup table
-       thay thế switch statement — thêm tower mới chỉ cần thêm 1 entry
-    ✅ OnSelectTowerHolder(index): invoke onGetTowerName(name, type)
-
-  ── TDTowerMainView ────────────────────────────────────────────────────────
-    ✅ [SerializeField] m_RangeHighlightPrefab: GameObject
-       → assigned RangeHighlight.prefab trong Inspector (session 15)
-    ✅ m_CurrentTowerType: TowerType — lưu khi OnCreateTower() gọi
-    ✅ m_RangeHighlightTiles: List<GameObject> — lazy-grow pool, SetActive on/off
-    ✅ m_LastRangeCell, m_LastRangeRotIndex — change detection, skip nếu không đổi
-
-    RefreshRangeHighlights() [gọi mỗi frame sau UpdateGhostTransform]:
-      - Skip nếu m_CurrentTower == null || prefab == null
-      - WorldToCell(ghost.position) → so sánh với m_LastRangeCell
-      - Skip nếu cell + rotIndex không đổi (O(1) guard)
-      - GetData(m_CurrentTowerType) → new TDOffsetRangeDTO(rangeOffsets)
-      - GetCellsInRange(cell, ghost.rotation) → List<Vector2Int>
-      - Lazy grow pool: Instantiate nếu cells.Count > m_RangeHighlightTiles.Count
-      - Position tiles tại y=0.12f (trên path tile y=0.1f → không bị che)
-      - SetActive(true/false) cho từng tile
-
-    HideRangeHighlights(): deactivate all, reset tracking vars
-    → gọi trong CancelPlacement() + OnPlaceTowerSuccess()
-
-  ── Render layer ordering ─────────────────────────────────────────────────────
-    Path tile (Plane.prefab):      y=0.10f (CONFIG_PATH_OFFSET_Y), renderQueue=3000
-    Placement highlight:           y=0.06f
-    RangeHighlight:                y=0.12f  ← trên path tile → transparent queue sort đúng
-    RangeHighlight material:       URP/Unlit, Transparent, renderQueue=3000, ZTest=Disabled
-    → Trong transparent queue: Y cao hơn → closer to camera → render sau → on top ✓
-
-  ── Inspector Assignments ─────────────────────────────────────────────────────
-    ✅ TDTowerMainView.m_RangeHighlightPrefab = RangeHighlight.prefab
-       (Assets/1.Assets/Resources/Prefabs/RangeHighlight.prefab)
+    RefreshRangeHighlights(): lazy tile pool, GetCellsInRange per frame, SetActive.
+    y=0.12f (>path tile 0.10f) → transparent queue sort đúng → on top ✓.
+    HideRangeHighlights() khi cancel/place. Inspector: m_RangeHighlightPrefab assigned ✅.
 
   ─────────────────────────────────────────────────────────────────────────────
 
   ╔══════════════════════════════════════════════════════════════════════════╗
-  ║  PHASE 13 — Enemy Animation System (Session 16)         [✅ DONE]        ║
+  ║  PHASE 13 — Enemy Animation System                      [✅ DONE s16]   ║
   ╚══════════════════════════════════════════════════════════════════════════╝
-
-  Goal: Wiring animation vào 4 enemy prefab — Walk, GetHit, Die.
-
-  ── Animator Controller Analysis ──────────────────────────────────────────────
-    Slime       (Normal): Controller "Slime"      — 0 params, WalkFWD auto-play on Enable
-    SwarmFast   (Fast):   Controller "Swarm09"    — 0 params, demo reel (ExitTime only)
-    TurtleTank  (Tank):   Controller "TurtleShell"— 0 params, demo reel (ExitTime only)
-    DragonBoarBoss (Boss): Controller "DragonBoarCTRL" — Trigger params: Walk/Run/BasicAttack/GetHit/Die/Scream
-
-  ── AnimatorController mới (SwarmFast & TurtleTank) ─────────────────────────
-    Lý do tạo mới: controller gốc (asset store) là demo reel không có params
-    → không code được SetTrigger. Tạo mới để tránh đụng chạm asset gốc.
-
-    Assets/1.Assets/Resources/AnimatorControllers/SwarmFast-Game.controller
-      States: Idle (default), Walk, GetHit, Die
-      Triggers: Walk, GetHit, Die
-      AnyState → Walk/GetHit/Die (Trigger, canTransitionToSelf=false, dur=0.1f)
-      Walk → Idle (ExitTime=1.0, dur=0.1f)
-      GetHit → Idle (ExitTime=1.0, dur=0.1f)
-      Clips: Swarm09_Idle, Swarm09_MoveFWD, Swarm09_GetHit, Swarm09_Die(0.63s,no-loop)
-
-    Assets/1.Assets/Resources/AnimatorControllers/TurtleTank-Game.controller
-      States: Idle (default), Walk, GetHit, Die
-      Triggers: Walk, GetHit, Die
-      Clips: IdleNormal, WalkFWD, GetHit, Die(2.0s,no-loop)
-
-    DragonBoarCTRL: parameter "Get Hit" → renamed "GetHit" (khớp với const)
-
-  ── TDEnemyView Animation Integration ────────────────────────────────────────
-    const string TRIGGER_WALK   = "Walk"
-    const string TRIGGER_GET_HIT = "GetHit"
-    const string TRIGGER_DIE    = "Die"
-    private Animator m_Animator   ← GetComponent<Animator>() trong Awake()
-    private float m_DieDuration   ← từ EnemyData.dieDuration, nhận qua Initialize()
-
-    Initialize(): m_Animator.Rebind() + Update(0) → reset từ pool state
-                  TriggerSafe(TRIGGER_WALK)
-    TakeDamage(): TriggerSafe(TRIGGER_GET_HIT) nếu chưa die
-    Die():        TriggerSafe(TRIGGER_DIE) → Coroutine(dieDuration) → PoolReturn()
-    TriggerSafe(): null-safe — bỏ qua nếu m_Animator == null
-
-  ── EnemyData.dieDuration (TDEnemyDataSettings) ──────────────────────────────
-    Slime (Normal):        0s    (không có Die animation — WalkFWD only controller)
-    SwarmFast (Fast):      0.63s (Swarm09_Die clip)
-    TurtleTank (Tank):     2.0s  (Die clip)
-    DragonBoarBoss (Boss): 1.33s (Die clip)
-    ⚠️ Cần set giá trị này trong Inspector: Enemy Data Config.asset
-
-  ── Prefab Setup ─────────────────────────────────────────────────────────────
-    Slime.prefab:          m_Animator = null (WalkFWD auto, không cần trigger)
-    SwarmFast.prefab:      TDEnemyView ADDED; m_Animator assigned; controller = SwarmFast-Game
-    TurtleTank.prefab:     TDEnemyView ADDED; m_Animator assigned; controller = TurtleTank-Game
-    DragonBoarBoss.prefab: TDEnemyView ADDED; m_Animator assigned; controller = DragonBoarCTRL
-                           triggerGetHit = "GetHit" (đã rename từ "Get Hit")
-
-  ── Inspector Assignments còn thiếu ─────────────────────────────────────────
-    ⚠️ Enemy Data Config.asset:
-       Normal.dieDuration = 0
-       Fast.dieDuration   = 0.63
-       Tank.dieDuration   = 2.0
-       Boss.dieDuration   = 1.33
+    TDEnemyView: const triggers Walk/GetHit/Die; m_Animator (Awake); Rebind+Update(0) on pool reuse.
+    SwarmFast-Game.controller + TurtleTank-Game.controller [NEW] — Trigger-based AnyState.
+    DragonBoarCTRL: "Get Hit"→"GetHit" renamed.
+    dieDuration: Slime=0, Fast=0.63s, Tank=2.0s, Boss=1.33s (set trong Enemy Data Config.asset).
 
   ─────────────────────────────────────────────────────────────────────────────
 
   ╔══════════════════════════════════════════════════════════════════════════╗
-  ║  PHASE 8 — Win/Lose Conditions + HUD           [⚠️ PARTIAL — UI stubs only] ║
+  ║  PHASE 8 — Win/Lose Conditions + HUD           [⚠️ PARTIAL s17-19]     ║
   ╚══════════════════════════════════════════════════════════════════════════╝
-
-  ── Trạng thái sau session 17+18+19 ──────────────────────────────────────────
-
-    ✅ HUD Top Bar (scene DTGamePlay.unity):
-         [Far-left]  BackButton    → QUIT → SceneManager.LoadScene(SCENE_LOAD_FIRST)
-         [Near-left] SettingButton → TODO Phase 9
-         [Center]    EnemyCount    → "{killed}/{total}" (TDGameStateControl)
-                     LifePoint     → "{lives}" (TDPlayerLifeControl), đỏ khi ≤ 5
-         [Far-right] SpeedButton   → toggle x1/x2 (TDSpeedControl)
-                                     SpeedIcon/Normal ↔ SpeedIcon/SpeedX2
-                     PauseButton   → TDPauseControl.Toggle()
-                     PausePanel    → SetActive(isPaused); ResumeButton → Resume()
-
-    ✅ Gold Counter (Bottom/Currency/TxtValue):
-         Passive: +1 gold mỗi 5 giây (CONFIG_GOLD_PASSIVE_RATE = 5f)
-         Kill reward: +data.goldReward mỗi khi enemy die (set trong SO)
-         Khởi điểm: 10 gold (CONFIG_PLAYER_STARTING_GOLD = 10)
-
-    ✅ Tower Bar (Bottom/TowerMainView):
-         SpendGold(cost) khi đặt tower thành công
-         TowerHolder disable khi gold < cost (RefreshHolderInteractability)
-         Sync ngay lúc init + mỗi khi onGoldChanged fire
-
-    ✅ Control layer DONE (session 18):
-         TDGoldControl.cs       — gold, passive income Tick(), SpendGold()
-         TDGameStateControl.cs  — OnEnemyRemoved (killed + escaped), IsGameEnded guard
-         TDSpeedControl.cs      — 1×/2× toggle, pause-aware
-
-    ✅ View layer DONE (session 18+19):
-         TDGameplayHUDView.cs   — gắn Canvas/SafeArea/Container (Inspector ✅)
-                                   cache qua transform.Find() + PATH_GAMEPLAY_HUD_xxx
-                                   PausePanel + ResumeButton wired
-                                   FlashScreen (child của Container) dùng Time.unscaledDeltaTime
-
-    ✅ Win/Lose logic DONE (session 19):
-         Victory: AllWavesSpawned && EnemyRemoved >= TotalEnemies
-                  IsGameEnded guard → không fire nhiều lần
-         Defeat:  TDPlayerLifeControl.onGameOver → OnGameOver() → TDGameStateControl.OnGameOver()
-                  IsGameEnded = true → Victory không fire sau khi thua
-         Enemy escape: ReturnToPool() khi reach end → cũng gọi OnEnemyRemoved()
-
-    ✅ Inspector DONE:
-         TDGameplayHUDView gắn vào Canvas/SafeArea/Container ✅
-         EnemyData.goldReward set trong Enemy Data Config.asset ✅
-
-    ✅ Material fix (session 19):
-         Stone_normal.mat: Transparent → Opaque, ZWrite=1, RenderQueue=-1
-         Lý do: path tile không cần alpha → transparent gây sorting conflict
-
-    ⬜ CÒN LẠI:
-         - VictoryPanel UI  (OnVictory stub đã có)
-         - GameOverPanel UI (OnGameOver stub đã có)
-
-    ── Quit Button ──────────────────────────────────────────────────────────
-      PATH: Canvas/SafeArea/Container/Header/HUDButtonRight/BackButton
-      Action: SceneManager.LoadScene(TDConstant.SCENE_LOAD_FIRST)
+    ✅ HUD Top Bar: BackButton(quit), EnemyCount, LifePoint(đỏ ≤5), SpeedToggle, PauseButton.
+    ✅ Gold: passive +1/5s; kill reward; SpendGold khi đặt; holder disable khi thiếu gold.
+    ✅ TDGoldControl, TDGameStateControl, TDSpeedControl, TDGameplayHUDView wired ✅.
+    ✅ Win/Lose: Victory=AllWavesSpawned+AllRemoved; Defeat=lives≤0; IsGameEnded guard.
+    ⬜ CÒN LẠI: VictoryPanel UI + GameOverPanel UI (stubs OnVictory/OnGameOver đã có).
 
   ─────────────────────────────────────────────────────────────────────────────
 
   ─────────────────────────────────────────────────────────────────────────────
 
   ╔══════════════════════════════════════════════════════════════════════════╗
-  ║  PHASE 8.5 — Pause System + Enemy Object Pool (Session 10) [✅ DONE]     ║
+  ║  PHASE 8.5 — Pause System + Enemy Object Pool           [✅ DONE s10]   ║
   ╚══════════════════════════════════════════════════════════════════════════╝
-
-  ── Pause System ─────────────────────────────────────────────────────────────
-    TDPauseControl.cs (NEW):
-      IsPaused: bool; Toggle(); Pause(); Resume(); onPauseChanged: Action<bool>
-      Pause()  → Time.timeScale = 0f → onPauseChanged(true)
-      Resume() → Time.timeScale = 1f → onPauseChanged(false)
-
-    PauseAwareDelay (trong TDEnemyPathMainControl):
-      Thay Task.Delay(ms, ct) bằng vòng lặp dùng Time.deltaTime accumulation
-      Time.deltaTime = 0 khi timeScale=0 → wave loop tự pause mà không cần
-      cancel/restart — wave timer và spawn delay đều dừng khi game pause
-
-    TDControl: TDPauseControl.api = new TDPauseControl() (đăng ký khi init)
-
-    TDGameplayMainView:
-      [SerializeField] m_PausePanel: GameObject
-      Subscribe onPauseChanged → SetActive(isPaused) trên m_PausePanel
-      OnPauseButtonClicked() / OnResumeButtonClicked() public methods
-
-    UI (Canvas/SafeArea — DTGamePlay.unity):
-      PauseButton: top-right 90×90, dark bg 75% alpha, text "II", anchor=(1,1)
-        onClick → TDPauseControl.api.Toggle()
-      PausePanel: full-screen dark overlay 65% alpha, SetActive(false) mặc định
-        TitleText: "PAUSED" fontSize=60 centered at (50%, 60%)
-        ResumeButton: 300×80 green, text "RESUME" centered at (50%, 45%)
-          onClick → TDPauseControl.api.Resume()
-
-  ── Enemy Object Pool ────────────────────────────────────────────────────────
-    Pattern: ObjectPool<TDEnemyView> — giống TDFlyweightBulletFactoryModel
-
-    TDEnemyPathMainControl:
-      InitEnemyPool(prefab, parent, capacity=20, maxSize=50)
-        createFunc: Instantiate + set localScale CONFIG_ENEMY_VISUAL_SCALE
-        actionOnGet: SetActive(true); actionOnRelease: SetActive(false)
-      ReturnEnemy(enemy): m_EnemyPool.Release(enemy)
-      SpawnWave: dùng m_EnemyPool.Get() thay Instantiate
-        → reset position/rotation trước khi Initialize(key)
-
-    TDEnemyPathMainView:
-      Initialize(): gọi TDEnemyPathMainControl.api.InitEnemyPool(m_Slime, transform)
-      OnGetAllPaths: StartWaveLoop(m_SpawnPos, ...) — bỏ param prefab
-
-    TDEnemyView:
-      m_HasBeenReturned: bool — guard tránh double-return
-      Initialize(key): reset tất cả state (health, pathIndex, hasReachedEnd, path)
-                        + subscribe event + register registry
-      ReturnToPool(): guard → unsubscribe → unregister → ReturnEnemy(this)
-      TakeDamage: gọi ReturnToPool() thay Destroy
-      Update (reach end): gọi ReturnToPool() thay Destroy
-      OnDestroy: chỉ cleanup nếu !m_HasBeenReturned (scene unload safety)
-
-  ── Ghi chú kỹ thuật ─────────────────────────────────────────────────────────
-    - Tower đặt lên path cells: giữ nguyên (sẽ dùng cho Operator mechanic như Arknights)
-    - PauseAwareDelay không dùng Task.Delay(real-time) mà dùng Task.Yield() loop
-      → tương thích với Unity main thread context, không cần lock hay semaphore
-    - Enemy pool collectionCheck=true → phát hiện double-release lúc dev
-    - StartWaveLoop signature đổi: bỏ TDEnemyView prefab param (pool tự quản lý)
+    TDPauseControl: Toggle/Pause/Resume → Time.timeScale 0/1; onPauseChanged event.
+    PauseAwareDelay: Task.Yield() loop + Time.deltaTime → tự pause khi timeScale=0.
+    Enemy Pool: ObjectPool<TDEnemyView> cap=20 maxSize=50; ReturnToPool thay Destroy.
+    m_HasBeenReturned guard tránh double-return khi Die + reach-end đồng thời.
 
   ─────────────────────────────────────────────────────────────────────────────
 
   ╔══════════════════════════════════════════════════════════════════════════╗
-  ║  PHASE 14 — Operator System (Session 21 + 22 refactor)  [✅ DONE]         ║
+  ║  PHASE 14 — Operator System                             [✅ DONE s21/22]║
   ╚══════════════════════════════════════════════════════════════════════════╝
-
-  Concept: Arknights-style path guard — đặt lên PATH cells, chặn enemy,
-           bidirectional combat (operator tấn công & nhận damage từ enemy),
-           có HP riêng, chết khi HP về 0 → ForceUnblock tất cả enemy bị chặn.
-
-  Session 21: MVP (TDMeleeRegistry, không HP, bullet-based)
-  Session 22: Refactor → TDOperatorRegistry + TDOperatorView với HP system,
-              enemy phản công operator, ForceUnblock khi operator chết,
-              TDFlyweightOperatorDataSettings SO riêng, OperatorKnight prefab.
-
-  ── Kiến trúc ────────────────────────────────────────────────────────────────
-    TDOperatorRegistry (singleton):
-      m_ValidPathCells: HashSet<Vector2Int> — path cells (không gồm gate)
-      m_Operators: Dictionary<Vector2Int, (blockCapacity, blockCount, TDOperatorView)>
-      m_BlockedEnemies: Dictionary<Vector2Int, List<TDEnemyView>>
-      RegisterPathCell(cell)           — gọi từ TDEnemyPathView.VisualizeAllPaths
-      RegisterOperator(cell, blockCount) + RegisterOperatorView(cell, view)
-      CanBlock(cell): blockCount < blockCapacity && operator tồn tại tại cell
-      OnEnemyBlocked(cell, enemy)      — thêm vào blocked list
-      GetBlockedEnemies(cell): List<TDEnemyView>
-      GetOperatorView(cell): TDOperatorView
-      UnregisterOperator(cell) → ForceUnblock() all enemies → m_CurrentPathIndex++
-
-    TDEnemyPathView.VisualizeAllPaths:
-      Gọi TDOperatorRegistry.RegisterPathCell cho mỗi non-gate cell (i>0, i<last)
-      HashSet đảm bảo không đăng ký trùng khi 3 paths share cells
-
-    TDEnemyView.Update:
-      Khi arrive tại waypoint → check TDOperatorRegistry.CanBlock(arrivedCell)
-      YES → m_IsBlocked=true, snap to cell center, OnEnemyBlocked(cell, this)
-      → Update returns early khi m_IsBlocked
-      Every frame blocked → attackTimer (1/attackSpeed); khi timer hit:
-        → GetOperatorView(cell).TakeDamage(m_AttackDamage)
-        → TriggerSafe("Attack")
-      Die()/ReturnToPool() → UnblockFromOperator() trước khi return to pool
-
-    TDOperatorView:
-      Init(cell, operatorData): ghi nhận cell position, set m_HP từ OperatorData
-      Update: attackTimer (1/data.attackSpeed); khi hit:
-        → GetBlockedEnemies(cell) → foreach enemy.TakeDamage(data.damage)
-        → TriggerSafe("Attack") trên Animator
-      TakeDamage(dmg): m_HP -= dmg; TriggerSafe("GetHit"); if m_HP ≤ 0 → Die()
-      Die():
-        → TDOperatorRegistry.UnregisterOperator(cell) → ForceUnblock all enemies
-        → TriggerSafe("Die") → Destroy(gameObject)
-
-    TDTowerFactoryControl:
-      CreateTower(prefab, pos, rot): Instantiate prefab
-      Phát hiện TDOperatorView component:
-        YES → TDOperatorView.Init(cell, operatorData)
-              TDOperatorRegistry.RegisterOperator(cell, data.blockCount)
-              TDOperatorRegistry.RegisterOperatorView(cell, view)
-        NO  → TDTowerWeaponView.Init(towerType) — regular tower pipeline
-
-    TDPlaceTowerControl:
-      CheckPlaceTower(pos, go, TowerType) — dispatch regular hoặc operator flow
-      Operator → validate IsValidPathCell + !HasOperatorAt(cell)
-               → TDTowerFactoryControl.CreateTower(operatorPrefab, cell, rot)
-
-    TDSlotHolderMainView (thay TDTowerMainView slot logic):
-      OnCreateTower(prefab, type):
-        if type == Operator → ShowOperatorHighlights() (blue quads trên path cells)
-        else               → ShowTowerZoneHighlights() (green quads)
-      RefreshRangeHighlights: skip nếu Operator
-
-  ── TDFlyweightOperatorDataSettings (ScriptableObject) ───────────────────────
-    [CreateAssetMenu] TDFlyweightOperatorDataSettings : ScriptableObject
-    List<OperatorData> m_Operators
-    GetData(int index): OperatorData          ← backward-compat (by index)
-    GetData(OperatorType type): OperatorData  ← NEW preferred lookup
-
-    [Serializable] OperatorData : ITowerDataProvider  ← Phase 16 (planned)
-      operatorType   : OperatorType  ← NEW — dùng để lookup (Knight, Medic, ...)
-      operatorPrefab : GameObject
-      icon           : Sprite
-      cost           : int
-      hp             : float
-      damage         : float
-      attackSpeed    : float
-      blockCount     : int
-      rangeOffsets   : Vector2Int[]  ← {(0,0)} = attack enemies trên own cell
-
-    Inspector path: Assets/1.Assets/Resources/Configs/Melee Operator Config.asset
-
-  ── OperatorDataDrawer (Editor) ──────────────────────────────────────────────
-    Assets/2.Scripts/Editor/OperatorDataDrawer.cs
-    CustomPropertyDrawer cho OperatorData — Grid 5×5 click-to-toggle
-    Operator cell (0,0) = orange, không toggle
-    Tương tự TowerDataDrawer nhưng cho melee range
-
-  ── Prefab ───────────────────────────────────────────────────────────────────
-    OperatorKnight.prefab (Assets/1.Assets/Resources/Prefabs/OperatorKnight.prefab)
-      Visual: Synty SidekickCharacters (HumanSpecies_01), Humanoid rig
-      TDOperatorView: m_OperatorDataIndex = 0
-      AnimatorController: OperatorKnight.controller
-        Idle_Battle_SingleSword (loop, default state)
-        Attack01_SingleSword (trigger "Attack", exit 90%, speed 1.2)
-        RPGTinyHero sword animations retargeted to HumanSpecies_01 rig
-
-    MeleeOperator.prefab → DELETED (replaced by OperatorKnight.prefab)
-
-  ── SO Config (Melee Operator Config.asset) ──────────────────────────────────
-    OperatorKnight (index 0):
-      hp           = 600 (approx — set trong Inspector)
-      damage       = 50
-      attackSpeed  = 1.0f
-      blockCount   = 2
-      rangeOffsets = {(0,0)}  ← attack on own cell
-
-  ── Data Flow — Operator Combat ──────────────────────────────────────────────
-    Enemy reaches operator cell:
-      → TDOperatorRegistry.CanBlock(cell) == true
-      → enemy.m_IsBlocked = true, OnEnemyBlocked(cell, enemy)
-
-    Every frame (enemy blocked):
-      → timer 1/enemy.attackSpeed
-      → GetOperatorView(cell).TakeDamage(enemy.attackDamage)
-      → TriggerSafe("Attack")
-
-    Every frame (operator):
-      → timer 1/operator.attackSpeed
-      → GetBlockedEnemies(cell) → foreach → enemy.TakeDamage(operator.damage)
-
-    Operator HP = 0:
-      → TDOperatorView.Die()
-      → TDOperatorRegistry.UnregisterOperator(cell)
-          → ForceUnblock(): all blocked enemies → m_CurrentPathIndex++, resume moving
-      → Destroy(gameObject)
-
-  ── Enums ─────────────────────────────────────────────────────────────────────
-    TowerType:    Cannon | Catapult | MissileG02 | MissileG03 | Mortar | Operator
-    OperatorType: Knight | ...        ← NEW (session 22 design)
-                  Dùng khi TowerType == Operator để chọn loại operator cụ thể
-                  TDTowerSlotInfo.operatorType chỉ meaningful khi towerType == Operator
-                  TDFlyweightOperatorDataSettings.GetData(OperatorType) lookup by type
-                  (TowerType.Melee từ session 21 → renamed bởi TowerType.Operator)
-
-  ── Retreat Mechanic (Phase 17 — Future) ─────────────────────────────────────
-    Concept: User có thể thu hồi operator đang đứng trên path.
-    Flow dự kiến:
-      Click operator đang đứng → hiện Retreat button (UI)
-      Confirm → TDOperatorRegistry.WithdrawOperator(cell)
-               → ForceUnblock() tất cả enemy (giống Die nhưng operator sống)
-               → TDOperatorView.Retreat() → play retreat animation → Destroy
-      Gold refund: một phần cost (50%?) hoặc 0 tuỳ balance
-      Cooldown: operator type đó không dùng lại được X giây (optional)
-    Tách biệt hoàn toàn với Die() — Retreat = chủ động, Die = bị tiêu diệt.
-
-  ── Notes ─────────────────────────────────────────────────────────────────────
-    ✅ MeleeOperator.prefab DELETED — replaced by OperatorKnight.prefab
-    ✅ TDMeleeRegistry DELETED — replaced by TDOperatorRegistry
-    ✅ Operator HP system + bidirectional combat (session 22 refactor)
-    ⬜  OperatorType enum (Phase 16 — planned): Knight | ...
-        Cần thêm OperatorData.operatorType field + GetData(OperatorType) lookup
-    ⬜  IPlacedUnit + ITowerDataProvider interface refactor (Phase 16 — planned)
-    ⚠️  Operator death animation: Destroy ngay sau TriggerSafe("Die")
-        → cần delay (tương tự EnemyData.dieDuration)
-    ⚠️  OperatorKnight icon field cần assign trong Melee Operator Config.asset
-    ⬜  Retreat mechanic (Phase 17 — future, xem design trên)
-    ⬜  Thêm operator types qua OperatorType enum (Phase 16+)
+    Arknights path guard: đặt lên PATH cells, chặn enemy (blockCount=2), bidirectional combat.
+    TDOperatorRegistry: ValidPathCells, Operators dict, BlockedEnemies dict, CanBlock, ForceUnblock.
+    TDOperatorView: HP system, TakeDamage, Die()→UnregisterOperator→ForceUnblock→Destroy.
+    Enemy: arrive→CanBlock()→m_IsBlocked=true; attackTimer→operator.TakeDamage(); Die→UnblockFromOperator.
+    OperatorKnight.prefab: Synty Humanoid, sword animations (Idle/Attack01_SingleSword).
+    MeleeOperator.prefab DELETED; TDMeleeRegistry DELETED.
+    SO: Melee Operator Config.asset — hp=600, damage=50, blockCount=2, rangeOffsets={(0,0)}.
+    ⚠️ Operator Die: Destroy ngay sau TriggerSafe("Die") → cần delay như dieDuration.
+    ⬜ Retreat mechanic → Phase 17.
 
   ╔══════════════════════════════════════════════════════════════════════════╗
-  ║  PHASE 15 — Dynamic Slot System (Session 22)            [✅ DONE]          ║
+  ║  PHASE 15 — Dynamic Slot System                         [✅ DONE s22]   ║
   ╚══════════════════════════════════════════════════════════════════════════╝
-
-  Goal: Thay thế 5 hardcoded TowerHolder slots bằng dynamic instantiation từ
-        ScriptableObject config. Slot bar tự động build từ TowerBulletConfig
-        + OperatorConfig, max 8 slots (random nếu tổng > 8 entries).
-
-  ── TDTowerSlotInfo (struct) ─────────────────────────────────────────────────
-    prefab       : GameObject    ← tower hoặc operator prefab
-    towerType    : TowerType     ← Cannon/Catapult/.../Operator
-    operatorType : OperatorType  ← chỉ meaningful khi towerType == Operator
-                                    (Phase 16: cần thêm field này)
-                                    dùng để TDOperatorView.Init() biết dùng data nào
-    cost         : int           ← từ TowerData.cost hoặc OperatorData.cost
-    icon         : Sprite        ← từ TowerData.icon hoặc OperatorData.icon
-
-  ── TDTowerMainControl.BuildSlots() ──────────────────────────────────────────
-    Đọc TDFlyweightTowerDataSettings: tất cả TowerData entries
-    Đọc TDFlyweightOperatorDataSettings: tất cả OperatorData entries
-    Merge thành 1 list → nếu tổng ≤ 8: dùng tất cả
-                          nếu > 8: random pick 8 không trùng (thuần random, không ưu tiên)
-                          (sau này: UI select trước màn → user chọn slot set)
-    Output: m_ActiveSlots (List<TDTowerSlotInfo>)
-    Phase 16 update: khi add OperatorData → set slotInfo.operatorType = data.operatorType
-
-    OnSelectTowerHolder(index):
-      slot = m_ActiveSlots[index]
-      onGetTowerPrefab?.Invoke(slot.prefab, slot.towerType)
-
-  ── TDSlotHolderMainView ─────────────────────────────────────────────────────
-    [SerializeField] m_SlotHolderPrefab: GameObject (SlotHolder.prefab từ Resources)
-    InitTowerHolder(List<TDTowerSlotInfo> slots):
-      foreach slot → Instantiate SlotHolder prefab
-      TDSlotHolderItemView.SetupIcon(slot.icon)
-      TDSlotHolderItemView.SetupCost(slot.cost)
-      ButtonSelector.onClick → OnSelectTowerHolder(i)
-
-    OnCreateTower(prefab, towerType):
-      Instantiate ghost tower
-      if Operator → ShowOperatorHighlights() (blue path cells)
-      else        → ShowTowerZoneHighlights() (green tower zone)
-
-    Arknights 2-phase drag (mobile): giống TDTowerMainView cũ
-    Desktop: LMB place, E/Q rotate, RMB cancel (giống cũ)
-    RefreshHolderInteractability(gold): disable holder nếu gold < cost
-
-  ── TDSlotHolderItemView ─────────────────────────────────────────────────────
-    SlotIcon       : Image — sprite icon của tower/operator
-    Cost (TMP)     : hiển thị cost
-    ButtonSelector : Button → OnSelectTowerHolder callback
-    DisabledOverlay: Image — SetActive(gold < cost)
-
-  ── SlotHolder.prefab ────────────────────────────────────────────────────────
-    Assets/1.Assets/Resources/Prefabs/SlotHolder.prefab
-    Children: ButtonSelector, SlotIcon(Image), CostBg/Cost(TMP), DisabledOverlay
-    TDSlotHolderItemView component attached
-
-  ── onGetTowerPrefab event ───────────────────────────────────────────────────
-    TDTowerMainControl.onGetTowerPrefab: Action<GameObject, TowerType>
-    → TDSlotHolderMainView subscribes → OnCreateTower(prefab, type)
-    (thay thế onGetTowerName: Action<string, TowerType> — không còn load by string)
-
-  ── Gold deduction ───────────────────────────────────────────────────────────
-    Sau khi đặt tower/operator thành công:
-      TDGoldControl.api.SpendGold(m_ActiveSlots[currentSlotIndex].cost)
-    Không còn hardcode GetCost(towerType) từ SO — lấy từ slot struct
-
-  ── TowerData + OperatorData: icon field ─────────────────────────────────────
-    TowerData: + icon : Sprite (assign trong Tower Bullet Config.asset)
-    OperatorData: + icon : Sprite (assign trong Melee Operator Config.asset)
-    TowerDataDrawer + OperatorDataDrawer: thêm DrawField("icon") + ammoPrefab fields
-
-  ── Setup Checklist (sau khi thêm tower/operator mới) ────────────────────────
-    1. Tower Bullet Config.asset → assign icon Sprite cho mỗi TowerData entry
-    2. Melee Operator Config.asset → add OperatorData entries (prefab, icon, stats)
-    3. OperatorKnight: TDOperatorView.m_OperatorDataIndex = 0
-    4. SlotHolder.prefab → children: ButtonSelector, SlotIcon, CostBg/Cost, DisabledOverlay
-    5. Scene TDSlotHolderMainView → auto-load SlotHolder từ Resources/Prefabs/
-
-  ── Notes ─────────────────────────────────────────────────────────────────────
-    ✅  Icon đã assign trong Tower Bullet Config.asset + Melee Operator Config.asset  [s24]
-    ⚠️  TDSlotHolderMainView.InitTowerHolder() có Debug.LogError dùng test
-        → đổi thành Debug.Log hoặc xóa khi xong
-    ⚠️  TDTowerMainView.cs (file cũ) có thể còn tồn tại → xóa nếu không dùng
-    ⬜  SlotHolder prefab polish (border animation khi select)
-    ⬜  Icon assignment cho tất cả tower + operator (dùng RapidIcon)
+    BuildSlots(): merge TowerBulletConfig + OperatorConfig → max 8 slots (random nếu >8).
+    TDTowerSlotInfo struct: prefab, towerType, operatorType, cost, icon.
+    TDSlotHolderItemView: icon, cost TMP, disabled overlay; auto-disable khi gold < cost.
+    SlotHolder.prefab: ButtonSelector/SlotIcon/CostBg/DisabledOverlay + TDSlotHolderItemView.
+    Icon assigned trong cả 2 Config.asset ✅ [s24].
+    ⚠️ Debug.LogError còn trong InitTowerHolder() → đổi thành Log khi hoàn thiện.
 
   ─────────────────────────────────────────────────────────────────────────────
 
   ╔══════════════════════════════════════════════════════════════════════════╗
-  ║  PHASE 16 — Interface Refactor + OperatorType           [✅ DONE s23]      ║
+  ║  PHASE 16 — Interface Refactor + OperatorType           [✅ DONE s23]   ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+    IDeployableDTO [NEW]: stats chung Tower+Operator; implement bởi TowerData+OperatorData (explicit).
+    IPlacedUnit [NEW]: Init(key,slot)+OnRemove(); implement bởi TDTowerWeaponView+TDOperatorView.
+    TDTowerBehaviorModel: Dictionary<TowerType, IDeployableDTO> (xóa if/else); InvalidateCache().
+    TDTowerFactoryControl.CreateUnit(): GetComponent<IPlacedUnit> (unified, xóa branch Operator).
+    TDOperatorView.Init() tự RegisterOperator; Die()→OnRemove()+EventBus+Destroy.
+    onGetTowerPrefab: Action<TDTowerSlotInfo>; OperatorType enum: { Knight }.
+    TDGameEventBus [NEW]: static event hub OnEnemyDied/OnOperatorDied/OnVictory/...
+    Code style enforced: Allman braces, 1 space quanh operator.
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 18 — Toon Shader + Outline + HP Bar Depth Fix    [✅ DONE s27]   ║
   ╚══════════════════════════════════════════════════════════════════════════╝
 
-  Goal: Xóa if/else branches trong TDTowerBehaviorModel, unify factory dispatch,
-        thêm OperatorType enum để hỗ trợ nhiều loại operator.
+  ── Toon Materials ───────────────────────────────────────────────────────────
+    Shader: Toon Shaders Pro/URP/Toon (LightMode=UniversalForwardOnly, 3-band cel-shading)
+    Folder: Assets/1.Assets/Materials/Toon/
 
-  ── Naming decisions (s23) ───────────────────────────────────────────────────
-    Interface data: IDeployableDTO  (không phải ITowerDataProvider — "Tower" quá hẹp;
-                                     không phải IDeployableData — "Data" redundant với "DTO";
-                                     convention project: data interface luôn suffix DTO)
-    Interface unit: IPlacedUnit     (không đổi)
+    Material            | Enemy        | BaseMap source
+    --------------------|--------------|--------------------------------
+    Toon_Slime.mat       | Slime        | RPG Monster DUO (a291ce08)
+    Toon_TurtleTank.mat  | TurtleTank   | RPG Monster DUO (a291ce08)
+    Toon_SwarmFast.mat   | SwarmFast    | Monster Minion (2fc5fd69)
+    Toon_DragonBoarBoss.mat | DragonBoar| FreeDragons (aa6db0ae)
+    Toon_OperatorKnight.mat | Operator  | Synty Sidekick (a8c2d05f)
 
-  ── Thực hiện (s23) ──────────────────────────────────────────────────────────
+    Settings (sau điều chỉnh s27):
+      _ShadowTint   : (0.25, 0.20, 0.28)  ← tím nhạt, không near-black
+      _MiddleTint   : (0.72, 0.72, 0.75)
+      _LightTint    : (1, 1, 1)
+      _DiffuseThresholds: (-0.1, 0.2)     ← mở rộng vùng sáng
+      _GIStrength   : 1.0                 ← full ambient
+      _UseSecondThreshold: 1 (3-band)
+      _RimColor     : (0.6, 0.8, 1.0)     ← xanh nhạt
+      _SpecularThresholds: (0.01, 0.02)
 
-  ✅ Enums.cs: + OperatorType { Knight }
+  ── Outline System ───────────────────────────────────────────────────────────
+    OutlineFeature (ScriptableRendererFeature) added → URP-Balanced-Renderer.asset
+    ToonOutlineProfile.asset: DepthNormalOutlines, outlineColor=black, depth/normal strength=1.0
+    ⚠️ ToonOutlineVolume (Global Volume) cần đặt thủ công vào DTGamePlay.unity
+       Profile: Assets/Settings/ToonOutlineProfile.asset, isGlobal=true
 
-  ✅ IDeployableDTO.cs [NEW]
-     TowerType, Damage, AttackSpeed, AttackType, MaxTargets, RangeOffsets
-     Implement bởi TowerData + OperatorData (explicit interface)
-
-  ✅ IPlacedUnit.cs [NEW]
-     UnitType: TowerType; Init(string key, TDTowerSlotInfo slotInfo); OnRemove()
-     Implement bởi TDTowerWeaponView + TDOperatorView
-
-  ✅ TowerData : IDeployableDTO — explicit interface, tất cả fields giữ nguyên
-
-  ✅ OperatorData : IDeployableDTO — + operatorType field; explicit interface
-     GetData(OperatorType) lookup by enum thêm vào TDFlyweightOperatorDataSettings
-
-  ✅ TDTowerBehaviorModel — Dictionary<TowerType, IDeployableDTO>
-     BuildDataMap() lazy-init từ TDFlyweightTowerDataSettings.GetAllTowers()
-     Operator KHÔNG vào map — TDOperatorView đọc SO trực tiếp
-     InvalidateCache() để reset khi scene reload
-
-  ✅ TDTowerSlotInfo struct — + operatorType : OperatorType
-
-  ✅ TDTowerMainControl
-     m_CurrentSlot stored khi OnSelectTowerHolder fires
-     onGetTowerPrefab: Action<TDTowerSlotInfo> (thay Action<GameObject, TowerType>)
-     OnPlaceTower(GameObject ghost) — không cần TowerType param nữa
-
-  ✅ TDTowerWeaponView implements IPlacedUnit
-     IPlacedUnit.Init(key, slot) → delegate Init(key)
-     IPlacedUnit.OnRemove() → unsubscribe onGetLastAttackTime
-
-  ✅ TDOperatorView implements IPlacedUnit
-     m_OperatorDataIndex → m_OperatorType : OperatorType
-     IPlacedUnit.Init(key, slot): set m_OperatorType từ slotInfo; tự RegisterOperator
-     IPlacedUnit.OnRemove(): UnregisterOperator (dùng cho Die + Phase 17 Retreat)
-     Die() gọi OnRemove() + TDGameEventBus.OperatorDied(cell) + Destroy
-
-  ✅ TDTowerFactoryControl.CreateUnit(prefab, pos, rot, slotInfo)
-     GetComponent<IPlacedUnit> — không còn GetComponent<TDOperatorView> branch
-     Key gen nội bộ: $"{Random(1000,9999)}-{prefab.name}"
-     onCreateUnitSuccess: Action<IPlacedUnit> (unified)
-     onCreateTowerSuccess: Action<TDTowerWeaponView> (backward-compat)
-
-  ✅ ITowerFactoryControl.cs — CreateUnit(prefab, pos, rot, slotInfo)
-
-  ✅ TDPlaceTowerControl.CheckPlaceTower(pos, ghost, slotInfo)
-     RegisterOperator đã xóa — TDOperatorView.Init() tự làm
-
-  ✅ TDSlotHolderMainView
-     OnCreateTower(TDTowerSlotInfo slot) — thay (GameObject, TowerType)
-     OnMouseButton0Clicked → OnPlaceTower(ghost) không pass TowerType
-     1-space operator style fix; k_DirectionThresholdRatio → DIRECTION_THRESHOLD_RATIO
-
-  ✅ TDTowerFactoryView — empty stub (Init logic moved vào CreateUnit)
-
-  ✅ TDFlyweightBulletFactoryModel — xóa TowerType.Operator case (operator không dùng bullet pool)
-
-  ── File thay đổi tổng hợp ───────────────────────────────────────────────────
-    NEW : IDeployableDTO.cs, IPlacedUnit.cs, TDGameEventBus.cs
-    MOD : Enums.cs, TDFlyweightTowerDataSettings.cs, TDFlyweightOperatorDataSettings.cs,
-          TDTowerBehaviorModel.cs, TDTowerSlotInfo.cs, TDTowerMainControl.cs,
-          TDTowerWeaponView.cs, TDOperatorView.cs, TDTowerFactoryControl.cs,
-          ITowerFactoryControl.cs, TDPlaceTowerControl.cs, TDSlotHolderMainView.cs,
-          TDTowerFactoryView.cs, TDFlyweightBulletFactoryModel.cs
+  ── HP Bar Depth Fix ─────────────────────────────────────────────────────────
+    Root cause: World Space Canvas dùng UI/Default (ZTest=LEqual) → model 3D đè.
+    Fix: Assets/2.Scripts/Shaders/UI_AlwaysOnTop.shader [NEW]
+         Queue=Overlay; ZTest Always; ZWrite Off; Blend SrcAlpha OneMinusSrcAlpha.
+    Assets/1.Assets/Materials/UI/HPBar_AlwaysOnTop.mat → Custom/UI_AlwaysOnTop shader.
+    Assigned to: HPBar_Enemy.prefab + HPBar_Operator.prefab (cả Background + Fill Images).
 
   ─────────────────────────────────────────────────────────────────────────────
 
@@ -1871,6 +1180,16 @@ File: Assets/3.Scenes/DTGamePlay.unity
       TDTowerFactoryControl: GetComponent<IPlacedUnit>, CreateUnit unified
       TDPlaceTowerControl: RegisterOperator moved vào TDOperatorView.Init()
       onGetTowerPrefab: Action<TDTowerSlotInfo>; TDTowerFactoryView: empty stub
+
+  ✅  Phase 3.9 — PathTile Visual Restore                        DONE session 25
+      PREFAB_PATH: "Plane" → "PathTile"
+      VisualizeAllPaths(): spawn PathTile.prefab tại path cells, tileScale=cellSize/10f
+      PathTile.prefab material fixed (missing → Stone_mobile.mat)
+
+  ✅  Phase 18 — Toon Shader + Outline + HP Bar Depth Fix        DONE session 27
+      5 Toon materials (Toon Shaders Pro/URP/Toon) assigned vào enemy+operator prefabs
+      OutlineFeature added to URP-Balanced-Renderer.asset (DepthNormalOutlines)
+      Custom/UI_AlwaysOnTop shader (ZTest Always) → HPBar depth bug FIXED
 
   ⬜  Phase 17 — Retreat Mechanic (PLANNED, sau Phase 16)
       TDOperatorView.Retreat() tách riêng với Die()
@@ -2005,6 +1324,28 @@ File: Assets/3.Scenes/DTGamePlay.unity
      │   onGetTowerPrefab: Action<TDTowerSlotInfo>
      │   TDGameEventBus [NEW]: static event hub cho VFX/Audio cross-cutting
      │
+  ✅ Phase 3.9 (PathTile Visual Restore) ── DONE (session 25)
+     │   PREFAB_PATH: "Plane" → "PathTile"; Stone_mobile.mat gán vào PathTile.prefab
+     │   VisualizeAllPaths(): spawn PathTile tại path cells, tileScale=cellSize/10f
+     │   HashSet deduplicate; skip gate cells; parent=view transform
+     │
+  ✅ Phase HP  (HP Bar System)           ── DONE (session 26, depth fix s27)
+     │   TDHPBarView.cs [NEW]: Show/Hide/UpdateHP/ResetBar
+     │   HPBar_Enemy.prefab (orange fill, ẩn đến TakeDamage lần đầu)
+     │   HPBar_Operator.prefab (blue fill, hiện ngay Init())
+     │   World Space Canvas, 200×20 px → 1.6u wide; LateUpdate fix position+rotation
+     │   Nested vào 4 enemy prefabs + OperatorKnight.prefab ✅
+     │   ✅ Depth bug FIXED s27: Custom/UI_AlwaysOnTop shader (ZTest Always)
+     │      HPBar_AlwaysOnTop.mat assigned vào cả 2 HPBar prefabs
+     │
+  ✅ Phase 18  (Toon Shader + Outline + HP Bar Depth Fix) ── DONE (session 27)
+     │   5 Toon materials: Toon_Slime/TurtleTank/SwarmFast/DragonBoarBoss/OperatorKnight
+     │   Shader: Toon Shaders Pro/URP/Toon; 3-band, rim light, specular dot
+     │   YAML patch trực tiếp vào prefab files; brightness điều chỉnh (GIStrength=1)
+     │   OutlineFeature added to URP-Balanced-Renderer.asset
+     │   ToonOutlineProfile.asset (DepthNormalOutlines) — Volume cần đặt thủ công vào DTGamePlay
+     │   Custom/UI_AlwaysOnTop shader (ZTest Always); HPBar_AlwaysOnTop.mat → 2 HPBar prefabs
+     │
   ⬜ Phase 17  (Retreat Mechanic)       ── TODO (requires Phase 16 ✓)
      │   TDOperatorView.Retreat() + TDOperatorRegistry.WithdrawOperator(cell)
      │   UI: click placed operator → Retreat button
@@ -2024,8 +1365,8 @@ File: Assets/3.Scenes/DTGamePlay.unity
      │
   ⬜ Phase 9   (Polish + Perf)          ── final pass
 
-  ── Thứ tự implement đề xuất (cập nhật session 23) ──────────────────────
-  ✅ Phase 10 → ✅ Phase 7 → ✅ Phase 11 → ✅ Phase 12 → ✅ Phase 13 → ✅ Phase 14 → ✅ Phase 15 → ✅ Phase 16 → ⬜ Phase 17 (Retreat) → ⚠️ Phase 8 (panels pending) → Phase 9
+  ── Thứ tự implement đề xuất (cập nhật session 27) ──────────────────────
+  ✅ Phase 10 → ✅ Phase 7 → ✅ Phase 11 → ✅ Phase 12 → ✅ Phase 13 → ✅ Phase 14 → ✅ Phase 15 → ✅ Phase 16 → ✅ Phase 3.9 → ✅ Phase HP → ✅ Phase 18 → ⬜ Phase 17 (Retreat) → ⚠️ Phase 8 (VictoryPanel/GameOverPanel) → ⬜ Phase 9 (Polish)
 
   Lý do thứ tự:
     Phase 10 trước Phase 7  : area damage cần grid-cell range → tránh viết lại (DONE)
@@ -3447,6 +2788,197 @@ File: Assets/3.Scenes/DTGamePlay.unity
     ⬜ Phase 17: Retreat mechanic (IPlacedUnit.OnRemove() đã sẵn sàng)
     ⬜ State Machine cho TDEnemyView (4 bool flags → EnemyState enum)
     ⬜ VFX/Audio systems subscribe TDGameEventBus
+
+
+================================================================================
+  25. SESSION 25 — SCENE AUDIT + PHASE 3.9 PATHTILE VISUAL RESTORE
+================================================================================
+
+  ── Mục tiêu ─────────────────────────────────────────────────────────────────
+    1. Audit toàn bộ scene và codebase so với roadmap (session 23 cuối)
+    2. Kiểm tra GameMapVisualize kích thước và path config
+    3. Tìm material phù hợp từ UnityStore Resources
+    4. Khôi phục visual path tile bằng PathTile.prefab
+
+  ── Scene Audit Findings (Session 25) ────────────────────────────────────────
+
+    GameMapVisualize (verified via MCP):
+      scale   : (4.4000001, 5, 2.5999999) ≈ (4.4, 5, 2.6) ✅
+      position: (23.2999992, 0.04, 27.7000008)
+      ⚠️  Y = 0.04 thay vì 0 — plane nổi lên 4cm. Không ảnh hưởng gameplay
+           (grid offset chỉ dùng X và Z), nhưng về visual thì plane không sát đất.
+
+    PathView/CreatePoint:
+      position: (1, 0, 27.7) ✅ — khớp roadmap
+
+    TDConstant path config:
+      CONFIG_ENEMY_START_POINT  = (0, 6)           ✅
+      CONFIG_ENEMY_END_POINT    = (21, 6)           ✅
+      CONFIG_PATH_Y_ZONES       = [(7,12),(0,5),(2,10)] ✅
+      CONFIG_GRID_CELL_SIZE     = 2f               ✅
+
+  ── Codebase Discrepancies Found (Session 25) ────────────────────────────────
+
+    1. TDMeleeRegistry.cs — file tên cũ, bên trong là class TDOperatorRegistry.
+       Roadmap ghi "TDMeleeRegistry DELETED" nhưng thực tế chỉ đổi tên class.
+       File cần rename: TDMeleeRegistry.cs → TDOperatorRegistry.cs
+       ⚠️ Compile vẫn OK vì Unity không yêu cầu file name = class name cho plain C#
+
+    2. PREFAB_MELEE_OPERATOR = "MeleeOperator" trong TDConstant.cs
+       MeleeOperator.prefab đã bị xóa từ Phase 14. Constant này là dead code.
+       Cần update → "OperatorKnight" hoặc xóa nếu không dùng.
+
+    3. TDFlyweightEnemyDataSettings.cs — roadmap doc gọi là TDEnemyDataSettings.cs
+       Trong code file tên là TDFlyweightEnemyDataSettings (nhất quán với Flyweight prefix).
+       Chỉ là doc discrepancy, không ảnh hưởng compile.
+
+  ── Material Research (Session 25) ──────────────────────────────────────────
+
+    Tìm material trong Assets/1.Assets/UnityStore Resources phù hợp CityGround
+    nhưng nổi hơn (cho PathTile visualization):
+
+    Candidates analyzed:
+      Stone_mobile.mat (Hand Painted Stone Texture)
+        Shader: URP Lit (guid 933532a4)
+        Texture: stone albedo (guid 48f4f66d) — cùng texture Stone_normal
+        _BaseColor: (1,1,1,1) → full brightness, không tint
+        _Smoothness: 0.5; _Metallic: 0; Opaque; _ZWrite: 1
+        _EMISSION keyword enabled (EmissionColor=black → có thể thêm glow sau)
+        Normal map: guid cfc6179a (khác bumpmap của Stone_normal)
+        → CHỌN: sáng hơn Stone_normal (0.38,0.30,0.22 nâu tối), cùng stone texture
+
+      Stone_normal.mat — đã dùng cho path tiles cũ; màu nâu tối (0.38,0.30,0.22)
+      ground2.mat      — dùng cho GameMapVisualize ground plane; gray, tile 4×4
+      Bg_Floor.mat     — solid near-black (0.078), không texture → không phù hợp
+
+  ── Phase 3.9 Implementation (Session 25) ────────────────────────────────────
+
+    PathTile.prefab (Assets/1.Assets/Resources/Prefabs/PathTile.prefab):
+      Mesh: Unity built-in Plane (fileID 10209, native 10u×10u)
+      Material trước: guid 03eccdb9 → NOT FOUND trong project (material bị xóa/mất)
+      Material sau: Stone_mobile.mat (guid 094c835627124fe4bbbaa762d2240cb1) ✅
+
+    Assets/2.Scripts/Model/Config/Constant/TDConstant.cs
+      PREFAB_PATH: "Plane" → "PathTile"
+
+    Assets/2.Scripts/View/GamePlay/EnemyPath/TDEnemyPathView.cs
+      VisualizeAllPaths() TRƯỚC: chỉ mark occupied + register operator cells
+                                  (comment "Path tile đã bị bỏ" — không spawn gì)
+      VisualizeAllPaths() SAU:
+        Load PathTile prefab từ Resources (lazy, dùng lại m_PathPrefab)
+        float cellSize  = TDGridMainModel.api.cellSize   (derive từ GameMapVisualize)
+        float tileScale = cellSize / 10f                 (Plane native 10u → 2u/cell)
+        HashSet<Vector2Int> visitedCells — deduplicate 3 paths overlapping
+        foreach path → foreach cell (skip i=0 GateStart, i=last GateEnd):
+          SetOccupiedCell(worldPos)
+          if !visitedCells.Add(gridCell) → continue
+          RegisterPathCell(gridCell) → TDOperatorRegistry
+          Instantiate PathTile at (worldPos.x, CONFIG_PATH_OFFSET_Y=0.1f, worldPos.z)
+          localScale = (tileScale, existingY, tileScale)
+          parent = transform (view GO)
+          m_InstantiatedTiles.Add(tile)
+      + using Object = UnityEngine.Object; (alias để dùng Object.Instantiate)
+
+  ── Files Modified (Session 25) ──────────────────────────────────────────────
+
+    Assets/2.Scripts/Model/Config/Constant/TDConstant.cs
+      ← PREFAB_PATH = "Plane" → "PathTile"
+
+    Assets/2.Scripts/View/GamePlay/EnemyPath/TDEnemyPathView.cs
+      ← + using Object = UnityEngine.Object
+      ← VisualizeAllPaths(): rewritten — thêm PathTile spawn logic
+
+    Assets/1.Assets/Resources/Prefabs/PathTile.prefab
+      ← m_Materials[0]: guid 03eccdb9 → guid 094c8356 (Stone_mobile.mat)
+
+  ── TODO còn lại từ audit (Session 25) ───────────────────────────────────────
+    ⬜ Rename TDMeleeRegistry.cs → TDOperatorRegistry.cs (file name mismatch)
+    ⬜ Fix PREFAB_MELEE_OPERATOR = "MeleeOperator" → "OperatorKnight" hoặc xóa
+    ⬜ Fix GameMapVisualize.position.Y = 0.04 → 0 (minor visual float)
+    ⬜ Phase 17: Retreat Mechanic
+    ⬜ Phase 8: VictoryPanel + GameOverPanel UI
+    ⚠️ HP Bar depth sort: WorldSpace Canvas sortingOrder=5 bị đè bởi GateStart wireframe
+       → Fix TODO: tăng sortingOrder hoặc assign Sorting Layer riêng cho HP bar canvas
+
+
+================================================================================
+  26. SESSION 26 — HP BAR SYSTEM (Enemy + Operator)
+================================================================================
+
+  ── Mục tiêu ─────────────────────────────────────────────────────────────────
+    Thêm thanh HP hiển thị trực quan cho enemy và operator:
+    - Enemy bar: màu cam, ẨN hoàn toàn cho tới khi bị đánh lần đầu
+    - Operator bar: màu xanh, HIỆN NGAY khi đặt xuống map
+
+  ── New Files (Session 26) ────────────────────────────────────────────────────
+
+  Assets/2.Scripts/View/GamePlay/TDHPBarView.cs                   [NEW]
+    public void Show()   → gameObject.SetActive(true)
+    public void Hide()   → gameObject.SetActive(false)
+    public void UpdateHP(float current, float max) → m_Fill.fillAmount = current/max
+    public void ResetBar() → fill=1, Hide()
+    Awake(): scale compensation — localScale = DESIRED_WORLD_WIDTH / (CANVAS_PX * parentLossyScale.x)
+             → bar luôn rộng 1.6u trong world space bất kể parent scale (Slime=1.5, SwarmFast=0.56, ...)
+    LateUpdate(): override world position = parent.position + (0, 0.12, 0)
+                  override world rotation = Euler(30, 0, 0) → face camera 30° pitch
+                  → enemy xoay theo hướng đi nhưng HP bar luôn đứng thẳng nhìn về camera
+
+  Assets/1.Assets/Resources/Prefabs/HPBar_Enemy.prefab            [NEW]
+    World Space Canvas, sortingOrder=5
+    RectTransform sizeDelta: 200×20 px → 1.6u × 0.16u sau scale
+    Background Image: dark (0.08,0.08,0.08,0.85)
+    Fill Image:  Orange (1.0, 0.55, 0.1, 1.0), fillMethod=Horizontal, fillOrigin=Left
+    TDHPBarView component với m_Fill assigned
+    SetActive(false) mặc định
+
+  Assets/1.Assets/Resources/Prefabs/HPBar_Operator.prefab         [NEW]
+    Giống HPBar_Enemy nhưng Fill màu Blue (0.2, 0.7, 1.0, 1.0)
+
+  ── Modified Files (Session 26) ──────────────────────────────────────────────
+
+  Assets/2.Scripts/View/GamePlay/Enemy/TDEnemyView.cs
+    ← ADDED: [SerializeField] private TDHPBarView m_HPBarView
+    ← ADDED: private float m_MaxHealth
+    ← Initialize(): m_MaxHealth = hp; m_HPBarView?.ResetBar()
+    ← TakeDamage(): m_HPBarView?.Show(); m_HPBarView?.UpdateHP(m_EnemyHealth, m_MaxHealth)
+       → Show() chỉ gọi khi bị đánh — bar ẩn hoàn toàn cho tới lần hit đầu tiên
+    ← PoolReturn(): m_HPBarView?.ResetBar()
+       → reset fill=1 và ẩn lại khi pool release (quan trọng cho pool reuse)
+
+  Assets/2.Scripts/View/GamePlay/Tower/TDOperatorView.cs
+    ← ADDED: [SerializeField] private TDHPBarView m_HPBarView
+    ← ADDED: private float m_MaxHp
+    ← IPlacedUnit.Init(): m_MaxHp = m_CurrentHp; m_HPBarView?.Show(); m_HPBarView?.UpdateHP(...)
+       → Hiện ngay khi operator được đặt xuống map
+    ← TakeDamage(): m_HPBarView?.UpdateHP(m_CurrentHp, m_MaxHp)
+
+  ── Prefab Setup (via script-execute) ────────────────────────────────────────
+    HPBar_Enemy.prefab nested vào:
+      Slime.prefab          → TDEnemyView.m_HPBarView wired ✅
+      SwarmFast.prefab      → TDEnemyView.m_HPBarView wired ✅
+      TurtleTank.prefab     → TDEnemyView.m_HPBarView wired ✅
+      DragonBoarBoss.prefab → TDEnemyView.m_HPBarView wired ✅
+    HPBar_Operator.prefab nested vào:
+      OperatorKnight.prefab → TDOperatorView.m_HPBarView wired ✅
+
+  ── Design Notes ─────────────────────────────────────────────────────────────
+    Scale formula: localScale = 1.6 / (200 * parentLossyScale.x)
+      Slime (1.5)         → 0.00533
+      SwarmFast (0.56)    → 0.01428
+      TurtleTank (0.74)   → 0.01081
+      DragonBoarBoss(0.32)→ 0.025
+      Operator (1.0)      → 0.008
+
+    LateUpdate overrides WORLD transform → Inspector shows LOCAL values
+      (Y rotation ≈ -90° local khi enemy facing left là CORRECT behavior)
+
+  ── Known Bug (session 26) ───────────────────────────────────────────────────
+    ⚠️ HP bar bị đè bởi GateStart red wireframe box khi Slime đứng gần gate
+       Root cause: World Space Canvas depth sort không guaranteed vs 3D opaque mesh
+       Triệu chứng: bar hiển thị nhưng bị gate box che một phần
+       Fix plan: tăng Canvas.sortingOrder (hiện =5) hoặc tạo Sorting Layer "UI_3D"
+                 và assign cho tất cả HP bar canvas → render sau toàn bộ 3D geometry
+       Status: TODO (user yêu cầu ghi chú, chưa fix)
 
 
 ================================================================================

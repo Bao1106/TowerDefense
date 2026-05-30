@@ -437,7 +437,7 @@ public class TDSlotHolderMainView : MonoBehaviour
     private GameObject CreateOperatorHighlightTile(Vector3 worldPos)
     {
         var go = GameObject.CreatePrimitive(PrimitiveType.Quad);
-        go.transform.position = new Vector3(worldPos.x, 0.06f, worldPos.z);
+        go.transform.position = new Vector3(worldPos.x, 0.15f, worldPos.z);
         go.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
 
         float size = TDGridMainModel.api.cellSize * 0.88f;

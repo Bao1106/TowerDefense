@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using Services.DependencyInjection;
 using UnityEngine;
+using Object = UnityEngine.Object;
 
 public class TDEnemyPathView : MonoBehaviour
 {
@@ -33,14 +34,18 @@ public class TDEnemyPathView : MonoBehaviour
         TDEnemyPathControl.api.CreatePath(path, m_PathPrefab);
     }
 
-    // Path tile đã bị bỏ — enemy đi trực tiếp trên GameMapVisualize (ground).
-    // Tower zone tile (cube sáng) sẽ được spawn trên non-path cells trong TDEnemyPathMainView.
-    // Chỉ cần đánh dấu các path cells là occupied để grid system hoạt động đúng.
-    // Đồng thời đăng ký non-gate path cells vào TDOperatorRegistry để operator có thể đặt ở đó.
+    // Spawn PathTile.prefab trên tất cả path cells (trừ gate).
+    // Scale tile = cellSize / 10f (Unity Plane native 10u → cellSize lấy từ TDGridMainModel, derive từ GameMapVisualize bounds).
+    // Dùng HashSet để deduplicate: 3 paths có thể share cells.
     public void VisualizeAllPaths(List<List<IGridCellDTO>> allPaths)
     {
-        // Dùng HashSet để tránh đăng ký cell trùng lặp (3 paths có thể share cells)
-        var registeredOperatorCells = new HashSet<Vector2Int>();
+        if (m_PathPrefab == null)
+            m_PathPrefab = TDResourceObject.GetResource<GameObject>(TDConstant.PREFAB_PATH);
+
+        float cellSize = TDGridMainModel.api.cellSize;
+        float tileScale = cellSize / 10f; // Plane mesh native = 10u
+
+        var visitedCells = new HashSet<Vector2Int>();
 
         foreach (var path in allPaths)
         {
@@ -51,13 +56,21 @@ public class TDEnemyPathView : MonoBehaviour
                 TDGridMainModel.api.SetOccupiedCell(worldPos);
 
                 // Bỏ qua gate cells (index 0 = GateStart, index cuối = GateEnd)
-                // → chỉ register cells giữa path cho melee placement
-                if (i > 0 && i < path.Count - 1)
-                {
-                    var gridCell = new Vector2Int(cell.position.x, cell.position.y);
-                    if (registeredOperatorCells.Add(gridCell))
-                        TDOperatorRegistry.api?.RegisterPathCell(gridCell);
-                }
+                if (i == 0 || i == path.Count - 1)
+                    continue;
+
+                var gridCell = new Vector2Int(cell.position.x, cell.position.y);
+                if (!visitedCells.Add(gridCell))
+                    continue;
+
+                // Đăng ký operator cell
+                TDOperatorRegistry.api?.RegisterPathCell(gridCell);
+
+                // Spawn path tile
+                Vector3 tilePos = new Vector3(worldPos.x, TDConstant.CONFIG_PATH_OFFSET_Y, worldPos.z);
+                var tile = Object.Instantiate(m_PathPrefab, tilePos, Quaternion.identity, transform);
+                tile.transform.localScale = new Vector3(tileScale, tile.transform.localScale.y, tileScale);
+                m_InstantiatedTiles.Add(tile);
             }
         }
     }

@@ -1,0 +1,145 @@
+================================================================================
+  TOWER DEFENSE — RECENT SESSIONS CHANGELOG (Sessions 23, 25, 26, 27)
+  Generated: 2026-05-30
+================================================================================
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 23 — PHASE 16: INTERFACE REFACTOR + EVENT BUS           [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Goal: Xóa if/else Operator branches, unify factory dispatch, thêm OperatorType enum.
+
+  Key changes:
+    + IDeployableDTO.cs, IPlacedUnit.cs [NEW interfaces]
+    + TDGameEventBus.cs [NEW static event hub: OnEnemyDied, OnOperatorDied, OnVictory, ...]
+    + OperatorType { Knight } added to Enums.cs
+    + TDTowerBehaviorModel → Dictionary<TowerType, IDeployableDTO> (xóa if/else)
+    + TDTowerFactoryControl.CreateUnit() → GetComponent<IPlacedUnit> (unified)
+    + TDOperatorView.Init() tự RegisterOperator; Die() gọi OnRemove() + EventBus
+    + onGetTowerPrefab: Action<TDTowerSlotInfo> (thay Action<GameObject, TowerType>)
+    + Code style enforced: Allman braces, 1 space quanh operator
+
+  ✅ Phase 16 DONE — 0 compile errors
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 25 — PHASE 3.9: PATHTILE VISUAL RESTORE + SCENE AUDIT   [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Goal: Khôi phục visual path tile; audit codebase vs roadmap.
+
+  Key changes:
+    + PREFAB_PATH: "Plane" → "PathTile" (TDConstant.cs)
+    + TDEnemyPathView.VisualizeAllPaths() rewrite: load PathTile từ Resources,
+      tileScale = cellSize/10f, HashSet deduplicate 3 paths, skip gate cells
+    + PathTile.prefab material: missing → Stone_mobile.mat (sáng hơn)
+
+  TODO còn lại từ audit:
+    ⬜ Rename TDMeleeRegistry.cs → TDOperatorRegistry.cs
+    ⬜ Fix PREFAB_MELEE_OPERATOR dead code
+    ⬜ Fix GameMapVisualize.position.Y = 0.04 → 0
+
+  ✅ Phase 3.9 DONE — PathTile visual hiển thị đúng
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 26 — HP BAR SYSTEM (Enemy + Operator)                   [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Goal: World Space Canvas HP bar cho enemy (cam) và operator (xanh).
+
+  Key changes:
+    + TDHPBarView.cs [NEW]: Show/Hide/UpdateHP/ResetBar; LateUpdate fix position+rotation
+    + HPBar_Enemy.prefab [NEW]: cam (1.0, 0.55, 0.1), ẩn đến khi TakeDamage() lần đầu
+    + HPBar_Operator.prefab [NEW]: xanh (0.2, 0.7, 1.0), hiện ngay khi Init()
+    + Scale formula: localScale = 1.6 / (200 × parentLossyScale.x)
+    + Nested vào 4 enemy prefabs + OperatorKnight.prefab; m_HPBarView wired ✅
+    + TDEnemyView: +m_HPBarView, +m_MaxHealth; ResetBar khi pool release
+    + TDOperatorView: +m_HPBarView, +m_MaxHp; Show ngay trong IPlacedUnit.Init()
+
+  ⚠️ Known bug (chưa fix s26): HP bar bị model 3D đè lên → FIXED s27 (xem bên dưới)
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 27 — TOON SHADER + OUTLINE + HP BAR DEPTH FIX
+════════════════════════════════════════════════════════════════════════════════
+
+  Goal: Apply Toon Shaders Pro cho enemy/operator; fix HP bar depth bug.
+
+  ── Phân tích Asset ──────────────────────────────────────────────────────────
+
+  Toon Shaders Pro gồm 2 hệ thống:
+    1. Toon.shader (URP): Cel-shading với shadow bands, specular dot, rim light
+       LightMode = UniversalForwardOnly; 3-band qua _DiffuseThresholds + _UseSecondThreshold
+    2. OutlineFeature (ScriptableRendererFeature): 5 chế độ outline qua Volume system
+       DepthNormal / HighQualityMask / PixelWidthMask / HullOutlines / DebugMask
+
+  Materials trước khi thay đổi:
+    Slime/TurtleTank : PBRDefault/PolyartDefault.mat  → URP/Lit, BaseMap a291ce08
+    SwarmFast        : PA_Default.mat                 → URP/Lit, BaseMap 2fc5fd69
+    DragonBoarBoss   : GoldPBR.mat                   → URP/Lit, BaseMap aa6db0ae
+    OperatorKnight   : Starter_01.mat                → Custom Synty shader, BaseMap a8c2d05f
+
+  ── Toon Materials [NEW] ─────────────────────────────────────────────────────
+
+  Folder: Assets/1.Assets/Materials/Toon/
+  Shader: Toon Shaders Pro/URP/Toon (guid: 1035ba4200ea08f41befac01b4c9d952)
+
+  5 materials tạo mới (YAML patch trực tiếp vào prefab files):
+    Toon_Slime.mat         → guid: ea32e72d → Slime.prefab
+    Toon_TurtleTank.mat    → guid: 093aa439 → TurtleTank.prefab
+    Toon_SwarmFast.mat     → guid: e41c8aa9 → SwarmFast.prefab
+    Toon_DragonBoarBoss.mat→ guid: 1ba4e3cb → DragonBoarBoss.prefab
+    Toon_OperatorKnight.mat→ guid: 3cadbad0 → OperatorKnight.prefab
+
+  Settings (điều chỉnh s27 sau feedback "hơi tối"):
+    _LightTint         : (1, 1, 1, 1)
+    _MiddleTint        : (0.72, 0.72, 0.75, 1)
+    _ShadowTint        : (0.25, 0.20, 0.28, 0)   ← tím nhạt (ban đầu near-black → quá tối)
+    _DiffuseThresholds : (-0.1, 0.2)              ← mở rộng vùng sáng
+    _GIStrength        : 1.0                       ← từ 0.5 (ambient bị giảm → tối)
+    _UseSecondThreshold: 1 (3-band)
+    _RimColor          : (0.6, 0.8, 1.0)           ← viền sáng xanh nhạt
+    _SpecularThresholds: (0.01, 0.02)              ← dot cứng
+    _Smoothness        : 0.25
+
+  ── Outline System ───────────────────────────────────────────────────────────
+
+  + OutlineFeature thêm vào Assets/Settings/URP-Balanced-Renderer.asset ✅
+  + Assets/Settings/ToonOutlineProfile.asset [NEW]
+      Mode: DepthNormalOutlines (tự động detect tất cả geometry edges)
+      outlineColor = black; depthStrength = 1.0; normalStrength = 1.0
+
+  ⚠️ ToonOutlineVolume (Global Volume) được tạo trong Init scene (scene đang active).
+     Cần đặt thủ công vào DTGamePlay.unity:
+       Add GameObject → Volume → isGlobal=true → Profile = ToonOutlineProfile.asset
+
+  ── HP Bar Depth Fix [DONE] ──────────────────────────────────────────────────
+
+  Root cause: World Space Canvas Image dùng UI/Default shader với ZTest=LEqual
+              → model 3D render trước (depth written) → UI bị đè.
+
+  Fix: Custom shader với ZTest Always hardcoded.
+
+  New files:
+    Assets/2.Scripts/Shaders/UI_AlwaysOnTop.shader [NEW]
+      Queue=Overlay; ZTest Always; ZWrite Off; Blend SrcAlpha OneMinusSrcAlpha
+      Standard Unity UI pass (UnityCG.cginc + UnityUI.cginc)
+
+    Assets/1.Assets/Materials/UI/HPBar_AlwaysOnTop.mat [NEW]
+      Shader: Custom/UI_AlwaysOnTop (guid: d93b4882...)
+
+  Applied to: HPBar_Enemy.prefab + HPBar_Operator.prefab
+    → cả 2 Image components (Background + Fill) dùng HPBar_AlwaysOnTop.mat
+    → HP bar luôn render on top, không còn bị model 3D đè dù enemy to hay tròn
+
+  ── Result ───────────────────────────────────────────────────────────────────
+    ✅ 5 prefabs hiển thị Toon cel-shading style
+    ✅ Outline feature sẵn sàng, chờ Volume trong gameplay scene
+    ✅ HP bar depth bug FIXED — ZTest Always
+
+
+================================================================================
+  END OF CHANGELOG
+================================================================================
