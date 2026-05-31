@@ -4,10 +4,11 @@ using UnityEngine.UI;
 public class TDHPBarView : MonoBehaviour
 {
     [SerializeField] private Image m_Fill;
+    // Serialized để mỗi prefab (enemy vs operator) tuỳ chỉnh độ cao bar so với root
+    [SerializeField] private float m_YOffset = 2.5f;
 
     private const float CANVAS_PIXEL_WIDTH = 200f;
     private const float DESIRED_WORLD_WIDTH = 1.6f;
-    private const float WORLD_Y_OFFSET      = 0.12f;
 
     private void Awake()
     {
@@ -20,7 +21,7 @@ public class TDHPBarView : MonoBehaviour
     private void LateUpdate()
     {
         if (transform.parent == null) return;
-        transform.position = transform.parent.position + new Vector3(0f, WORLD_Y_OFFSET, 0f);
+        transform.position = transform.parent.position + new Vector3(0f, m_YOffset, 0f);
         transform.rotation = Quaternion.Euler(30f, 0f, 0f);
     }
 

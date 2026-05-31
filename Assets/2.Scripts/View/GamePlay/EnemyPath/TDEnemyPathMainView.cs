@@ -7,6 +7,7 @@ using UnityEngine.Serialization;
 public class TDEnemyPathMainView : MonoBehaviour
 {
     [SerializeField] private GameObject[]          m_ObstaclePrefabs;
+    [SerializeField] private GameObject            m_ObstacleTilePrefab;   // tile đất/tự nhiên dưới obstacle
     [SerializeField] private GameObject            m_GateStartPrefab;
     [SerializeField] private GameObject            m_GateEndPrefab;
     [FormerlySerializedAs("m_EnemyDataSettings")] [SerializeField] private TDFlyweightEnemyDataSettings   flyweightEnemyDataSettings;
@@ -155,8 +156,16 @@ public class TDEnemyPathMainView : MonoBehaviour
 
         int obstacleCount = Mathf.RoundToInt(positions.Count * TDConstant.CONFIG_MAZE_OBSTACLE_WALL_RATIO);
 
-        // Phase 1: place obstacles + block toàn bộ footprint cells
-        var blockedCells = new HashSet<Vector2Int>();
+        // Build lookup để giới hạn footprint chỉ trong wall cells — tránh spawn tile trên corridor
+        var validWallCells = new HashSet<Vector2Int>();
+        foreach (var pos in validPositions)
+            validWallCells.Add(TDGridMainModel.api.WorldToCell(pos));
+
+        // Phase 1: place obstacles + block footprint cells (chỉ wall cells)
+        var blockedCells  = new HashSet<Vector2Int>();
+        var obstacleCells = new HashSet<Vector2Int>(); // wall cells có obstacle (cần ObstacleTile)
+
+        GameObject tilePrefabForObstacle = m_ObstacleTilePrefab != null ? m_ObstacleTilePrefab : m_TowerZonePrefab;
 
         for (int i = 0; i < obstacleCount && hasObstacles; i++)
         {
@@ -167,19 +176,30 @@ public class TDEnemyPathMainView : MonoBehaviour
 
             Object.Instantiate(m_ObstaclePrefabs[pIdx], center, rotation, transform);
 
-            // Block center + tất cả cells trong footprint (2*radius+1)²
+            // Footprint chỉ block wall cells — corridor cells không bị ảnh hưởng
             Vector2Int centerCell = TDGridMainModel.api.WorldToCell(center);
             for (int dx = -radius; dx <= radius; dx++)
                 for (int dz = -radius; dz <= radius; dz++)
                 {
                     var cell = new Vector2Int(centerCell.x + dx, centerCell.y + dz);
                     if (!TDGridMainModel.api.IsInBounds(cell)) continue;
+                    if (!validWallCells.Contains(cell)) continue; // bỏ qua corridor cells
+
                     blockedCells.Add(cell);
+                    obstacleCells.Add(cell);
                     TDGridMainModel.api.SetOccupiedCell(TDGridMainModel.api.CellToWorld(cell));
                 }
         }
 
-        // Phase 2: tower zone tiles chỉ trên cells KHÔNG bị obstacle footprint block
+        // Phase 1.5: spawn ObstacleTile (tile đất tự nhiên) dưới mọi obstacle footprint wall cell
+        foreach (var cell in obstacleCells)
+        {
+            Vector3 w = TDGridMainModel.api.CellToWorld(cell);
+            Object.Instantiate(tilePrefabForObstacle,
+                new Vector3(w.x, 0f, w.z), Quaternion.identity, transform);
+        }
+
+        // Phase 2: TowerZone tiles chỉ trên wall cells không có obstacle
         foreach (var pos in positions)
         {
             var cell = TDGridMainModel.api.WorldToCell(pos);
@@ -190,7 +210,7 @@ public class TDEnemyPathMainView : MonoBehaviour
             m_TowerZoneTiles.Add(tile);
         }
 
-        Debug.Log($"[TDEnemyPathMainView] {m_TowerZoneTiles.Count} tower tiles | {obstacleCount} obstacles | {blockedCells.Count} footprint cells blocked");
+        Debug.Log($"[TDEnemyPathMainView] {m_TowerZoneTiles.Count} tower tiles | {obstacleCount} obstacles | {obstacleCells.Count} obstacle cells");
     }
 
     // Tính footprint radius từ Renderer.bounds thực tế của prefab

@@ -7250,10 +7250,13 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_ObstaclePrefabs:
-  - {fileID: 8498775590324875546, guid: 046fcab6e891a844abfc53b520c8f394, type: 3}
-  - {fileID: 8498775590324875546, guid: 046fcab6e891a844abfc53b520c8f394, type: 3}
-  - {fileID: 8294394904559025366, guid: 259516b1bf743f84aba64a77847b9d06, type: 3}
-  - {fileID: 1875828765980602, guid: 9c5ad4629ea7af7448f90e61ae1ea78d, type: 3}
+  - {fileID: 4322767382158653204, guid: b6ddfbfd1ea362c4bb32e531cb6213cb, type: 3}
+  - {fileID: 7251943758774493481, guid: 5de91b71dc1698644b51f75f1521f6ea, type: 3}
+  - {fileID: 2308869840000360606, guid: 37c84c10bc09ad14eb8854f863ea5b82, type: 3}
+  - {fileID: 6938313185453466299, guid: 3d7b3b0cc989a8b42b09ddb0ad31ef4d, type: 3}
+  - {fileID: 8461432304894645062, guid: 3cddcf39bbe57674fbe747564a932cc8, type: 3}
+  - {fileID: 2166530208138196212, guid: 37c2994d3a827184593e4bf8f8e836b5, type: 3}
+  m_ObstacleTilePrefab: {fileID: 4348593566783157186, guid: 96e22ebb60e92ad43952e407a5e09bbf, type: 3}
   m_GateStartPrefab: {fileID: 3157467065612542411, guid: 7ff469d747b7c2143ad82b9b7088051b, type: 3}
   m_GateEndPrefab: {fileID: 3466638691481364011, guid: 5c21da1d2d9879a4f958f25cdafa2d18, type: 3}
   flyweightEnemyDataSettings: {fileID: 11400000, guid: 8a703885983e4c948a839504a79815b5, type: 2}

@@ -67,7 +67,7 @@ public static class TDConstant
     public const float CONFIG_MAZE_EXTRA_PASSAGE_RATE = 0.45f;
     // Obstacle ratio: % wall cells dùng làm obstacle decoration (không đặt tower được)
     // Remaining (1 - ratio) = tower zone tiles (đặt tower được)
-    public const float CONFIG_MAZE_OBSTACLE_WALL_RATIO = 0.30f;
+    public const float CONFIG_MAZE_OBSTACLE_WALL_RATIO = 0.15f;
     public const int   CONFIG_PLAYER_STARTING_LIVES  = 20;
     public const int   CONFIG_PLAYER_STARTING_GOLD   = 10;
     public const float CONFIG_GOLD_PASSIVE_RATE       = 5f;   // giây/+1 gold passive

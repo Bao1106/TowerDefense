@@ -75,6 +75,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Fill: {fileID: 2838571429401134606}
+  m_YOffset: 2.5
 --- !u!1 &4581148380885022189
 GameObject:
   m_ObjectHideFlags: 0

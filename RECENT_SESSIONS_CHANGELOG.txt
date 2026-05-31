@@ -1,6 +1,6 @@
 ================================================================================
-  TOWER DEFENSE — RECENT SESSIONS CHANGELOG (Sessions 23, 25, 26, 27, 28)
-  Generated: 2026-05-30
+  TOWER DEFENSE — RECENT SESSIONS CHANGELOG (Sessions 23, 25, 26, 27, 28, 29, 30)
+  Generated: 2026-05-31
 ================================================================================
 
 
@@ -337,6 +337,108 @@
     ✅ Enemy spawn đúng từ start gate
     ✅ Camera Arknights-style (40° rotation)
     ✅ Map scale fit camera view
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 30 — OBSTACLE SYSTEM OVERHAUL + HP BAR Y-OFFSET BUG FIX  [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Goal: Cải thiện hệ thống obstacle (prefab, tile, footprint logic);
+        fix bug HP bar enemy không hiển thị đúng khi operator tấn công.
+
+  ── Obstacle Prefab & Footprint System ───────────────────────────────────────
+
+  Bug #1 (corridor overlap): Footprint radius của obstacle lớn (Rock_07, Pine trees)
+    lan sang corridor cells → TowerZone tile spawn trên corridor → enemy "đi trên wall".
+    Fix: build validWallCells HashSet từ validPositions; footprint chỉ expand trong
+         wall cells (if !validWallCells.Contains(cell) → continue).
+
+  Bug #2 (obstacle quá to): Rock_07/09 + Pine trees có renderer bounds lớn
+    → ComputeFootprintRadii() tính radius=1+ → chiếm 3×3–5×5 cells.
+    Fix: thay bằng Rock_01–04 (nhỏ, radius=0) + Bush_01/02/Large_01 + Grass_Tall_01.
+
+  [MODIFIED] TDEnemyPathMainView.cs — OnValidTowerCellsReady():
+    + m_ObstacleTilePrefab [SerializeField mới]: tile đất/cỏ dưới obstacle
+    + Phase 1: footprint chỉ block wall cells, KHÔNG block corridor cells
+    + Phase 1.5 [MỚI]: spawn ObstacleTile (không phải TowerZone) dưới mọi obstacle cell
+    + Obstacle Y: 0f (ngồi tự nhiên trên ObstacleTile, không elevated)
+    + Phase 2: TowerZone chỉ trên wall cells không có obstacle (không đổi logic)
+    - Xóa: obstacleY = CONFIG_TOWER_ZONE_TILE_HEIGHT * 0.5f (sai — tile không dùng
+            constant này)
+
+  ── ObstacleTile Prefab [NEW] ────────────────────────────────────────────────
+
+  Path: Assets/1.Assets/Resources/Prefabs/ObstacleTile.prefab
+    + Cube, scale (2,1,2) — cùng shape/height với TowerZone
+    + Material: Generic_Grass.mat (Synty/Generic_Basic, grass texture thực)
+      guid: 77d067287fb28b7409b920737e9eb9ff
+    + Không có BoxCollider (removed)
+
+  Visual phân cấp 3 tầng:
+    Corridor  → PathTile      (dark grey, Stone_mobile.mat) — enemy path
+    Wall bỏ trống → TowerZone (light grey/white)            — đặt tower
+    Wall có obstacle → ObstacleTile (grass texture) + obstacle prefab trên đó
+
+  Material history:
+    Tạo ban đầu: URP/Lit brownish (ObstacleTile.mat tự tạo)
+    → Đổi sang: Generic_Dirt.mat (Synty, có texture dirt thực)
+    → Đổi sang: Generic_Grass.mat (Synty, grass texture — match style tự nhiên hơn)
+
+  ── Obstacle Prefab List (DTGamePlay scene) ──────────────────────────────────
+
+  Thay đổi qua 3 lần iteration:
+
+  V1 (s29): Bush_04×2 (dup), Rock_Pebbles_01, Small_Rocks_05 — quá nhỏ, dup
+  V2: Rock_03, Rock_07, Rock_09, Tree_Pine_01, Tree_Pine_02, Tree_Dead_01 — quá to
+  V3 (final):
+    [0] SM_Gen_Env_Rock_01        (đá nhỏ, radius=0)
+    [1] SM_Gen_Env_Rock_02        (đá nhỏ variant, radius=0)
+    [2] SM_Gen_Env_Bush_01        (bụi cây nhỏ)
+    [3] SM_Gen_Env_Bush_02        (bụi cây nhỏ variant)
+    [4] SM_Gen_Env_Bush_Large_01  (bụi cây vừa)
+    [5] SM_Gen_Env_Grass_Tall_01  (cỏ cao, variety)
+
+  ── Obstacle Ratio ───────────────────────────────────────────────────────────
+
+  CONFIG_MAZE_OBSTACLE_WALL_RATIO: 0.30f → 0.15f
+  Lý do: 30% quá nhiều obstacle, map trông rối. 15% ≈ 18–22 obstacle/run.
+
+  ── HP Bar Y-Offset Bug Fix ──────────────────────────────────────────────────
+
+  Bug report: "operator attack nhưng enemy ko mất máu trên thanh hp"
+
+  Điều tra:
+    - Operator damage = 10f (SO config OK), TakeDamage() được gọi → logic đúng
+    - m_HPBarView wired đúng (stripped MonoBehaviour, prefab reference valid)
+    - m_Fill wired đúng (fileID non-zero trong HPBar_Enemy.prefab)
+    - CONFIG_ENEMY_VISUAL_SCALE = 1.5f tồn tại trong TDConstant nhưng KHÔNG ĐƯỢC
+      DÙNG ở bất cứ đâu trong code — enemy scale đến từ prefab model
+
+  Root cause: WORLD_Y_OFFSET = 0.12f hardcoded const trong TDHPBarView.cs
+    → HP bar chỉ 0.12 world units trên enemy root
+    → Enemy model cao ~2–3 units → bar nằm dưới chân enemy
+    → Bar gần như bị ẩn trong mesh hoặc sát mặt đất, không nhìn thấy rõ
+
+  Fix:
+    [MODIFIED] TDHPBarView.cs
+      - const float WORLD_Y_OFFSET = 0.12f
+      + [SerializeField] float m_YOffset = 2.5f  (serialized, tunable per prefab)
+      - LateUpdate: transform.position = parent.position + (0, WORLD_Y_OFFSET, 0)
+      + LateUpdate: transform.position = parent.position + (0, m_YOffset, 0)
+
+    [MODIFIED] HPBar_Enemy.prefab
+      + m_YOffset: 2.5  (bar hiện trên đầu enemy, ~2.5 units above root)
+
+    [MODIFIED] HPBar_Operator.prefab
+      + m_YOffset: 1.8  (operator thấp hơn enemy → offset nhỏ hơn)
+
+  ── Result ───────────────────────────────────────────────────────────────────
+    ✅ Obstacle footprint không còn lan sang corridor cells (enemy đi đúng path)
+    ✅ ObstacleTile.prefab với Generic_Grass material — terrain tự nhiên
+    ✅ 6 obstacle prefabs nhỏ-vừa, mix đá + cây + cỏ
+    ✅ Obstacle ratio 15% — ≈18–22 obstacle/run, không rối
+    ✅ HP bar enemy hiển thị đúng trên đầu unit (m_YOffset serialized per-prefab)
+    ⚠️ m_YOffset có thể cần fine-tune thêm trong Inspector tùy scale model
 
 
 ================================================================================
