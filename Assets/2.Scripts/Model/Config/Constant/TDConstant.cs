@@ -59,43 +59,15 @@ public static class TDConstant
 
     //Config Values
     public static readonly float[] CONFIG_TOWER_ROTATIONS = { 0f, 90f, 180f, 270f };
-    // Grid 22×13 (plane scale 4.4×2.6, cellSize 2 → world 44×26, position Z=27.7)
-    // Plane X range 1.3..45.3, Z range 14.7..40.7 → aligns perfectly with CityGround 2u tiles [s20]
-    // → không cần buffer Y → PATH_MIN_GRID_Y = 0
-    public const int CONFIG_PATH_MIN_GRID_Y = 0;
+    // Grid size derives từ GameMapVisualize plane bounds / cellSize — không hardcode
+    // Start/End tính động: start=(0, height/2), end=(width-1, height/2)
 
-    // START/END tại Y=6 (giữa grid 13 tall, rows 0-12)
-    // Grid 22 wide (0..21): start col=0, end col=21
-    public static readonly Vector2Int CONFIG_ENEMY_START_POINT = new Vector2Int(0,  6);
-    public static readonly Vector2Int CONFIG_ENEMY_END_POINT   = new Vector2Int(21, 6);
-
-    // Paths được gen RANDOM mỗi game qua TDPathGeneratorControl
-    // → mỗi path nằm trong 1 Y-zone riêng để 3 paths không đè chaos
-    //
-    // Grid 22×13, start/end tại Y=6. Zones (yMin, yMax inclusive):
-    //   Path 0 — Top zone     Y= 7..12 (6 rows trên start.y=6, dùng hết row mới)
-    //   Path 1 — Bottom zone  Y= 0..5  (6 rows dưới start.y=6)
-    //   Path 2 — Mid sweep    Y= 2..10 (spans most rows)
-    public static readonly Vector2Int[] CONFIG_PATH_Y_ZONES =
-    {
-        new Vector2Int(7, 12), // Path 0: top   (extended to row 12 — new row [s20])
-        new Vector2Int(0, 5),  // Path 1: bottom
-        new Vector2Int(2, 10), // Path 2: mid sweep (extended from 9→10 [s20])
-    };
-
-    // Tunables cho random waypoint generator (grid 22 wide)
-    public const int CONFIG_PATH_MIN_STEP_X         = 2;  // horizontal segment ngắn nhất
-    public const int CONFIG_PATH_MAX_STEP_X         = 5;  // horizontal segment dài nhất
-    public const int CONFIG_PATH_MIN_VERTICAL_DELTA = 2;  // |dY| tối thiểu giữa 2 vertical strokes liên tiếp
-
-    // --- OBSTACLE CONFIG ---
-    // Obstacles là visual decoration (trees/rocks) — không ảnh hưởng path shape
-    // Đặt vào các cells KHÔNG phải path cell và KHÔNG quá gần start/end
-    public const int CONFIG_OBSTACLE_COUNT            = 12;
-    // Buffer (số cell) quanh START và END không đặt obstacle
-    public const int CONFIG_OBSTACLE_EXCLUSION_RADIUS = 2;
-    // Khoảng cách tối thiểu (Manhattan) giữa 2 obstacle centers
-    public const int CONFIG_OBSTACLE_SPACING          = 3;
+    // --- MAZE CONFIG ---
+    // Extra passage rate: % wall cells được mở thêm để tạo loops
+    public const float CONFIG_MAZE_EXTRA_PASSAGE_RATE = 0.45f;
+    // Obstacle ratio: % wall cells dùng làm obstacle decoration (không đặt tower được)
+    // Remaining (1 - ratio) = tower zone tiles (đặt tower được)
+    public const float CONFIG_MAZE_OBSTACLE_WALL_RATIO = 0.30f;
     public const int   CONFIG_PLAYER_STARTING_LIVES  = 20;
     public const int   CONFIG_PLAYER_STARTING_GOLD   = 10;
     public const float CONFIG_GOLD_PASSIVE_RATE       = 5f;   // giây/+1 gold passive

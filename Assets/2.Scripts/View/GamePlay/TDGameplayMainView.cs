@@ -26,18 +26,10 @@ public class TDGameplayMainView : MonoBehaviour
         TDGridMainModel.api.CreateGrid();
 
         IGridDTO gridDTO = new TDGridDTO(TDGridMainModel.api.width, TDGridMainModel.api.height);
-        MarkHUDZoneAsNonWalkable(gridDTO);
 
         m_TDEnemyPathMainView = transform.Find(TDConstant.GAMEPLAY_ENEMY_PATH_MAIN_VIEW)
                                          .GetComponent<TDEnemyPathMainView>();
         TDGameplayMainControl.api.InitEnemyPath(m_TDEnemyPathMainView, gridDTO);
-    }
-
-    private void MarkHUDZoneAsNonWalkable(IGridDTO gridDTO)
-    {
-        for (int x = 0; x < gridDTO.width; x++)
-            for (int y = 0; y < TDConstant.CONFIG_PATH_MIN_GRID_Y; y++)
-                gridDTO.GetCell(x, y).isWalkable = false;
     }
 
     private void CheckSceneLoaded()

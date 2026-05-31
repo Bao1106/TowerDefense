@@ -74,35 +74,7 @@ public class TDaStarPathControl : IPathFinderDTO
         return null; // No path found
     }
 
-    // Phase 2 — tính path qua chuỗi waypoints cố định (mỗi path có waypoints riêng)
-    // Ghép các đoạn A* start→wp[0]→wp[1]→...→end thành 1 path hoàn chỉnh
-    public List<IGridCellDTO> ComputeWaypointPath(IGridDTO gridDTO, IGridCellDTO start, IGridCellDTO end, Vector2Int[] waypoints)
-    {
-        List<IGridCellDTO> fullPath = new List<IGridCellDTO>();
-        IGridCellDTO current = start;
-
-        foreach (Vector2Int wp in waypoints)
-        {
-            IGridCellDTO wpCell = gridDTO.GetCell(wp.x, wp.y);
-            List<IGridCellDTO> segment = ComputePath(gridDTO, current, wpCell);
-            if (segment == null || segment.Count == 0) return null;
-
-            // Thêm tất cả trừ cell cuối (tránh duplicate tại điểm nối)
-            for (int i = 0; i < segment.Count - 1; i++)
-                fullPath.Add(segment[i]);
-
-            current = wpCell;
-        }
-
-        // Đoạn cuối đến END
-        List<IGridCellDTO> lastSegment = ComputePath(gridDTO, current, end);
-        if (lastSegment == null || lastSegment.Count == 0) return null;
-        fullPath.AddRange(lastSegment);
-
-        return fullPath;
-    }
-
-    // Phase 2 — tìm N path khác nhau bằng path-blocking (interior cells)
+    // Tìm N path khác nhau bằng path-blocking (interior cells)
     public List<List<IGridCellDTO>> FindMultiplePaths(IGridDTO gridDTO, IGridCellDTO start, IGridCellDTO end, int numberOfPaths)
     {
         List<List<IGridCellDTO>> paths = new List<List<IGridCellDTO>>();
@@ -128,59 +100,6 @@ public class TDaStarPathControl : IPathFinderDTO
             ResetPathInteriorAsWalkable(path);
 
         return paths;
-    }
-
-    // BuildDefinedPath — vẽ straight horizontal/vertical segments giữa các waypoints
-    // KHÔNG dùng A* → path shape 100% do CONFIG_MULTI_PATH_WAYPOINTS quyết định
-    // Rule: mỗi cặp waypoint liên tiếp phải cùng X hoặc cùng Y
-    public List<IGridCellDTO> BuildDefinedPath(IGridDTO gridDTO, Vector2Int start, Vector2Int end, Vector2Int[] waypoints)
-    {
-        var path = new List<IGridCellDTO>();
-        Vector2Int cur = start;
-
-        foreach (Vector2Int wp in waypoints)
-        {
-            AppendStraightSegment(gridDTO, path, cur, wp);
-            cur = wp;
-        }
-
-        // Đoạn cuối → end
-        AppendStraightSegment(gridDTO, path, cur, end);
-        // Thêm cell end (AppendStraightSegment không thêm cell đích)
-        path.Add(gridDTO.GetCell(end.x, end.y));
-
-        return path;
-    }
-
-    // Vẽ đoạn thẳng từ 'from' đến 'to' (cùng X hoặc cùng Y)
-    // Thêm tất cả cells của đoạn KHÔNG bao gồm cell 'to' (tránh duplicate tại điểm nối)
-    private void AppendStraightSegment(IGridDTO gridDTO, List<IGridCellDTO> path, Vector2Int from, Vector2Int to)
-    {
-        int x = from.x, y = from.y;
-
-        // Di chuyển theo X trước (nếu khác X)
-        if (from.x != to.x)
-        {
-            int dx = to.x > from.x ? 1 : -1;
-            while (x != to.x)
-            {
-                path.Add(gridDTO.GetCell(x, y));
-                x += dx;
-            }
-        }
-
-        // Di chuyển theo Y (nếu khác Y)
-        if (from.y != to.y)
-        {
-            int dy = to.y > from.y ? 1 : -1;
-            while (y != to.y)
-            {
-                path.Add(gridDTO.GetCell(x, y));
-                y += dy;
-            }
-        }
-
-        // Nếu from == to (waypoint trùng điểm hiện tại) → không thêm gì
     }
 
     private List<IGridCellDTO> ReconstructPath(Dictionary<IGridCellDTO, IGridCellDTO> cameFrom, IGridCellDTO current)

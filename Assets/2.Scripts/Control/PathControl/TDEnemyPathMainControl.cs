@@ -79,55 +79,36 @@ public class TDEnemyPathMainControl
         onGetEnemyPos?.Invoke(startPoint, endPoint);
     }
 
+    // Maze Extraction: gen N mazes độc lập, mỗi maze cho 1 path, combine thành unified grid
     public void GenerateAllPaths(IGridDTO gridDTO, Vector2Int startPoint, Vector2Int endPoint)
     {
-        var allPaths = new List<List<IGridCellDTO>>();
+        List<List<IGridCellDTO>> allPaths =
+            TDMazePathGenerator.api.GenerateMultiplePaths(gridDTO, startPoint, endPoint, TDConstant.CONFIG_NUM_PATHS);
 
-        for (int i = 0; i < TDConstant.CONFIG_PATH_Y_ZONES.Length; i++)
-        {
-            Vector2Int zone = TDConstant.CONFIG_PATH_Y_ZONES[i];
-            Vector2Int[] waypoints = TDPathGeneratorControl.api.GenerateRandomWaypoints(
-                startPoint, endPoint, zone.x, zone.y);
-            List<IGridCellDTO> path = TDaStarPathControl.api.BuildDefinedPath(
-                gridDTO, startPoint, endPoint, waypoints);
-
-            if (path != null && path.Count > 0)
-            {
-                allPaths.Add(path);
-                Debug.Log($"<color=cyan>GenerateAllPaths: Path {i} (zone Y={zone.x}..{zone.y}) → {waypoints.Length} waypoints, {path.Count} cells</color>");
-            }
-            else
-                Debug.LogWarning($"<color=orange>GenerateAllPaths: Path {i} failed</color>");
-        }
-
-        Debug.Log($"<color=cyan>GenerateAllPaths: built {allPaths.Count}/{TDConstant.CONFIG_PATH_Y_ZONES.Length} paths</color>");
+        Debug.Log($"<color=cyan>GenerateAllPaths (Maze): {allPaths.Count}/{TDConstant.CONFIG_NUM_PATHS} paths</color>");
         onGetAllPaths?.Invoke(allPaths);
     }
 
-    public void ComputeValidTowerCells(IGridDTO gridDTO, List<List<IGridCellDTO>> allPaths,
-        List<Vector2Int> obstacleCells, Vector2Int start, Vector2Int end)
+    // Maze B1: valid tower cells = wall cells (non-walkable) excluding start and end
+    public void ComputeValidTowerCells(IGridDTO gridDTO, Vector2Int start, Vector2Int end)
     {
-        var forbidden = new HashSet<Vector2Int> { start, end };
-        foreach (var path in allPaths)
-            foreach (var cell in path)
-                forbidden.Add(cell.position);
-        foreach (var obs in obstacleCells)
-            forbidden.Add(obs);
+        var excluded = new HashSet<Vector2Int> { start, end };
 
-        Vector3[,] grid         = TDGridMainModel.api.GetGrid();
+        Vector3[,] grid          = TDGridMainModel.api.GetGrid();
         var        validPositions = new List<Vector3>();
+
         for (int x = 0; x < gridDTO.width; x++)
             for (int y = 0; y < gridDTO.height; y++)
-                if (!forbidden.Contains(new Vector2Int(x, y)))
+                if (!gridDTO.GetCell(x, y).isWalkable && !excluded.Contains(new Vector2Int(x, y)))
                     validPositions.Add(grid[x, y]);
 
-        Debug.Log($"<color=cyan>ComputeValidTowerCells: {validPositions.Count} valid cells</color>");
+        Debug.Log($"<color=cyan>ComputeValidTowerCells (Maze): {validPositions.Count} wall cells = tower spots</color>");
         onValidTowerCellsReady?.Invoke(validPositions);
     }
 
     // ── Wave Loop (LevelConfig-driven) ───────────────────────────────────────
     // allPaths[0] = corridor 1, allPaths[1] = corridor 2 (fallback to [0] nếu chỉ có 1)
-    public async void StartWaveLoop(Transform spawnPos,
+    public async void StartWaveLoop(Vector3 spawnWorldPos,
         List<List<IGridCellDTO>> allPaths, LevelConfig config, CancellationToken ct)
     {
         if (allPaths == null || allPaths.Count == 0)
@@ -152,7 +133,7 @@ public class TDEnemyPathMainControl
                 Debug.Log($"<color=green>Wave {waveIdx + 1}/{waveBatches.Count} — {waveBatches[waveIdx].Count} enemies</color>");
                 onWaveStart?.Invoke(waveIdx);
 
-                await SpawnBatch(spawnPos, corridor, waveBatches[waveIdx], ratio, waveIdx, config.spawnInterval, ct);
+                await SpawnBatch(spawnWorldPos, corridor, waveBatches[waveIdx], ratio, waveIdx, config.spawnInterval, ct);
 
                 await PauseAwareDelay(config.waveInterval, ct);
             }
@@ -166,7 +147,7 @@ public class TDEnemyPathMainControl
         }
     }
 
-    private async Task SpawnBatch(Transform spawnPos, List<IGridCellDTO> path,
+    private async Task SpawnBatch(Vector3 spawnWorldPos, List<IGridCellDTO> path,
         List<EnemyType> batch, DifficultyRatioTable.RatioRow ratio,
         int waveIdx, float spawnInterval, CancellationToken ct)
     {
@@ -188,7 +169,7 @@ public class TDEnemyPathMainControl
             }
 
             TDEnemyView enemy = pool.Get();
-            enemy.transform.position = spawnPos.position;
+            enemy.transform.position = spawnWorldPos;
             enemy.transform.rotation = Quaternion.identity;
 
             string key = $"w{waveIdx}-{type}-e{i}-{enemy.gameObject.GetInstanceID()}";

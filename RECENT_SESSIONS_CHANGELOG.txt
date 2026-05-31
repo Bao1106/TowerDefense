@@ -225,6 +225,120 @@
     ⚠️ Sword rotation có thể cần fine-tune thủ công trong Unity Inspector
 
 
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 29 — MAZE EXTRACTION REFACTOR + CAMERA/MAP REWORK         [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Goal: Thay thế Y-zones zigzag path gen bằng Recursive Backtracker maze extraction
+        (Arknights style B1: wall cells = elevated platform = tower spots).
+        Update camera settings và GameMapVisualize scale.
+
+  ── Architecture change: Path Generation ────────────────────────────────────
+
+  TRƯỚC (Y-zones zigzag):
+    TDPathGeneratorControl.GenerateRandomWaypoints() → Y-zones
+    TDaStarPathControl.BuildDefinedPath() → straight H/V segments
+    TDObstacleControl.PlaceObstacles() → random trees/rocks trên valid cells
+
+  SAU (Maze Extraction):
+    TDMazePathGenerator.GenerateMultiplePaths(N=3)
+      → Gen N mazes độc lập (Recursive Backtracker)
+      → A* extract 1 shortest path/maze
+      → Combine: union of N path cells = walkable (corridor)
+      → Wall cells (!isWalkable) = tower placement spots
+    TDEnemyPathMainControl.GenerateAllPaths() → call MazePathGenerator
+    TDEnemyPathMainControl.ComputeValidTowerCells() → wall cells only (new logic)
+
+  ── Files thay đổi ───────────────────────────────────────────────────────────
+
+  [NEW] TDMazePathGenerator.cs
+    + GenerateMultiplePaths(gridDTO, start, end, N): gen N mazes → N paths → unified grid
+    + CarveFrom(): Recursive Backtracker, room cells tại even (x,y) coords
+    + SetAllWalls(): reset grid trước mỗi maze run
+    Không cần extra passage rate nữa (mỗi maze run độc lập, path guaranteed tìm được)
+
+  [DELETED content] TDPathGeneratorControl.cs → Y-zones + zigzag logic removed
+  [DELETED content] TDObstacleControl.cs → replaced bởi footprint logic trong View
+
+  [MODIFIED] TDaStarPathControl.cs
+    - Xóa: BuildDefinedPath(), AppendStraightSegment(), ComputeWaypointPath()
+    + Giữ: ComputePath(), FindMultiplePaths(), ReconstructPath()
+
+  [MODIFIED] TDEnemyPathMainControl.cs
+    + GenerateAllPaths(): MazePathGenerator.GenerateMultiplePaths()
+    + ComputeValidTowerCells(gridDTO, start, end): wall cells = valid tower spots
+      (Signature đổi: bỏ allPaths + obstacleCells params)
+    + StartWaveLoop(Vector3 spawnWorldPos, ...): Transform → Vector3
+    + SpawnBatch(Vector3 spawnWorldPos, ...): dùng world pos trực tiếp
+
+  [MODIFIED] TDEnemyPathMainView.cs
+    + Initialize(): start/end dynamic — snap về even coord
+        centerY = height/2; if odd → centerY--
+        lastCol = width-1;  if odd → lastCol--
+    + ImplementPath(): bỏ PlaceObstacles call, chỉ GenerateAllPaths()
+    + OnGetAllPaths(): gọi ComputeValidTowerCells trực tiếp sau path gen
+    + OnValidTowerCellsReady(): split wall cells:
+        30% → obstacle prefab (footprint-aware, block neighbors)
+        70% → TowerZone tile
+    + ComputeFootprintRadii(): tính từ Renderer.bounds thực tế mỗi prefab
+        radius=0 → 1×1 cell; radius=1 → 3×3 cells
+    + Enemy spawn: CellToWorld(m_StartPoint) thay vì CreatePoint Transform
+    - Xóa: m_SpawnPos, m_ObstacleSpawned, ComputeFootprintRadii (old), OnObstaclesPlaced
+
+  [MODIFIED] TDControl.cs
+    - TDObstacleControl.api + TDPathGeneratorControl.api removed
+    + TDMazePathGenerator.api = new TDMazePathGenerator()
+
+  [MODIFIED] TDConstant.cs
+    - Xóa: CONFIG_PATH_Y_ZONES, CONFIG_PATH_MIN/MAX_STEP_X, CONFIG_PATH_MIN_VERTICAL_DELTA
+    - Xóa: CONFIG_OBSTACLE_COUNT, CONFIG_OBSTACLE_EXCLUSION_RADIUS, CONFIG_OBSTACLE_SPACING
+    - Xóa: CONFIG_ENEMY_START_POINT, CONFIG_ENEMY_END_POINT (hardcode → dynamic)
+    - Xóa: CONFIG_PATH_MIN_GRID_Y
+    + CONFIG_MAZE_EXTRA_PASSAGE_RATE = 0.45f  (giữ cho tương lai nếu cần)
+    + CONFIG_MAZE_OBSTACLE_WALL_RATIO = 0.30f (30% wall = obstacle)
+    + CONFIG_NUM_PATHS = 3
+
+  [MODIFIED] TDGameplayMainView.cs
+    - Xóa: MarkHUDZoneAsNonWalkable() — no-op (loop y<0 không bao giờ chạy,
+           maze gen overwrite toàn bộ walkable state anyway)
+
+  ── Camera Settings (DTGamePlay scene, SAVED) ────────────────────────────────
+
+  Main Camera:
+    Position: (24.5, 13.7, 3)   [trước: Y=15]
+    Rotation: X=40°             [trước: X=30°] — Arknights isometric style
+    Orthographic Size: 13       [trước: 14]
+
+  Visible ground area (Y=0):
+    Width: 2×13×(16/9) ≈ 46.2 units
+    Depth: 2×13/sin(40°) ≈ 40.4 units
+
+  ── GameMapVisualize (DTGamePlay scene, SAVED) ───────────────────────────────
+
+  Transform:
+    Position: (24.5, 0, 23)     [trước: (23.3, 0, 27.7)]
+    Scale:    (4.0, 5.0, 3.0)   [trước: (4.4, 5.0, 2.6)]
+  Bounds: 40×30 world units
+  Grid: ~20×15 cells (40/2 × 30/2, cellSize=2)
+  Start/End: (0,6)→(18,6) — dynamic, computed at runtime
+
+  ── Debug notes ──────────────────────────────────────────────────────────────
+
+  Bug encountered: start=(0,7) odd coord → CarveFrom stuck (no valid room neighbors)
+  Fix: snap centerY về even: if (centerY % 2 != 0) centerY--
+
+  Bug encountered: enemy spawn tại CreatePoint cũ (vị trí sai)
+  Fix: CellToWorld(m_StartPoint) → đúng world position của start gate
+
+  ── Result ───────────────────────────────────────────────────────────────────
+    ✅ Maze gen hoạt động — 3 paths từ 3 maze runs độc lập
+    ✅ Wall cells = tower spots, corridor cells = enemy path
+    ✅ 30% wall cells có obstacle decoration (footprint-aware)
+    ✅ Enemy spawn đúng từ start gate
+    ✅ Camera Arknights-style (40° rotation)
+    ✅ Map scale fit camera view
+
+
 ================================================================================
   END OF CHANGELOG
 ================================================================================

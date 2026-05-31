@@ -40,8 +40,7 @@ public class TDControl
         TDEnemyPathMainControl.api    = new TDEnemyPathMainControl();
         TDTowerMainControl.api        = new TDTowerMainControl();
         TDaStarPathControl.api        = new TDaStarPathControl();
-        TDObstacleControl.api         = new TDObstacleControl();
-        TDPathGeneratorControl.api    = new TDPathGeneratorControl();
+        TDMazePathGenerator.api       = new TDMazePathGenerator();
         
         //Init sub control
         TDOperatorRegistry.api    = new TDOperatorRegistry();
