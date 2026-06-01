@@ -89,18 +89,32 @@ public class TDEnemyPathMainControl
         onGetAllPaths?.Invoke(allPaths);
     }
 
-    // Maze B1: valid tower cells = wall cells (non-walkable) excluding start and end
+    // Maze B1: valid tower cells = wall cells (non-walkable) excluding start/end buffer + occupied cells
     public void ComputeValidTowerCells(IGridDTO gridDTO, Vector2Int start, Vector2Int end)
     {
-        var excluded = new HashSet<Vector2Int> { start, end };
+        // Exclusion zone: start/end + 2-cell radius — prevent obstacles spawning at gate entrances
+        const int gateBuffer = 2;
+        var excluded = new HashSet<Vector2Int>();
+        for (int dx = -gateBuffer; dx <= gateBuffer; dx++)
+            for (int dy = -gateBuffer; dy <= gateBuffer; dy++)
+            {
+                var s = new Vector2Int(start.x + dx, start.y + dy);
+                var e = new Vector2Int(end.x   + dx, end.y   + dy);
+                if (s.x >= 0 && s.x < gridDTO.width && s.y >= 0 && s.y < gridDTO.height) excluded.Add(s);
+                if (e.x >= 0 && e.x < gridDTO.width && e.y >= 0 && e.y < gridDTO.height) excluded.Add(e);
+            }
 
         Vector3[,] grid          = TDGridMainModel.api.GetGrid();
         var        validPositions = new List<Vector3>();
 
         for (int x = 0; x < gridDTO.width; x++)
             for (int y = 0; y < gridDTO.height; y++)
-                if (!gridDTO.GetCell(x, y).isWalkable && !excluded.Contains(new Vector2Int(x, y)))
-                    validPositions.Add(grid[x, y]);
+            {
+                if (gridDTO.GetCell(x, y).isWalkable) continue;           // skip path cells
+                if (excluded.Contains(new Vector2Int(x, y))) continue;    // skip gate buffer
+                if (!TDGridMainModel.api.IsValidPlacement(grid[x, y])) continue; // skip occupied (path tiles already SetOccupied)
+                validPositions.Add(grid[x, y]);
+            }
 
         Debug.Log($"<color=cyan>ComputeValidTowerCells (Maze): {validPositions.Count} wall cells = tower spots</color>");
         onValidTowerCellsReady?.Invoke(validPositions);

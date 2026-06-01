@@ -135,7 +135,8 @@ namespace UnityEngine.UI.ProceduralImage
             FixTexCoordsInCanvas();
             this.m_OnDirtyVertsCallback += OnVerticesDirty;
             this.preserveAspect = false;
-            this.material = null;
+            if (m_Material == null)
+                this.material = null;
             if (this.sprite == null)
             {
                 this.sprite = EmptySprite.Get();

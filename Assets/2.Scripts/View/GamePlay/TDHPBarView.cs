@@ -1,9 +1,10 @@
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.UI.ProceduralImage;
 
 public class TDHPBarView : MonoBehaviour
 {
-    [SerializeField] private Image m_Fill;
+    [SerializeField] private ProceduralImage m_Fill;
     // Serialized để mỗi prefab (enemy vs operator) tuỳ chỉnh độ cao bar so với root
     [SerializeField] private float m_YOffset = 2.5f;
 

@@ -57,6 +57,14 @@ public static class TDConstant
     public const string PATH_GAMEPLAY_VICTORY_RETRY_BTN     = "VictoryPanel/PopupWindow/RetryButton";
     public const string PATH_GAMEPLAY_VICTORY_NEXT_BTN      = "VictoryPanel/PopupWindow/NextButton";
 
+    // Stat value labels inside popups (TMP that HUDView fills at show-time)
+    public const string PATH_GAMEOVER_STAT_ENEMIES  = "GameOverPanel/PopupWindow/Stats/EnemiesRow/Value";
+    public const string PATH_GAMEOVER_STAT_LIVES    = "GameOverPanel/PopupWindow/Stats/LivesRow/Value";
+    public const string PATH_GAMEOVER_STAT_GOLD     = "GameOverPanel/PopupWindow/Stats/GoldRow/Value";
+    public const string PATH_VICTORY_STAT_ENEMIES   = "VictoryPanel/PopupWindow/Stats/EnemiesRow/Value";
+    public const string PATH_VICTORY_STAT_LIVES     = "VictoryPanel/PopupWindow/Stats/LivesRow/Value";
+    public const string PATH_VICTORY_STAT_GOLD      = "VictoryPanel/PopupWindow/Stats/GoldRow/Value";
+
     //Config Values
     public static readonly float[] CONFIG_TOWER_ROTATIONS = { 0f, 90f, 180f, 270f };
     // Grid size derives từ GameMapVisualize plane bounds / cellSize — không hardcode

@@ -15,6 +15,7 @@ namespace UnityEditor.UI
 
         SerializedProperty m_borderWidth;
         SerializedProperty m_falloffDist;
+        SerializedProperty m_Material;
 
         SerializedProperty m_FillMethod;
         SerializedProperty m_FillOrigin;
@@ -50,6 +51,7 @@ namespace UnityEditor.UI
 
             m_borderWidth = serializedObject.FindProperty("borderWidth");
             m_falloffDist = serializedObject.FindProperty("falloffDistance");
+            m_Material = serializedObject.FindProperty("m_Material");
 
             if ((target as ProceduralImage).GetComponent<ProceduralImageModifier>() != null)
             {
@@ -85,7 +87,7 @@ namespace UnityEditor.UI
             ProceduralImageSpriteGUI();
 
             EditorGUILayout.PropertyField(m_Color);
-            //EditorGUILayout.PropertyField(m_Material);
+            EditorGUILayout.PropertyField(m_Material);
             
             RaycastControlsGUI();
             ProceduralImageTypeGUI();

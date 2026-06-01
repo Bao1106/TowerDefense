@@ -1,6 +1,6 @@
 ================================================================================
-  TOWER DEFENSE — RECENT SESSIONS CHANGELOG (Sessions 23, 25, 26, 27, 28, 29, 30)
-  Generated: 2026-05-31
+  TOWER DEFENSE — RECENT SESSIONS CHANGELOG (Sessions 23, 25–33)
+  Generated: 2026-06-01
 ================================================================================
 
 
@@ -439,6 +439,296 @@
     ✅ Obstacle ratio 15% — ≈18–22 obstacle/run, không rối
     ✅ HP bar enemy hiển thị đúng trên đầu unit (m_YOffset serialized per-prefab)
     ⚠️ m_YOffset có thể cần fine-tune thêm trong Inspector tùy scale model
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 31 — HP BAR FILL BUG FIX (VISUAL KHÔNG GIẢM)                [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Goal: Fix HP bar của enemy và operator hiển thị đúng khi bị damage.
+        (Damage logic đúng — operator vẫn die — nhưng thanh HP không co lại về mặt visual)
+
+  ── Điều tra ─────────────────────────────────────────────────────────────────
+
+  Xác nhận qua static analysis:
+    - TDEnemyView.TakeDamage() và TDOperatorView.TakeDamage() gọi UpdateHP() đúng
+    - m_HPBarView wired đúng trong cả Slime và OperatorKnight prefab
+    - EnemyData HP, attackDamage, attackSpeed đều hợp lệ
+    - OperatorData hp=100, damage=10, attackSpeed=2 đều hợp lệ
+    - Tower Bullet Config damage values đều > 0
+    - DifficultyRatioTable hpMult > 0 mọi difficulty
+
+  ── Root cause #1 — HPBar_Enemy: 2 Fill child chồng nhau ────────────────────
+
+  Phát hiện trong HPBar_Enemy.prefab có 2 child cùng tên "Fill":
+
+  | Child         | instanceID | Type            | activeSelf | Wired vào m_Fill |
+  |---------------|------------|-----------------|------------|------------------|
+  | Fill (gốc)    | 32794      | standard Image  | FALSE ❌   | ✓ (32788)        |
+  | Fill (mới)    | 35830      | ProceduralImage | TRUE  ✓    | ✗                |
+
+  → Fill gốc (standard Image) bị inactive → không bao giờ render dù m_Fill trỏ đúng
+  → Fill ProceduralImage active và nhìn thấy nhưng không được control bởi UpdateHP
+  → Visual luôn hiện full bar, HP code giảm đúng (operator vẫn die)
+
+  ProceduralImage (Fill 35830) đã có:
+    - fillAmount property (kế thừa từ Image) ✓
+    - type = Filled, fillMethod = Horizontal ✓
+    - sprite đã assign sẵn (không null) ✓
+    - Color orange (1, 0.549, 0.102, 1) ✓
+
+  Fix:
+    [MODIFIED] HPBar_Enemy.prefab
+      TDHPBarView.m_Fill: 32788 (standard Image, inactive) → 35834 (ProceduralImage, active)
+    Propagate tự động sang tất cả nested instances (Slime, SwarmFast, TurtleTank, DragonBoarBoss)
+
+  ── Root cause #2 — Unity Filled Image bỏ qua fillAmount khi sprite = null ──
+
+  Unity Image.OnPopulateMesh() có logic:
+    if (activeSprite == null) {
+        base.OnPopulateMesh(toFill); // render full rect, KHÔNG quan tâm fillAmount
+        return;
+    }
+  → HPBar_Operator Fill (standard Image, sprite=null) gặp vấn đề này
+  → Tuy nhiên HPBar_Operator chưa được chuyển sang ProceduralImage
+  ⚠️ Nếu HPBar_Operator HP bar không giảm: cần upgrade Fill sang ProceduralImage
+     hoặc assign sprite cho Fill Image của HPBar_Operator
+
+  ── Files thay đổi ────────────────────────────────────────────────────────────
+
+  [MODIFIED] TDHPBarView.cs
+    - Awake(): xóa code tạm thời assign UISprite (không cần vì dùng ProceduralImage)
+    - UpdateHP(): xóa debug log tạm thời
+    - Code sạch lại đúng như design ban đầu
+
+  [MODIFIED] HPBar_Enemy.prefab
+    - TDHPBarView.m_Fill → ProceduralImage (35834) trên Fill child active
+    - Fill gốc (standard Image, 32794) vẫn còn trong hierarchy nhưng inactive và không dùng
+
+  [MODIFIED] HPBar_Operator.prefab
+    - Tương tự HPBar_Enemy: user thêm ProceduralImage Fill mới (48972, activeSelf=true)
+    - Fill gốc (standard Image, 33478) bị inactive
+    - TDHPBarView.m_Fill → ProceduralImage (48972)
+
+  ── Result ───────────────────────────────────────────────────────────────────
+    ✅ HP bar enemy giảm đúng khi bị tower/operator attack
+    ✅ HP bar operator giảm đúng khi bị enemy attack
+    ✅ Cả 2 HP bar dùng ProceduralImage (rounded corners, sprite sẵn có)
+    ✅ Nested instances (Slime, SwarmFast, TurtleTank, DragonBoarBoss, OperatorKnight) tự update
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 32 — HP BAR UI + OBSTACLE SPAWN BUG FIX                  [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Goal: Apply AlwaysOnTop material cho ProceduralImage HP bar Fill;
+        chuyển HP bar xuống dưới chân unit (Arknights style);
+        fix obstacle spawn lên path và end gate.
+
+  ── ProceduralImage AlwaysOnTop Material Support ─────────────────────────────
+
+  Vấn đề:
+    - ProceduralImage.Init() luôn set this.material = null → xóa mọi material
+      được assign trong Inspector.
+    - Custom inspector (ProceduralImageEditor) comment out PropertyField(m_Material)
+      → không có slot Material trong Inspector.
+    - HPBar_AlwaysOnTop.mat (shader Custom/UI_AlwaysOnTop) không có rounded corners
+      logic → không dùng trực tiếp cho ProceduralImage Fill được.
+
+  Fix #1 — ProceduralImage.cs (Init method):
+    - Thêm điều kiện: chỉ reset material nếu m_Material == null
+    - Material assign trong Inspector được giữ lại qua OnEnable()
+
+  Fix #2 — ProceduralImageEditor.cs:
+    - Khai báo SerializedProperty m_Material
+    - FindProperty("m_Material") trong OnEnable()
+    - Uncomment EditorGUILayout.PropertyField(m_Material) → slot hiện trong Inspector
+
+  New shader — UI/Procedural UI Image AlwaysOnTop:
+    Path: Assets/4.ThirdParties/ProceduralUIImage/Resources/Shaders/
+          ProceduralUIImage_AlwaysOnTop.shader
+    Copy của ProceduralImageRuntime.shader, chỉ đổi:
+      "Queue"="Transparent" → "Queue"="Overlay"
+      ZTest [unity_GUIZTestMode] → ZTest Always
+    Đặt trong Resources/Shaders/ (cạnh shader gốc) để Shader.Find() luôn tìm thấy
+
+  New material:
+    Assets/1.Assets/Materials/UI/HPBar_ProceduralAlwaysOnTop.mat
+    Shader: UI/Procedural UI Image AlwaysOnTop (guid: 8c32bace353b97346957c43f45936adc)
+    → Giữ rounded corners + ZTest Always (render on top of 3D models)
+
+  Applied to HPBar_Enemy.prefab + HPBar_Operator.prefab:
+    | Node              | Component       | Material                      |
+    |-------------------|-----------------|-------------------------------|
+    | Background        | Image           | HPBar_AlwaysOnTop.mat         |
+    | Fill (inactive)   | Image           | HPBar_AlwaysOnTop.mat         |
+    | Fill (active)     | ProceduralImage | HPBar_ProceduralAlwaysOnTop.mat|
+
+  ── HP Bar Position: Above → Below (Arknights style) ─────────────────────────
+
+  Thay đổi: TDHPBarView.m_YOffset
+    HPBar_Enemy.prefab:    2.5f → -0.3f  (từ trên đầu → dưới chân)
+    HPBar_Operator.prefab: 1.8f → -0.3f
+
+  ── Obstacle Spawn Bug Fix ───────────────────────────────────────────────────
+
+  Bug #1 — Obstacle spawn sát/trên end gate:
+    Root cause: ComputeValidTowerCells chỉ exclude đúng 1 cell start/end.
+                Wall cells kề liền gate vẫn là valid obstacle spot.
+    Fix: Mở rộng exclusion zone thành radius 2 (vùng 5×5) quanh start và end.
+
+  Bug #2 — Obstacle spawn trên enemy path:
+    Root cause: ComputeValidTowerCells chỉ check !isWalkable, không cross-check
+                với m_OccupiedCell. VisualizeAllPaths đã gọi SetOccupiedCell
+                cho mọi path cell trước khi ComputeValidTowerCells chạy.
+    Fix #1 (control): Thêm IsValidPlacement() check trong ComputeValidTowerCells
+                      → lọc path cells đã occupied ra khỏi validPositions.
+    Fix #2 (view): Safety guard trong OnValidTowerCellsReady trước khi
+                   Instantiate obstacle → skip nếu cell occupied.
+
+  [MODIFIED] TDEnemyPathMainControl.cs — ComputeValidTowerCells():
+    + const int gateBuffer = 2 — exclusion radius quanh start/end
+    + Build excluded HashSet bằng double loop gateBuffer
+    + !TDGridMainModel.api.IsValidPlacement(grid[x,y]) → skip occupied cells
+
+  [MODIFIED] TDEnemyPathMainView.cs — OnValidTowerCellsReady():
+    + if (!TDGridMainModel.api.IsValidPlacement(center)) continue
+
+  ── Result ───────────────────────────────────────────────────────────────────
+    ✅ ProceduralImage Fill slot Material hiện trong Inspector
+    ✅ HPBar_ProceduralAlwaysOnTop.mat — rounded corners + ZTest Always
+    ✅ HP bar hiển thị dưới chân unit (Arknights style, m_YOffset = -0.3)
+    ✅ Obstacle không còn spawn sát end gate (gateBuffer = 2 cells)
+    ✅ Obstacle không còn spawn trên enemy path (IsValidPlacement guard)
+
+  ── Win/Lose Popup Border Asset Analysis ─────────────────────────────────────
+
+  Source pack: Assets/1.Assets/UnityStore Resources/Kenney/
+               kenney_fantasy-ui-borders/PNG/Double/
+
+  Phương pháp: Script generate dark-background preview cho toàn bộ 32 variants
+  của Border, Panel, Transparent border, Divider, Divider Fade → đọc và so sánh
+  với 2 design mockup (WIN gold ornate, LOSE dark red chunky).
+
+  🏆 WIN Border (Gold):
+    Frame  : Transparent border/panel-transparent-border-000.png
+             → Rectangular, góc ornament MỞ RỘNG RA NGOÀI (meander bracket)
+             → Thin lines, rất ornate, phong cách trang trí cổ điển
+    Tint   : Gold (1.0, 0.75, 0.15, 1)
+    Mode   : Image Type = Sliced
+
+  💀 LOSE Border (Dark Red):
+    Frame  : Transparent border/panel-transparent-border-005.png
+             → Rectangular, góc CHAMFERED (cắt chéo 45°), chunky/solid
+    Tint   : Dark Red (0.65, 0.08, 0.08, 1)
+    Mode   : Image Type = Sliced
+
+    Lines  : Divider Fade/divider-fade-001.png  × 2 instances
+             → Double line, fade cả 2 đầu → hiệu ứng dashed khi co ngắn
+             → Đặt tại ~1/3 và ~2/3 chiều cao phần trong border
+    Tint   : cùng Dark Red như frame
+
+  Preview helper: _Preview/ folder (generated, có thể xoá sau khi dùng)
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 33 — WIN/LOSE POPUP DESIGN (Phase 8)                       [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Goal: Thiết kế 2 popup kết quả game (Victory / GameOver) dựa trên
+        border_win_frame.png (vàng) và border_lose_frame.png (đỏ).
+        Populate stats từ game logic hiện có. Wire logic show/hide vào HUDView.
+
+  ── Border Assets ────────────────────────────────────────────────────────────
+
+  Assets/1.Assets/UI/border_win_frame.png
+    → Golden elegant double-line frame, corner ornaments + side center ornaments
+    → Import type: Texture2D → đổi sang Sprite (TextureImporter)
+
+  Assets/1.Assets/UI/border_lose_frame.png
+    → Red sharp double-line frame, small corner squares + top/bottom center notch
+    → Import type: Texture2D → đổi sang Sprite
+
+  ── UI Hierarchy (Canvas/SafeArea/Container) ─────────────────────────────────
+
+  GameOverPanel [Image overlay: dark red #2E0808 @53%] [LayoutElement.ignoreLayout=true]
+    └─ PopupWindow [RectTransform center: 1440×750]
+         ├─ BgFill         [Image: #0F0709]
+         ├─ BorderFrame    [Image: border_lose_frame.png sprite]
+         ├─ TitleText      [TMP: "Operation Failed" bold, #CC2828, ~94pt]
+         ├─ Subtitle       [TMP: "Your city has fallen" medium, #AA7777, ~29pt]
+         ├─ Divider1       [Image: thin red line]
+         ├─ Stats          [RectTransform container]
+         │    ├─ EnemiesRow  [Label "Enemies Defeated" | Value TMP]
+         │    ├─ LivesRow    [Label "Lives Lost"        | Value TMP]
+         │    └─ GoldRow     [Label "Gold Remaining"    | Value TMP]
+         ├─ Divider2       [Image: thin red line]
+         └─ RetryButton    [Button: RETRY]
+
+  VictoryPanel [Image overlay: dark navy #0A0A28 @53%] [LayoutElement.ignoreLayout=true]
+    └─ PopupWindow [RectTransform center: 1440×820]
+         ├─ BgFill         [Image: #07081A]
+         ├─ BorderFrame    [Image: border_win_frame.png sprite]
+         ├─ TitleText      [TMP: "Operation Complete" bold, #D4A830, ~91pt]
+         ├─ StarsRow       [HorizontalLayoutGroup: Star1 ★ Star2 ★ Star3 ★]
+         ├─ Divider1       [Image: thin gold line]
+         ├─ Stats          [RectTransform container]
+         │    ├─ EnemiesRow  [Label "Enemies Defeated" | Value TMP]
+         │    ├─ LivesRow    [Label "Lives Remaining"  | Value TMP]
+         │    └─ GoldRow     [Label "Gold Remaining"   | Value TMP]
+         ├─ Divider2       [Image: thin gold line]
+         ├─ RetryButton    [Button: RETRY — muted]
+         └─ NextButton     [Button: NEXT → — gold]
+
+  Kích thước: 1440px = 75% của 1920px canvas width
+
+  ── Stats runtime values (populated by TDGameplayHUDView) ────────────────────
+
+  GameOver:
+    EnemiesRow/Value ← TDGameStateControl.api.KilledEnemies + "/" + TotalEnemies
+    LivesRow/Value   ← CONFIG_PLAYER_STARTING_LIVES - TDPlayerLifeControl.api.CurrentLives
+    GoldRow/Value    ← TDGoldControl.api.Gold
+
+  Victory:
+    EnemiesRow/Value ← KilledEnemies + "/" + TotalEnemies
+    LivesRow/Value   ← CurrentLives + "/" + CONFIG_PLAYER_STARTING_LIVES
+    GoldRow/Value    ← TDGoldControl.api.Gold
+
+  ── TDConstant.cs — paths mới ────────────────────────────────────────────────
+
+    PATH_GAMEOVER_STAT_ENEMIES  = "GameOverPanel/PopupWindow/Stats/EnemiesRow/Value"
+    PATH_GAMEOVER_STAT_LIVES    = "GameOverPanel/PopupWindow/Stats/LivesRow/Value"
+    PATH_GAMEOVER_STAT_GOLD     = "GameOverPanel/PopupWindow/Stats/GoldRow/Value"
+    PATH_VICTORY_STAT_ENEMIES   = "VictoryPanel/PopupWindow/Stats/EnemiesRow/Value"
+    PATH_VICTORY_STAT_LIVES     = "VictoryPanel/PopupWindow/Stats/LivesRow/Value"
+    PATH_VICTORY_STAT_GOLD      = "VictoryPanel/PopupWindow/Stats/GoldRow/Value"
+
+  ── TDGameplayHUDView.cs — thay đổi ──────────────────────────────────────────
+
+  + Cached refs: m_GameOverPanel, m_GameOverRetryBtn, m_GameOverStat*
+  + Cached refs: m_VictoryPanel, m_VictoryRetryBtn, m_VictoryNextBtn, m_VictoryStat*
+  + CacheReferences(): find và deactivate cả 2 panels
+  + SetupButtons(): wire m_GameOverRetryBtn, m_VictoryRetryBtn, m_VictoryNextBtn → OnBackClicked
+  + OnGameOver(): TDPauseControl.api.Pause() + populate stats + m_GameOverPanel.SetActive(true)
+                  (bỏ TODO, implement đầy đủ)
+  + OnVictory():  TDPauseControl.api.Pause() + populate stats + m_VictoryPanel.SetActive(true)
+                  (bỏ TODO, implement đầy đủ)
+
+  ── Iteration history ────────────────────────────────────────────────────────
+
+  v1: 560×300 (Defeat) / 560×340 (Victory) — too small
+  v2: 1100×600 / 1140×680 — 60% screen
+  v3: 1440×750 / 1440×820 — 75% screen (final)
+  Title: "DEFEAT"/"VICTORY" → "Operation Failed"/"Operation Complete"
+
+  ── Result ───────────────────────────────────────────────────────────────────
+    ✅ 2 popup built + styled với border images đúng màu (đỏ/vàng)
+    ✅ Stats populate từ live game data khi trigger
+    ✅ Panels inactive by default, hiện/ẩn qua TDGameplayHUDView events
+    ✅ Game pause tự động khi popup hiện
+    ✅ Retry button → về main menu (OnBackClicked)
+    ✅ Scene DTGamePlay.unity saved
+    ✅ 0 compile errors
 
 
 ================================================================================

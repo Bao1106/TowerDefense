@@ -24,6 +24,19 @@ public class TDGameplayHUDView : MonoBehaviour
     private Button     m_ResumeButton;
     private GameObject m_PausePanel;
 
+    private GameObject m_GameOverPanel;
+    private Button     m_GameOverRetryBtn;
+    private TextMeshProUGUI m_GameOverStatEnemies;
+    private TextMeshProUGUI m_GameOverStatLives;
+    private TextMeshProUGUI m_GameOverStatGold;
+
+    private GameObject m_VictoryPanel;
+    private Button     m_VictoryRetryBtn;
+    private Button     m_VictoryNextBtn;
+    private TextMeshProUGUI m_VictoryStatEnemies;
+    private TextMeshProUGUI m_VictoryStatLives;
+    private TextMeshProUGUI m_VictoryStatGold;
+
     private GameObject m_SpeedIconNormal;
     private GameObject m_SpeedIconX2;
 
@@ -75,6 +88,21 @@ public class TDGameplayHUDView : MonoBehaviour
 
         m_ScreenFlash = transform.Find(TDConstant.PATH_GAMEPLAY_SCREEN_FLASH)?.GetComponent<Image>();
 
+        m_GameOverPanel       = transform.Find(TDConstant.PATH_GAMEPLAY_GAMEOVER_PANEL)        ?.gameObject;
+        m_GameOverRetryBtn    = transform.Find(TDConstant.PATH_GAMEPLAY_GAMEOVER_RETRY_BTN)    ?.GetComponent<Button>();
+        m_GameOverStatEnemies = transform.Find(TDConstant.PATH_GAMEOVER_STAT_ENEMIES)          ?.GetComponent<TextMeshProUGUI>();
+        m_GameOverStatLives   = transform.Find(TDConstant.PATH_GAMEOVER_STAT_LIVES)            ?.GetComponent<TextMeshProUGUI>();
+        m_GameOverStatGold    = transform.Find(TDConstant.PATH_GAMEOVER_STAT_GOLD)             ?.GetComponent<TextMeshProUGUI>();
+        m_GameOverPanel?.SetActive(false);
+
+        m_VictoryPanel        = transform.Find(TDConstant.PATH_GAMEPLAY_VICTORY_PANEL)         ?.gameObject;
+        m_VictoryRetryBtn     = transform.Find(TDConstant.PATH_GAMEPLAY_VICTORY_RETRY_BTN)     ?.GetComponent<Button>();
+        m_VictoryNextBtn      = transform.Find(TDConstant.PATH_GAMEPLAY_VICTORY_NEXT_BTN)      ?.GetComponent<Button>();
+        m_VictoryStatEnemies  = transform.Find(TDConstant.PATH_VICTORY_STAT_ENEMIES)           ?.GetComponent<TextMeshProUGUI>();
+        m_VictoryStatLives    = transform.Find(TDConstant.PATH_VICTORY_STAT_LIVES)             ?.GetComponent<TextMeshProUGUI>();
+        m_VictoryStatGold     = transform.Find(TDConstant.PATH_VICTORY_STAT_GOLD)              ?.GetComponent<TextMeshProUGUI>();
+        m_VictoryPanel?.SetActive(false);
+
         if (m_LifeText != null)
             m_LifeColorNormal = m_LifeText.color;
     }
@@ -118,11 +146,14 @@ public class TDGameplayHUDView : MonoBehaviour
     // ── Button wiring ─────────────────────────────────────────────────────────
     private void SetupButtons()
     {
-        m_BackButton   ?.onClick.AddListener(OnBackClicked);
-        m_SettingButton?.onClick.AddListener(OnSettingClicked);
-        m_SpeedButton  ?.onClick.AddListener(OnSpeedClicked);
-        m_PauseButton  ?.onClick.AddListener(OnPauseClicked);
-        m_ResumeButton ?.onClick.AddListener(OnResumeClicked);
+        m_BackButton      ?.onClick.AddListener(OnBackClicked);
+        m_SettingButton   ?.onClick.AddListener(OnSettingClicked);
+        m_SpeedButton     ?.onClick.AddListener(OnSpeedClicked);
+        m_PauseButton     ?.onClick.AddListener(OnPauseClicked);
+        m_ResumeButton    ?.onClick.AddListener(OnResumeClicked);
+        m_GameOverRetryBtn?.onClick.AddListener(OnBackClicked);
+        m_VictoryRetryBtn ?.onClick.AddListener(OnBackClicked);
+        m_VictoryNextBtn  ?.onClick.AddListener(OnBackClicked); // TODO: load next level
     }
 
     // ── Event handlers ────────────────────────────────────────────────────────
@@ -140,9 +171,20 @@ public class TDGameplayHUDView : MonoBehaviour
 
     private void OnGameOver()
     {
-        TDGameStateControl.api?.OnGameOver(); // ngăn victory fire sau khi đã thua
-        Debug.Log("<color=red>GAME OVER</color>");
-        // TODO Phase 8: show GameOverPanel
+        TDGameStateControl.api?.OnGameOver();
+        TDPauseControl.api?.Pause();
+
+        int killed = TDGameStateControl.api?.KilledEnemies ?? 0;
+        int total  = TDGameStateControl.api?.TotalEnemies  ?? 0;
+        int lives  = TDPlayerLifeControl.api?.CurrentLives ?? 0;
+        int livesLost = TDConstant.CONFIG_PLAYER_STARTING_LIVES - lives;
+        int gold   = TDGoldControl.api?.Gold ?? 0;
+
+        if (m_GameOverStatEnemies != null) m_GameOverStatEnemies.text = $"{killed} / {total}";
+        if (m_GameOverStatLives   != null) m_GameOverStatLives.text   = livesLost.ToString();
+        if (m_GameOverStatGold    != null) m_GameOverStatGold.text    = gold.ToString();
+
+        m_GameOverPanel?.SetActive(true);
     }
 
     private void OnGoldChanged(int gold)
@@ -159,8 +201,18 @@ public class TDGameplayHUDView : MonoBehaviour
 
     private void OnVictory()
     {
-        Debug.Log("<color=yellow>VICTORY</color>");
-        // TODO Phase 8: show VictoryPanel
+        TDPauseControl.api?.Pause();
+
+        int killed = TDGameStateControl.api?.KilledEnemies ?? 0;
+        int total  = TDGameStateControl.api?.TotalEnemies  ?? 0;
+        int lives  = TDPlayerLifeControl.api?.CurrentLives ?? 0;
+        int gold   = TDGoldControl.api?.Gold ?? 0;
+
+        if (m_VictoryStatEnemies != null) m_VictoryStatEnemies.text = $"{killed} / {total}";
+        if (m_VictoryStatLives   != null) m_VictoryStatLives.text   = $"{lives} / {TDConstant.CONFIG_PLAYER_STARTING_LIVES}";
+        if (m_VictoryStatGold    != null) m_VictoryStatGold.text    = gold.ToString();
+
+        m_VictoryPanel?.SetActive(true);
     }
 
     private void OnPauseChanged(bool isPaused)

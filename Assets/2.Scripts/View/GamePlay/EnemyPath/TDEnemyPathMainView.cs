@@ -170,6 +170,10 @@ public class TDEnemyPathMainView : MonoBehaviour
         for (int i = 0; i < obstacleCount && hasObstacles; i++)
         {
             Vector3    center     = new Vector3(positions[i].x, 0f, positions[i].z);
+
+            // Safety: skip if cell was occupied after validPositions was computed (e.g. by another system)
+            if (!TDGridMainModel.api.IsValidPlacement(center)) continue;
+
             int        pIdx       = Random.Range(0, m_ObstaclePrefabs.Length);
             int        radius     = footprintRadii != null ? footprintRadii[pIdx] : 0;
             Quaternion rotation   = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
