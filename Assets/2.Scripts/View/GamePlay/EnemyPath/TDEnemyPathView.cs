@@ -16,6 +16,11 @@ public class TDEnemyPathView : MonoBehaviour
         TDEnemyPathControl.api.onGetPaths += OnGetPaths;
     }
 
+    public void OverridePathTilePrefab(GameObject prefab)
+    {
+        if (prefab != null) m_PathPrefab = prefab;
+    }
+
     private void OnDestroy()
     {
         TDEnemyPathControl.api.onGetPaths -= OnGetPaths;

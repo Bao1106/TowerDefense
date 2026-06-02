@@ -34,7 +34,8 @@ Material:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: Generic_Sun_Beam_01
-  m_Shader: {fileID: -6465566751694194690, guid: 0736e099ec10c9e46b9551b2337d0cc7, type: 3}
+  m_Shader: {fileID: -6465566751694194690, guid: 0736e099ec10c9e46b9551b2337d0cc7,
+    type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
@@ -91,7 +92,7 @@ Material:
     - _BUILTIN_ZTest: 4
     - _BUILTIN_ZWrite: 0
     - _BUILTIN_ZWriteControl: 0
-    - _Blend: 0
+    - _Blend: 2
     - _BlendOp: 0
     - _BumpScale: 1
     - _CameraFadingEnabled: 1
@@ -109,7 +110,7 @@ Material:
     - _DistortionEnabled: 0
     - _DistortionStrength: 1
     - _DistortionStrengthScaled: 0
-    - _DstBlend: 10
+    - _DstBlend: 1
     - _EmissionEnabled: 0
     - _Enable_Camera_Fade: 1
     - _Enable_Emission: 0
@@ -137,6 +138,8 @@ Material:
     - _SrcBlend: 5
     - _Surface: 1
     - _UVSec: 0
+    - _Use_View_Edge_Compensation: 1
+    - _ViewEdgePower: 1
     - _ZTest: 4
     - _ZWrite: 0
     - _ZWriteControl: 0

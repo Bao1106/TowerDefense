@@ -1,0 +1,28 @@
+using System.Collections.Generic;
+using UnityEngine;
+
+[CreateAssetMenu(menuName = "Game Configs/Stage Repository", fileName = "Stage Repository")]
+public class TDStageRepository : ScriptableObject
+{
+    [SerializeField] private List<TDStageConfig> m_Stages;
+
+    public string DefaultStageId => m_Stages != null && m_Stages.Count > 0
+        ? m_Stages[0].StageId
+        : "DEMO-1";
+
+    public TDStageConfig GetStage(string stageId)
+    {
+        var stage = m_Stages?.Find(s => s.StageId == stageId);
+        if (stage == null)
+            Debug.LogError($"[TDStageRepository] Stage not found: {stageId}");
+        return stage;
+    }
+
+    public TDStageConfig GetNextStage(string currentStageId)
+    {
+        if (m_Stages == null) return null;
+        int idx = m_Stages.FindIndex(s => s.StageId == currentStageId);
+        if (idx < 0 || idx >= m_Stages.Count - 1) return null;
+        return m_Stages[idx + 1];
+    }
+}

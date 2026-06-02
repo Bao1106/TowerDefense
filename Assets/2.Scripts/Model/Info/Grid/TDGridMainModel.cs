@@ -74,8 +74,15 @@ public class TDGridMainModel : IGridMainModel
     {
         int x = Mathf.RoundToInt((position.x - m_OffsetX) / cellSize);
         int z = Mathf.RoundToInt((position.z - m_OffsetZ) / cellSize);
-        
         m_OccupiedCell[x, z] = true;
+    }
+
+    public void UnoccupyCell(Vector3 position)
+    {
+        int x = Mathf.RoundToInt((position.x - m_OffsetX) / cellSize);
+        int z = Mathf.RoundToInt((position.z - m_OffsetZ) / cellSize);
+        if (x >= 0 && x < width && z >= 0 && z < height)
+            m_OccupiedCell[x, z] = false;
     }
 
     public bool IsValidPlacement(Vector3 position)

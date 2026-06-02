@@ -76,7 +76,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Fill: {fileID: 2900610317222738001}
-  m_YOffset: -0.3
+  m_YOffset: -0.6
 --- !u!1 &2394022847789191668
 GameObject:
   m_ObjectHideFlags: 0

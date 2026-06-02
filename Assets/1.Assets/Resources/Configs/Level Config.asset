@@ -16,7 +16,12 @@ MonoBehaviour:
   - levelIndex: 0
     difficulty: 0
     totalEnemies: 30
-    path1Ratio: 0.5
     waveCount: 5
     waveInterval: 10
     spawnInterval: 2
+  - levelIndex: 1
+    difficulty: 1
+    totalEnemies: 40
+    waveCount: 4
+    waveInterval: 10
+    spawnInterval: 1.5

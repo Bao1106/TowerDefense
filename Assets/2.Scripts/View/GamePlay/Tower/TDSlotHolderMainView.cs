@@ -18,6 +18,8 @@ public class TDSlotHolderMainView : MonoBehaviour
     private const float DIRECTION_THRESHOLD_RATIO = 0.35f;
 
     private readonly List<TDSlotHolderItemView> m_SlotHolders = new List<TDSlotHolderItemView>();
+    public static bool IsPlacingUnit { get; private set; }
+
     private int m_CurrentSlotIndex = -1;
     private GameObject m_CurrentTower;
     private TowerType m_CurrentTowerType;
@@ -75,9 +77,17 @@ public class TDSlotHolderMainView : MonoBehaviour
         // ── Mobile ──────────────────────────────────────────────────────────
         if (m_IsDirectionSelected)
         {
-            // Ghost đóng băng — chỉ cập nhật direction từ frozen cell center
             Vector3 delta = fingerWorld - m_LastSnappedPos;
             delta.y = 0f;
+
+            // Kéo ngón về gần center → thoát Phase 2, quay lại Phase 1
+            float threshold = TDGridMainModel.api.cellSize * DIRECTION_THRESHOLD_RATIO;
+            if (delta.sqrMagnitude <= threshold * threshold)
+            {
+                m_IsDirectionSelected = false;
+                return;
+            }
+
             int rotIndex = ComputeRotationIndex(delta);
             if (rotIndex != m_CurrentRotationIndex)
             {
@@ -96,7 +106,10 @@ public class TDSlotHolderMainView : MonoBehaviour
         Vector3 dirMobile = fingerWorld - m_LastSnappedPos;
         dirMobile.y = 0f;
         float thresholdMobile = TDGridMainModel.api.cellSize * DIRECTION_THRESHOLD_RATIO;
-        if (dirMobile.sqrMagnitude > thresholdMobile * thresholdMobile)
+        bool cellOk = m_CurrentTowerType == TowerType.Operator
+            ? IsValidOperatorPlacement(m_LastSnappedPos)
+            : TDGridMainModel.api.IsValidPlacement(m_LastSnappedPos);
+        if (dirMobile.sqrMagnitude > thresholdMobile * thresholdMobile && cellOk)
         {
             m_IsDirectionSelected = true;
             m_CurrentRotationIndex = ComputeRotationIndex(dirMobile);
@@ -138,7 +151,8 @@ public class TDSlotHolderMainView : MonoBehaviour
         {
             if (m_IsDirectionSelected)
                 TDUserInputControl.api.OnMouseButton0Clicked();
-            // else: bỏ qua — user chưa chọn hướng, giữ ghost ở đây
+            else
+                CancelPlacement(); // nhấc ngón chưa chọn direction = auto cancel
         }
 #else
         // Desktop: LMB click = đặt, E/Q = rotate thủ công, RMB = cancel
@@ -323,7 +337,8 @@ public class TDSlotHolderMainView : MonoBehaviour
         if (m_CurrentTower != null)
             Destroy(m_CurrentTower);
 
-        m_CurrentTower = Instantiate(slot.prefab, Vector3.zero, Quaternion.identity);
+        m_CurrentTower  = Instantiate(slot.prefab, Vector3.zero, Quaternion.identity);
+        IsPlacingUnit   = true;
         m_CurrentTower.transform.localScale = slot.towerType == TowerType.Operator
             ? new Vector3(1.5f, 1.5f, 1.5f)
             : new Vector3(1.0f, 1.0f, 1.0f);
@@ -499,6 +514,7 @@ public class TDSlotHolderMainView : MonoBehaviour
 
             Destroy(m_CurrentTower);
             m_CurrentTower = null;
+            IsPlacingUnit  = false;
             TDPlaceTowerControl.api.onPlaceTowerSuccess?.Invoke(false);
             HideHighlights();
             HideRangeHighlights();
@@ -553,10 +569,19 @@ public class TDSlotHolderMainView : MonoBehaviour
             Destroy(m_CurrentTower);
             m_CurrentTower = null;
         }
+        IsPlacingUnit = false;
         m_IsDirectionSelected = false;
         m_LastSnappedPos      = Vector3.negativeInfinity;
         HideHighlights();
         HideRangeHighlights();
         HidePlacementPanel();
+    }
+
+    private bool IsValidOperatorPlacement(Vector3 worldPos)
+    {
+        if (TDOperatorRegistry.api == null) return false;
+        Vector2Int cell = TDGridMainModel.api.WorldToCell(worldPos);
+        return TDOperatorRegistry.api.IsValidOperatorCell(cell)
+            && !TDOperatorRegistry.api.HasOperatorAt(cell);
     }
 }

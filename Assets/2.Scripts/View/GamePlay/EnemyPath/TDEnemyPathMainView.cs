@@ -14,7 +14,19 @@ public class TDEnemyPathMainView : MonoBehaviour
     [SerializeField] private TDLevelConfigSettings m_LevelConfigSettings;
     [SerializeField] private GameObject            m_TowerZonePrefab;
 
-    private const int k_CurrentLevelIndex = 0;
+    private int              m_LevelIndex;
+    private TDMapVisualConfig m_VisualConfig;
+
+    public void SetLevelIndex(int levelIndex) => m_LevelIndex = levelIndex;
+
+    public void ApplyVisual(TDMapVisualConfig config)
+    {
+        if (config == null) return;
+        m_VisualConfig = config;
+        if (config.TowerZonePrefab    != null) m_TowerZonePrefab    = config.TowerZonePrefab;
+        if (config.ObstacleTilePrefab != null) m_ObstacleTilePrefab = config.ObstacleTilePrefab;
+        if (config.ObstaclePrefabs?.Length > 0) m_ObstaclePrefabs   = config.ObstaclePrefabs;
+    }
 
     private Vector2Int m_StartPoint, m_EndPoint;
     private TDGateView m_GateStartView;
@@ -48,6 +60,7 @@ public class TDEnemyPathMainView : MonoBehaviour
     {
         await TDInitializeModel.api.createGridCompletion.Task;
         m_EnemyPathView.RegistryValues();
+        m_EnemyPathView.OverridePathTilePrefab(m_VisualConfig?.PathTilePrefab);
         RegistryEvents();
 
         TDEnemyPathMainControl.api.InitEnemyPath(m_GridDTO, m_StartPoint, m_EndPoint);
@@ -118,7 +131,7 @@ public class TDEnemyPathMainView : MonoBehaviour
             return;
         }
 
-        LevelConfig config = m_LevelConfigSettings.GetLevel(k_CurrentLevelIndex);
+        LevelConfig config = m_LevelConfigSettings.GetLevel(m_LevelIndex);
         if (config == null) return;
 
         TDGameStateControl.api?.Initialize(config.totalEnemies);
@@ -146,8 +159,24 @@ public class TDEnemyPathMainView : MonoBehaviour
         bool hasObstacles    = m_ObstaclePrefabs != null && m_ObstaclePrefabs.Length > 0;
         int[] footprintRadii = hasObstacles ? ComputeFootprintRadii() : null;
 
+        // Lọc thêm: bỏ mọi cell đã là path theo gridDTO (double-check với isWalkable)
+        var filteredPositions = new List<Vector3>(validPositions.Count);
+        int pathLeakCount = 0;
+        foreach (var pos in validPositions)
+        {
+            var cell = TDGridMainModel.api.WorldToCell(pos);
+            if (m_GridDTO.GetCell(cell.x, cell.y).isWalkable)
+            {
+                pathLeakCount++;
+                continue; // bỏ qua path cell lọt vào
+            }
+            filteredPositions.Add(pos);
+        }
+        if (pathLeakCount > 0)
+            Debug.LogWarning($"<color=orange>[PathView] {pathLeakCount} path cells leaked into validPositions — filtered out</color>");
+
         // Shuffle để random hoá vị trí obstacle
-        var positions = new List<Vector3>(validPositions);
+        var positions = filteredPositions;
         for (int i = positions.Count - 1; i > 0; i--)
         {
             int j = Random.Range(0, i + 1);
@@ -171,17 +200,31 @@ public class TDEnemyPathMainView : MonoBehaviour
         {
             Vector3    center     = new Vector3(positions[i].x, 0f, positions[i].z);
 
-            // Safety: skip if cell was occupied after validPositions was computed (e.g. by another system)
+            // Safety: skip if cell was occupied after validPositions was computed
             if (!TDGridMainModel.api.IsValidPlacement(center)) continue;
 
-            int        pIdx       = Random.Range(0, m_ObstaclePrefabs.Length);
+            // Kiểm tra vertical wall space (N/S)
+            // Nếu không có wall cell ở trên hoặc dưới (path cell hoặc out of bounds)
+            // → chỉ chọn prefab nhỏ chiếm 1 cell (index 0-1: Rock_01, Rock_02)
+            // → tránh model lớn visually overflow vào path tile từ camera isometric
+            Vector2Int centerCell = TDGridMainModel.api.WorldToCell(center);
+            var nbNorth = new Vector2Int(centerCell.x, centerCell.y + 1);
+            var nbSouth = new Vector2Int(centerCell.x, centerCell.y - 1);
+            bool hasNorthWall = TDGridMainModel.api.IsInBounds(nbNorth)
+                                && !m_GridDTO.GetCell(nbNorth.x, nbNorth.y).isWalkable;
+            bool hasSouthWall = TDGridMainModel.api.IsInBounds(nbSouth)
+                                && !m_GridDTO.GetCell(nbSouth.x, nbSouth.y).isWalkable;
+            // Cần BOTH N và S đều là wall → mới cho dùng prefab to
+            // Chỉ 1 phía wall → prefab nhỏ thôi (Rock_01, Rock_02)
+            bool hasVerticalWall = hasNorthWall && hasSouthWall;
+
+            // Không đủ wall dọc cả 2 phía → chỉ dùng small prefab (Rock_01, Rock_02)
+            int maxPIdx = hasVerticalWall ? m_ObstaclePrefabs.Length : Mathf.Min(2, m_ObstaclePrefabs.Length);
+            int        pIdx       = Random.Range(0, maxPIdx);
             int        radius     = footprintRadii != null ? footprintRadii[pIdx] : 0;
             Quaternion rotation   = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
 
             Object.Instantiate(m_ObstaclePrefabs[pIdx], center, rotation, transform);
-
-            // Footprint chỉ block wall cells — corridor cells không bị ảnh hưởng
-            Vector2Int centerCell = TDGridMainModel.api.WorldToCell(center);
             for (int dx = -radius; dx <= radius; dx++)
                 for (int dz = -radius; dz <= radius; dz++)
                 {

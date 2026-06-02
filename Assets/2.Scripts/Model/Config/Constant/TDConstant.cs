@@ -61,9 +61,25 @@ public static class TDConstant
     public const string PATH_GAMEOVER_STAT_ENEMIES  = "GameOverPanel/PopupWindow/Stats/EnemiesRow/Value";
     public const string PATH_GAMEOVER_STAT_LIVES    = "GameOverPanel/PopupWindow/Stats/LivesRow/Value";
     public const string PATH_GAMEOVER_STAT_GOLD     = "GameOverPanel/PopupWindow/Stats/GoldRow/Value";
+    public const string PATH_GAMEOVER_STAGE_NAME    = "GameOverPanel/PopupWindow/StageName";
     public const string PATH_VICTORY_STAT_ENEMIES   = "VictoryPanel/PopupWindow/Stats/EnemiesRow/Value";
     public const string PATH_VICTORY_STAT_LIVES     = "VictoryPanel/PopupWindow/Stats/LivesRow/Value";
     public const string PATH_VICTORY_STAT_GOLD      = "VictoryPanel/PopupWindow/Stats/GoldRow/Value";
+    public const string PATH_VICTORY_STAGE_NAME     = "VictoryPanel/PopupWindow/StageName";
+
+    // Operator action panel — relative to Canvas/SafeArea/Container (dùng bởi TDOperatorSelectionView)
+    public const string PATH_OPERATOR_ACTION_PANEL  = "OperatorActionPanel";
+    public const string PATH_OPERATOR_BTN_RETREAT   = "OperatorActionPanel/BtnRetreat";
+    public const string PATH_OPERATOR_BTN_RETREAT_ICON  = "OperatorActionPanel/BtnRetreat/Icon";
+
+    // Panel sizes (multiples of 12)
+    public const int OPERATOR_PANEL_W      = 96;
+    public const int OPERATOR_PANEL_H      = 108;
+    public const int OPERATOR_BTN_SIZE     = 72;
+    public const int OPERATOR_ICON_SIZE    = 48;
+    public const int OPERATOR_LABEL_H      = 24;
+    // World-space offset above operator for panel anchor point
+    public const float OPERATOR_PANEL_WORLD_Y_OFFSET = 2.4f;
 
     //Config Values
     public static readonly float[] CONFIG_TOWER_ROTATIONS = { 0f, 90f, 180f, 270f };

@@ -34,7 +34,7 @@ public class TDControl
         TDPauseControl.api            = new TDPauseControl();
         TDPlayerLifeControl.api       = new TDPlayerLifeControl();
         TDGoldControl.api             = new TDGoldControl();
-        TDGameStateControl.api        = new TDGameStateControl();
+        TDGameStateControl.api      ??= new TDGameStateControl();
         TDSpeedControl.api            = new TDSpeedControl();
         TDGameplayMainControl.api     = new TDGameplayMainControl();
         TDEnemyPathMainControl.api    = new TDEnemyPathMainControl();
@@ -52,6 +52,8 @@ public class TDControl
         TDTowerBehaviorMainControl.api = new TDTowerBehaviorMainControl();
         TDTowerBehaviorSubControl.api = new TDTowerBehaviorSubControl();
         TDUserInputControl.api = new TDUserInputControl();
+        TDOperatorRetreatControl.api = new TDOperatorRetreatControl();
+        TDTowerRetreatControl.api    = new TDTowerRetreatControl();
     }
     
     // private void OnApiMiniAppReady(APIUnity apiUnity)

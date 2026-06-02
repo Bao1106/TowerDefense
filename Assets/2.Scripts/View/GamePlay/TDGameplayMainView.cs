@@ -7,6 +7,8 @@ using UnityEngine.SceneManagement;
 /// </summary>
 public class TDGameplayMainView : MonoBehaviour
 {
+    [SerializeField] private TDStageRepository m_StageRepository;
+
     private TDEnemyPathMainView m_TDEnemyPathMainView;
     private GameObject          m_MapVisualize;
 
@@ -19,9 +21,17 @@ public class TDGameplayMainView : MonoBehaviour
 
     private void InitGameplay()
     {
+        TDInitializeModel.Reset();
+        TDPauseControl.api?.Resume();
+
+        string        stageId = TDGameStateControl.api.SelectedStageId;
+        TDStageConfig stage   = m_StageRepository.GetStage(stageId);
+
         m_MapVisualize = GameObject.Find(TDConstant.GAMEPLAY_MAP_VISUALIZE);
-        Vector3 mapSize        = m_MapVisualize.GetComponent<Renderer>().bounds.size;
-        Vector3 planePosition  = m_MapVisualize.transform.position;
+        ApplyMapVisual(stage?.VisualConfig);
+
+        Vector3 mapSize       = m_MapVisualize.GetComponent<Renderer>().bounds.size;
+        Vector3 planePosition = m_MapVisualize.transform.position;
         TDGridMainModel.Initialize(mapSize, planePosition);
         TDGridMainModel.api.CreateGrid();
 
@@ -29,7 +39,20 @@ public class TDGameplayMainView : MonoBehaviour
 
         m_TDEnemyPathMainView = transform.Find(TDConstant.GAMEPLAY_ENEMY_PATH_MAIN_VIEW)
                                          .GetComponent<TDEnemyPathMainView>();
+        m_TDEnemyPathMainView.ApplyVisual(stage?.VisualConfig);
+        m_TDEnemyPathMainView.SetLevelIndex(stage?.LevelIndex ?? 0);
         TDGameplayMainControl.api.InitEnemyPath(m_TDEnemyPathMainView, gridDTO);
+    }
+
+    private void ApplyMapVisual(TDMapVisualConfig config)
+    {
+        if (config == null) return;
+        if (config.MapGroundMaterial != null)
+            m_MapVisualize.GetComponent<Renderer>().material = config.MapGroundMaterial;
+        if (config.SkyboxMaterial != null)
+            RenderSettings.skybox = config.SkyboxMaterial;
+        if (config.AmbientColor != Color.white)
+            RenderSettings.ambientLight = config.AmbientColor;
     }
 
     private void CheckSceneLoaded()

@@ -29,6 +29,7 @@ public class TDGameplayHUDView : MonoBehaviour
     private TextMeshProUGUI m_GameOverStatEnemies;
     private TextMeshProUGUI m_GameOverStatLives;
     private TextMeshProUGUI m_GameOverStatGold;
+    private TextMeshProUGUI m_GameOverStageName;
 
     private GameObject m_VictoryPanel;
     private Button     m_VictoryRetryBtn;
@@ -36,9 +37,12 @@ public class TDGameplayHUDView : MonoBehaviour
     private TextMeshProUGUI m_VictoryStatEnemies;
     private TextMeshProUGUI m_VictoryStatLives;
     private TextMeshProUGUI m_VictoryStatGold;
+    private TextMeshProUGUI m_VictoryStageName;
 
     private GameObject m_SpeedIconNormal;
     private GameObject m_SpeedIconX2;
+
+    [SerializeField] private TDStageRepository m_StageRepository;
 
     private Image m_ScreenFlash;
 
@@ -93,6 +97,7 @@ public class TDGameplayHUDView : MonoBehaviour
         m_GameOverStatEnemies = transform.Find(TDConstant.PATH_GAMEOVER_STAT_ENEMIES)          ?.GetComponent<TextMeshProUGUI>();
         m_GameOverStatLives   = transform.Find(TDConstant.PATH_GAMEOVER_STAT_LIVES)            ?.GetComponent<TextMeshProUGUI>();
         m_GameOverStatGold    = transform.Find(TDConstant.PATH_GAMEOVER_STAT_GOLD)             ?.GetComponent<TextMeshProUGUI>();
+        m_GameOverStageName   = transform.Find(TDConstant.PATH_GAMEOVER_STAGE_NAME)            ?.GetComponent<TextMeshProUGUI>();
         m_GameOverPanel?.SetActive(false);
 
         m_VictoryPanel        = transform.Find(TDConstant.PATH_GAMEPLAY_VICTORY_PANEL)         ?.gameObject;
@@ -101,6 +106,7 @@ public class TDGameplayHUDView : MonoBehaviour
         m_VictoryStatEnemies  = transform.Find(TDConstant.PATH_VICTORY_STAT_ENEMIES)           ?.GetComponent<TextMeshProUGUI>();
         m_VictoryStatLives    = transform.Find(TDConstant.PATH_VICTORY_STAT_LIVES)             ?.GetComponent<TextMeshProUGUI>();
         m_VictoryStatGold     = transform.Find(TDConstant.PATH_VICTORY_STAT_GOLD)              ?.GetComponent<TextMeshProUGUI>();
+        m_VictoryStageName    = transform.Find(TDConstant.PATH_VICTORY_STAGE_NAME)             ?.GetComponent<TextMeshProUGUI>();
         m_VictoryPanel?.SetActive(false);
 
         if (m_LifeText != null)
@@ -153,7 +159,7 @@ public class TDGameplayHUDView : MonoBehaviour
         m_ResumeButton    ?.onClick.AddListener(OnResumeClicked);
         m_GameOverRetryBtn?.onClick.AddListener(OnBackClicked);
         m_VictoryRetryBtn ?.onClick.AddListener(OnBackClicked);
-        m_VictoryNextBtn  ?.onClick.AddListener(OnBackClicked); // TODO: load next level
+        m_VictoryNextBtn  ?.onClick.AddListener(OnNextClicked);
     }
 
     // ── Event handlers ────────────────────────────────────────────────────────
@@ -183,6 +189,7 @@ public class TDGameplayHUDView : MonoBehaviour
         if (m_GameOverStatEnemies != null) m_GameOverStatEnemies.text = $"{killed} / {total}";
         if (m_GameOverStatLives   != null) m_GameOverStatLives.text   = livesLost.ToString();
         if (m_GameOverStatGold    != null) m_GameOverStatGold.text    = gold.ToString();
+        if (m_GameOverStageName   != null) m_GameOverStageName.text   = $"Stage {TDGameStateControl.api?.SelectedStageId}";
 
         m_GameOverPanel?.SetActive(true);
     }
@@ -211,6 +218,7 @@ public class TDGameplayHUDView : MonoBehaviour
         if (m_VictoryStatEnemies != null) m_VictoryStatEnemies.text = $"{killed} / {total}";
         if (m_VictoryStatLives   != null) m_VictoryStatLives.text   = $"{lives} / {TDConstant.CONFIG_PLAYER_STARTING_LIVES}";
         if (m_VictoryStatGold    != null) m_VictoryStatGold.text    = gold.ToString();
+        if (m_VictoryStageName   != null) m_VictoryStageName.text   = $"Stage {TDGameStateControl.api?.SelectedStageId}";
 
         m_VictoryPanel?.SetActive(true);
     }
@@ -232,7 +240,17 @@ public class TDGameplayHUDView : MonoBehaviour
     // ── Button callbacks ──────────────────────────────────────────────────────
     private void OnBackClicked()
     {
-        // Quit gameplay → về main menu / load first scene
+        SceneManager.LoadScene(TDConstant.SCENE_LOAD_FIRST);
+    }
+
+    private void OnNextClicked()
+    {
+        string        currentId = TDGameStateControl.api.SelectedStageId;
+        TDStageConfig next      = m_StageRepository?.GetNextStage(currentId);
+
+        if (next != null)
+            TDGameStateControl.api.SelectStage(next.StageId);
+
         SceneManager.LoadScene(TDConstant.SCENE_LOAD_FIRST);
     }
 

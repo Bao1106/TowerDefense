@@ -4973,6 +4973,7 @@ GameObject:
   m_Component:
   - component: {fileID: 4081698564255386}
   - component: {fileID: 8756693811369057409}
+  - component: {fileID: 1414592898410076870}
   m_Layer: 0
   m_Name: FattyMissileG02
   m_TagString: Untagged
@@ -5011,6 +5012,27 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   type: 2
+--- !u!65 &1414592898410076870
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1498501323785604}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 1, y: 2, z: 1}
+  m_Center: {x: 0, y: 1, z: 0}
 --- !u!1 &1637871164663996
 GameObject:
   m_ObjectHideFlags: 0

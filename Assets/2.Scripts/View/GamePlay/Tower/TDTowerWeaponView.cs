@@ -20,18 +20,31 @@ public class TDTowerWeaponView : MonoBehaviour, IPlacedUnit
     private readonly List<TDEnemyView> m_CandidateBuffer = new List<TDEnemyView>();
 
     public TowerType towerType => type;
+    public int Cost { get; private set; }
+    private Vector3 m_PlacedWorldPos;
 
     // ── IPlacedUnit ───────────────────────────────────────────────────────────
 
     TowerType IPlacedUnit.UnitType => type;
 
     void IPlacedUnit.Init(string instanceKey, TDTowerSlotInfo slotInfo)
-        => Init(instanceKey);
+    {
+        Cost             = slotInfo.cost;
+        m_PlacedWorldPos = transform.position;
+        Init(instanceKey);
+    }
 
     void IPlacedUnit.OnRemove()
     {
         if (TDTowerBehaviorMainControl.api != null)
             TDTowerBehaviorMainControl.api.onGetLastAttackTime -= OnGetLastAttackTime;
+    }
+
+    public void DoRetreat()
+    {
+        ((IPlacedUnit)this).OnRemove();
+        TDGridMainModel.api?.UnoccupyCell(m_PlacedWorldPos);
+        Object.Destroy(gameObject);
     }
 
     // ── Init ──────────────────────────────────────────────────────────────────

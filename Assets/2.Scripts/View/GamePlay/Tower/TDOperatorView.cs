@@ -8,7 +8,8 @@ using UnityEngine;
 /// </summary>
 public class TDOperatorView : MonoBehaviour, IPlacedUnit
 {
-    [SerializeField] private TDHPBarView m_HPBarView;
+    [SerializeField] private TDHPBarView  m_HPBarView;
+    [SerializeField] private GameObject  m_SelectionIndicator;
 
     private static readonly int HASH_ATTACK = Animator.StringToHash("Attack");
 
@@ -20,6 +21,9 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
     private float m_LastAttackTime = -999f;
     private bool m_Initialized;
 
+    public int        Cost         { get; private set; }
+    public OperatorType OperatorType => m_OperatorType;
+
     // ── IPlacedUnit ───────────────────────────────────────────────────────────
 
     TowerType IPlacedUnit.UnitType => TowerType.Operator;
@@ -28,7 +32,9 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
     {
         m_Animator = GetComponentInChildren<Animator>();
         m_OperatorType = slotInfo.operatorType;
+        Cost     = slotInfo.cost;
         m_MyCell = TDGridMainModel.api.WorldToCell(transform.position);
+        m_SelectionIndicator?.SetActive(false);
 
         var data = TDFlyweightOperatorDataSettings.api.GetData(m_OperatorType);
         m_CurrentHp = data?.hp ?? 100f;
@@ -60,6 +66,18 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         m_CurrentHp -= damage;
         m_HPBarView?.UpdateHP(m_CurrentHp, m_MaxHp);
         if (m_CurrentHp <= 0) Die();
+    }
+
+    public void SetSelected(bool selected)
+    {
+        m_SelectionIndicator?.SetActive(selected);
+    }
+
+    public void DoRetreat()
+    {
+        ((IPlacedUnit)this).OnRemove();
+        TDGameEventBus.OperatorDied(m_MyCell);
+        Destroy(gameObject);
     }
 
     private void Die()

@@ -4,6 +4,10 @@ public class TDGameStateControl
 {
     public static TDGameStateControl api;
 
+    public string SelectedStageId { get; private set; } = "DEMO-1";
+
+    public void SelectStage(string stageId) => SelectedStageId = stageId;
+
     public int  TotalEnemies    { get; private set; }
     public int  KilledEnemies   { get; private set; }
     public bool AllWavesSpawned { get; private set; }

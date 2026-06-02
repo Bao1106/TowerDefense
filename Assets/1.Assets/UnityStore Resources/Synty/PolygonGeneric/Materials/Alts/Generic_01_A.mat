@@ -34,13 +34,12 @@ Material:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: Generic_01_A
-  m_Shader: {fileID: -6465566751694194690, guid: 3b44a38ec6f81134ab0f820ac54d6a93,
-    type: 3}
+  m_Shader: {fileID: -6465566751694194690, guid: 3b44a38ec6f81134ab0f820ac54d6a93, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
-  m_ValidKeywords:
-  - _ALPHATEST_ON
+  m_ValidKeywords: []
   m_InvalidKeywords:
+  - _ALPHATEST_ON
   - _EMISSION
   - _NORMALMAP
   m_LightmapFlags: 2
@@ -48,7 +47,7 @@ Material:
   m_DoubleSidedGI: 0
   m_CustomRenderQueue: 2000
   stringTagMap:
-    RenderType: TransparentCutout
+    RenderType: Opaque
   disabledShaderPasses: []
   m_LockedProperties: 
   m_SavedProperties:
@@ -63,6 +62,10 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _Hair_Mask:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _Metallic_Smoothness_Map:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
@@ -93,7 +96,7 @@ Material:
     - _Alpha_Clip_Threshold: 0.5
     - _BUILTIN_AlphaClip: 0
     - _BUILTIN_Blend: 0
-    - _BUILTIN_CullMode: 0
+    - _BUILTIN_CullMode: 2
     - _BUILTIN_DstBlend: 0
     - _BUILTIN_QueueControl: 0
     - _BUILTIN_QueueOffset: 0
@@ -127,6 +130,7 @@ Material:
     - _SpecularHighlights: 1
     - _SrcBlend: 1
     - _Surface: 0
+    - _USE_METALLIC_SMOOTHNESS_MAP: 0
     - _UVSec: 0
     - _WorkflowMode: 1
     - _ZTest: 4
@@ -137,6 +141,6 @@ Material:
     - _Color: {r: 1, g: 1, b: 1, a: 1}
     - _EmissionColor: {r: 1, g: 1, b: 1, a: 1}
     - _Emission_Color: {r: 0, g: 0, b: 0, a: 1}
-    - _Hair_Color: {r: 0.3098039, g: 0.254902, b: 0.1764706, a: 0}
+    - _Hair_Color: {r: 0.30980387, g: 0.25490198, b: 0.17647055, a: 0}
     - _Skin_Color: {r: 1, g: 0.8, b: 0.682353, a: 0}
   m_BuildTextureStacks: []

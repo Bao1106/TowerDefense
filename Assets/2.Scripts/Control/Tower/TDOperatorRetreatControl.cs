@@ -1,0 +1,16 @@
+using System;
+
+public class TDOperatorRetreatControl
+{
+    public static TDOperatorRetreatControl api;
+
+    public Action<TDOperatorView> onRetreatSuccess;
+
+    public void Retreat(TDOperatorView view)
+    {
+        if (view == null) return;
+        TDGoldControl.api?.AddGold(view.Cost / 2);
+        view.DoRetreat();
+        onRetreatSuccess?.Invoke(view);
+    }
+}

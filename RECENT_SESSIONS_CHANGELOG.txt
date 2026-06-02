@@ -731,6 +731,711 @@
     ✅ 0 compile errors
 
 
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 34 — BUG FIXES + ANIMATOR + MOBILE PLACEMENT + OPERATOR RETREAT
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-02
+
+  ── Bug Fix: Retry → InvalidOperationException ──────────────────────────────
+
+  Root cause: TDInitializeModel là pure C# singleton — không bị destroy khi
+    scene reload. createGridCompletion là readonly TaskCompletionSource đã
+    SetResult(true) lần 1. Khi Retry load lại scene, CreateGrid() gọi
+    SetResult lần 2 → InvalidOperationException.
+
+  Fix:
+    [MODIFIED] TDInitializeModel.cs
+      + public static void Reset() => m_api = null;
+
+    [MODIFIED] TDGameplayMainView.cs
+      + TDInitializeModel.Reset(); ở đầu InitGameplay()
+      → Mỗi lần scene load tạo instance mới với TCS fresh.
+
+  ── DragonBoarBoss Animator ──────────────────────────────────────────────────
+
+  Vấn đề: DragonBoarBoss khi di chuyển không play Walk animation mà play
+    attack animation thay thế.
+
+  Điều tra qua DragonBoarCTRL.controller:
+    - Idle (default state) → Basic Attack: transition KHÔNG CÓ condition
+      → enemy spawn xong tự chuyển sang attack animation ngay
+    - Walk state không có AnyState transition → trigger "Walk" bị gọi
+      nhưng không có path dẫn đến Walk state
+
+  Action:
+    1. Revert DragonBoarCTRL.controller về trạng thái gốc
+    2. Duplicate → Assets/1.Assets/Resources/Animators/DragonBoarBossCTRL.controller
+    3. Fix bản duplicate:
+       - Xóa conditionless Idle → Basic Attack transition
+       - Thêm AnyState → Walk (trigger "Walk", hasExitTime=false,
+         canTransitionToSelf=false)
+       - Set Walk làm default state
+    4. Gán DragonBoarBossCTRL cho DragonBoarBoss.prefab
+
+  Files:
+    [NEW]      Assets/1.Assets/Resources/Animators/DragonBoarBossCTRL.controller
+    [MODIFIED] Assets/1.Assets/Resources/Prefabs/DragonBoarBoss.prefab
+               → Animator.runtimeAnimatorController = DragonBoarBossCTRL
+
+  ── Mobile Placement Flow Fixes (Arknights-style) ────────────────────────────
+
+  File: TDSlotHolderMainView.cs
+
+  Phân tích 2-phase placement:
+    Phase 1 (m_IsDirectionSelected = false): ghost drag theo ngón tay
+    Phase 2 (m_IsDirectionSelected = true):  ghost frozen, ngón tay chọn direction
+
+  Fix 1 — Phase 1: Nhấc ngón = auto cancel [DONE]
+    Before: TouchPhase.Ended + m_IsDirectionSelected=false → không làm gì
+            (ghost còn lơ lửng, user phải tap Cancel)
+    After:  else CancelPlacement() → ghost bị destroy ngay khi nhấc ngón
+    Matches: Arknights behavior (nhấc ngón chưa chọn direction = cancel)
+
+  Fix 2 — Phase 2 entry: chỉ vào Phase 2 khi ô hợp lệ [DONE]
+    Before: m_IsDirectionSelected = true dựa thuần vào swipe threshold distance
+            → có thể vào Phase 2 trên ô invalid
+            → nhấc ngón: CheckPlaceTower fail silent, ghost còn lơ lửng
+    After:  + && TDGridMainModel.api.IsValidPlacement(m_LastSnappedPos)
+            → ô invalid luôn ở Phase 1 → nhấc ngón → Fix 1 kick in → cancel
+
+    ⚠️  Operator dùng sai validity check: IsValidPlacement không biết path cell
+        hợp lệ cho operator — cần tách IsValidOperatorPlacement() sau.
+
+  Fix 3 — Phase 2 exit: kéo ngón về center → quay lại Phase 1 [DONE]
+    Before: Phase 2 chỉ có 2 lối ra: nhấc ngón (commit) hoặc Cancel button
+    After:  if (delta.sqrMagnitude <= threshold * threshold)
+                m_IsDirectionSelected = false; return;
+            → Kéo ngón về gần cell center → Phase 1 → nhấc ngón → cancel
+    Matches: Arknights gesture cancel (kéo ngược về bar/center = cancel)
+
+  ── Operator Retreat System ──────────────────────────────────────────────────
+
+  New files:
+    [NEW] TDOperatorRetreatControl.cs
+      + public static api
+      + Retreat(TDOperatorView view): AddGold(Cost/2), view.DoRetreat()
+
+    [NEW] TDOperatorSelectionView.cs
+      + MonoBehaviour trên Canvas/SafeArea/Container
+      + Update: HandleTapInput() → Physics.Raycast → hit TDOperatorView → Select
+      + Select(op): SetSelected(true), show OperatorActionPanel, UpdatePanelPosition
+      + Deselect(): SetSelected(false), hide panel
+      + UpdatePanelPosition(): WorldToScreenPoint(operator + Y offset)
+      + IsPointerOverUI(): mobile fingerId / desktop mouse
+
+  Modified files:
+    [MODIFIED] TDOperatorView.cs
+      + [SerializeField] GameObject m_SelectionIndicator
+      + public int Cost { get; private set; }
+      + public OperatorType OperatorType => m_OperatorType
+      + Cost = slotInfo.cost trong Init()
+      + m_SelectionIndicator?.SetActive(false) trong Init()
+      + public void SetSelected(bool): toggle m_SelectionIndicator
+      + public void DoRetreat(): OnRemove() + EventBus.OperatorDied + Destroy
+
+    [MODIFIED] TDConstant.cs
+      + PATH_OPERATOR_ACTION_PANEL  = "OperatorActionPanel"
+      + PATH_OPERATOR_BTN_RETREAT   = "OperatorActionPanel/BtnRetreat"
+      + PATH_OPERATOR_BTN_RETREAT_ICON = "OperatorActionPanel/BtnRetreat/Icon"
+      + OPERATOR_PANEL_W = 96, OPERATOR_PANEL_H = 108
+      + OPERATOR_BTN_SIZE = 72, OPERATOR_ICON_SIZE = 48, OPERATOR_LABEL_H = 24
+      + OPERATOR_PANEL_WORLD_Y_OFFSET = 2.4f
+
+    [MODIFIED] TDControl.cs
+      + TDOperatorRetreatControl.api = new TDOperatorRetreatControl()
+
+  Scene changes (DTGamePlay.unity):
+    + OperatorActionPanel added under Canvas/SafeArea/Container
+      - Background  (96×108, #141428 @90%)
+      - BtnRetreat  (72×72, pivot top-center, anchor top, offset -12)
+        - BtnBG     (stretch, dark red #8C1A1A, targetGraphic)
+        - Icon      (48×48, Icon_PictoIcon_Exit.Png, white tint)
+      - LblRetreat  (stretch×24, anchor bottom, offset +12, "Rút lui" bold 13pt)
+    + TDOperatorSelectionView component added to Container
+
+  Sizes: tất cả bội số 12 (96, 108, 72, 48, 24, 12)
+  Icon: Assets/1.Assets/UnityStore Resources/Layer Lab/2D Icons-PictoIconPack01/
+        Icons/PictoIcon_256/Icon_PictoIcon_Exit.Png
+
+  ⚠️  Còn thiếu: m_SelectionIndicator (diamond decal) cần tạo thủ công
+      làm child của OperatorKnight.prefab và assign vào [SerializeField] Inspector.
+  ⚠️  IsValidOperatorPlacement() chưa implement cho operator Phase 2 fix.
+  ⚠️  Retreat cooldown chưa implement (TODO).
+
+  ── Result ───────────────────────────────────────────────────────────────────
+    ✅ Retry không còn crash InvalidOperationException
+    ✅ DragonBoarBoss play Walk animation khi di chuyển
+    ✅ Original DragonBoarCTRL.controller không bị thay đổi
+    ✅ Phase 1: nhấc ngón = auto cancel ghost (Arknights behavior)
+    ✅ Phase 2: chỉ enter khi ô valid → nhấc ngón luôn commit thành công
+    ✅ Phase 2: kéo ngón về center → exit về Phase 1 → có thể cancel
+    ✅ OperatorRetreatControl + SelctionView + UI panel setup hoàn chỉnh
+    ✅ Scene saved
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 35 — OPERATOR/TOWER SELECTION + RETREAT + OBSTACLE FIX      [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-02
+
+  ── Fix: IsValidOperatorPlacement (Mobile Android) ───────────────────────────
+
+  Bug: Phase 2 entry guard dùng IsValidPlacement() — path cells là occupied=true
+       → IsValidPlacement=false → operator không bao giờ vào Phase 2 trên path cell.
+       Chỉ ảnh hưởng UNITY_ANDROID && !UNITY_EDITOR build, không ảnh hưởng Editor.
+
+  Fix [TDSlotHolderMainView.cs]:
+    + IsValidOperatorPlacement(worldPos): check IsValidOperatorCell && !HasOperatorAt
+    + Phase 2 entry: bool cellOk = towerType==Operator
+                                   ? IsValidOperatorPlacement()
+                                   : IsValidPlacement()
+
+  ── SelectionIndicator (Diamond) cho OperatorKnight ──────────────────────────
+
+  [MODIFIED] OperatorKnight.prefab:
+    + Child "SelectionIndicator" (Quad):
+        localPosition : (0, 0.12, 0)   — Y=0.14 world > PathTile Y=0.1
+        localRotation : (90, 45, 0)    — flat nằm ngang, diamond shape
+        localScale    : (2.6, 2.6, 1)
+        activeSelf    : false
+    + CapsuleCollider (trigger): center=(0,1,0), radius=0.45, height=2
+      → Raycast tap trên mobile/desktop hit được operator
+
+  [NEW] Assets/2.Scripts/Shaders/SelectionIndicator.shader
+    Queue=Overlay; ZTest Always; ZWrite Off; Blend SrcAlpha OneMinusSrcAlpha
+    → Render on top, không bị PathTile đè
+
+  [NEW] Assets/1.Assets/Materials/UI/SelectionIndicator.mat
+    Shader: Custom/SelectionIndicator; Color: gold (1, 0.85, 0.1, 0.55)
+
+  TDOperatorView.m_SelectionIndicator → assigned ✅
+
+  ── Retreat Panel Redesign ────────────────────────────────────────────────────
+
+  Bug: OperatorActionPanel anchorMin=(0,0) anchorMax=(1,1) → stretch toàn màn hình.
+
+  Fix [DTGamePlay scene]:
+    OperatorActionPanel: anchor center (0.5,0.5), sizeDelta (96×110)
+    Background: Destroyed (user yêu cầu remove)
+    BtnRetreat: 88×88 (mobile-friendly tap target), anchor top-center
+      - BtnBG: dark red #B81E1E @92%
+      - Icon: 60×60 (exit icon)
+    LblRetreat: 96×20, "Retreat" (đổi từ "Rút lui"), hồng nhạt 13pt
+
+  Panel position offset [TDOperatorSelectionView.cs]:
+    screenPt += new Vector2(-70f, 30f) → shift trái+lên, không che operator
+
+  ── Obstacle Spawn Fix ────────────────────────────────────────────────────────
+
+  Vấn đề 1: Path cells (isWalkable=true) có thể lọt vào validPositions.
+  Fix [TDEnemyPathMainView.cs — OnValidTowerCellsReady]:
+    + Double-check filter: bỏ qua cell nếu m_GridDTO.GetCell().isWalkable == true
+    + Log warning nếu có path cell leak
+
+  Vấn đề 2: Prefab to được chọn cho vị trí chật (chỉ 1-2 ô dọc).
+  Fix: kiểm tra vertical wall space trước khi chọn prefab:
+    hasVerticalWall = hasNorthWall && hasSouthWall  (cần CẢ HAI phía)
+    hasVerticalWall = true  → bất kỳ prefab (Rock, Bush, Grass)
+    hasVerticalWall = false → chỉ Rock_01, Rock_02 (index 0-1, nhỏ, không overflow)
+
+  ── Tower Retreat System ──────────────────────────────────────────────────────
+
+  [NEW] TDTowerRetreatControl.cs
+    + Retreat(TDTowerWeaponView): AddGold(Cost/2) + view.DoRetreat()
+
+  [MODIFIED] IGridMainModel.cs + TDGridMainModel.cs
+    + UnoccupyCell(Vector3): m_OccupiedCell[x,z] = false
+    → Giải phóng ô khi tower bị retreat, cho phép đặt tower mới
+
+  [MODIFIED] TDTowerWeaponView.cs
+    + Cost { get; private set; }       — lưu từ slotInfo.cost trong Init()
+    + m_PlacedWorldPos                 — lưu transform.position khi Init()
+    + DoRetreat(): OnRemove() + UnoccupyCell() + Destroy(gameObject)
+
+  [MODIFIED] TDControl.cs
+    + TDTowerRetreatControl.api = new TDTowerRetreatControl()
+
+  [MODIFIED] TDOperatorSelectionView.cs → unified selection cho cả operator + tower:
+    - m_Selected (TDOperatorView) → m_SelectedOperator + m_SelectedTower
+    + SelectOperator(TDOperatorView): SetSelected(true), show panel
+    + SelectTower(TDTowerWeaponView): show panel tại tower position
+    + HandleTapInput: raycast detect cả TDOperatorView và TDTowerWeaponView
+    + OnRetreatClicked: dispatch đến OperatorRetreatControl hoặc TowerRetreatControl
+    + UpdatePanelPosition: dùng anchor = selectedOperator?.transform ?? selectedTower.transform
+
+  BoxCollider (trigger) thêm vào 13 tower prefabs:
+    KenneyTower: Ballista, Cannon, Catapult, Crystals, RoofedKeep,
+                 SquareGuard, SquareSpire, Turret
+    Fatty: CannonG02, CatapultG02, MissileG02, MissileG03, MortarG02
+    center=(0,1,0), size=(1,2,1)
+
+  ── Result ───────────────────────────────────────────────────────────────────
+    ✅ Operator placement mobile hoạt động đúng (Phase 2 guard fixed)
+    ✅ SelectionIndicator diamond hiện khi tap operator
+    ✅ Retreat panel không còn fullscreen overlay
+    ✅ BtnRetreat 88×88 dễ tap trên mobile, label "Retreat"
+    ✅ Panel position offset (-70, +30) không che khuất operator
+    ✅ Obstacle không còn spawn trên path cell (double-check filter)
+    ✅ Prefab lớn chỉ dùng khi có wall ở cả 2 phía dọc
+    ✅ Tap tower → hiện Retreat panel → retreat + hoàn 50% gold + unoccupy cell
+    ✅ 13 tower prefabs có BoxCollider cho raycast selection
+    ✅ 0 compile errors
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 36 — STAGE SYSTEM + NEXT BUTTON + STAGE NAME IN POPUPS       [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-02
+
+  Goal: Refactor config màn chơi theo Arknights model (stage-first, không phải
+        map-first). Default play Stage 1-1, win → Next → Stage 1-2. Bổ sung
+        stage name vào 2 popup Win/Lose.
+
+  ── Phân tích design (trước khi implement) ───────────────────────────────────
+
+  Arknights tổ chức theo màn (stage), không theo map chủ đề:
+    Episode/Chapter → Stage 1-1, 1-2, 1-3... → Stage 2-1, 2-2...
+  Visual theme (City/Desert) là thuộc tính của Chapter, không phải selection unit.
+
+  Vấn đề cũ:
+    - TDEnemyPathMainView: k_CurrentLevelIndex = 0  (hardcode)
+    - TDGameplayHUDView: VictoryNextBtn → OnBackClicked()  (TODO comment)
+    - Không có khái niệm stage/chapter trong codebase
+
+  Scope giữ minimal (chưa có Stage Select UI, chưa có Map 2 visual):
+    - TDStageConfig + TDStageRepository (không cần interface layer)
+    - TDGameStateControl.SelectedStageId (persist qua scene reload)
+    - TDControl dùng ??= để không reset SelectedStageId
+    - Wire levelIndex từ stage xuống EnemyPathMainView
+    - Next button đúng behavior
+
+  ── Files mới ────────────────────────────────────────────────────────────────
+
+  [NEW] Assets/2.Scripts/Model/Config/TDStageConfig.cs
+    ScriptableObject per stage:
+      StageId    : string  — "1-1", "1-2", "2-1"
+      ChapterId  : int     — 1=City, 2=Desert (dùng khi implement Map 2)
+      LevelIndex : int     — index vào TDLevelConfigSettings
+
+  [NEW] Assets/2.Scripts/Model/Config/TDStageRepository.cs
+    ScriptableObject chứa ordered list:
+      m_Stages        : List<TDStageConfig>
+      DefaultStageId  : m_Stages[0].StageId
+      GetStage(id)    : tìm theo StageId
+      GetNextStage(id): trả về stage kế tiếp trong list, null nếu cuối
+
+  ── Files sửa ────────────────────────────────────────────────────────────────
+
+  [MODIFIED] TDGameStateControl.cs
+    + SelectedStageId { get; private set; } = "1-1"  (default)
+    + SelectStage(string stageId)
+    Initialize() giữ nguyên — reset game state nhưng KHÔNG reset SelectedStageId
+
+  [MODIFIED] TDControl.cs
+    - TDGameStateControl.api = new TDGameStateControl()
+    + TDGameStateControl.api ??= new TDGameStateControl()
+    → SelectedStageId tồn tại qua LoadScene("DTLoadFirst") vì singleton không bị tạo lại
+
+  [MODIFIED] TDGameplayMainView.cs
+    + [SerializeField] TDStageRepository m_StageRepository
+    + InitGameplay():
+        stageId = TDGameStateControl.api.SelectedStageId
+        stage   = m_StageRepository.GetStage(stageId)
+        m_TDEnemyPathMainView.SetLevelIndex(stage.LevelIndex)
+
+  [MODIFIED] TDEnemyPathMainView.cs
+    - private const int k_CurrentLevelIndex = 0
+    + private int m_LevelIndex
+    + public void SetLevelIndex(int levelIndex) => m_LevelIndex = levelIndex
+    OnGetAllPaths(): GetLevel(m_LevelIndex) thay vì GetLevel(0)
+
+  [MODIFIED] TDGameplayHUDView.cs
+    + [SerializeField] TDStageRepository m_StageRepository
+    + m_GameOverStageName (TextMeshProUGUI) cached từ PATH_GAMEOVER_STAGE_NAME
+    + m_VictoryStageName  (TextMeshProUGUI) cached từ PATH_VICTORY_STAGE_NAME
+    SetupButtons(): VictoryNextBtn → OnNextClicked() (thay OnBackClicked)
+    + OnNextClicked():
+        next = m_StageRepository.GetNextStage(SelectedStageId)
+        if next != null → SelectStage(next.StageId)
+        LoadScene("DTLoadFirst")
+    OnGameOver(): set m_GameOverStageName.text = "Stage {SelectedStageId}"
+    OnVictory():  set m_VictoryStageName.text  = "Stage {SelectedStageId}"
+
+  [MODIFIED] TDConstant.cs
+    + PATH_GAMEOVER_STAGE_NAME = "GameOverPanel/PopupWindow/StageName"
+    + PATH_VICTORY_STAGE_NAME  = "VictoryPanel/PopupWindow/StageName"
+
+  ── SO Assets tạo qua script-execute ─────────────────────────────────────────
+
+  Assets/1.Assets/Resources/Configs/
+    Stage Repository.asset      m_Stages: [Stage_1-1, Stage_1-2, Stage_2-1]
+    Stages/
+      Stage_1-1.asset           StageId="1-1", ChapterId=1, LevelIndex=0
+      Stage_1-2.asset           StageId="1-2", ChapterId=1, LevelIndex=1
+      Stage_2-1.asset           StageId="2-1", ChapterId=2, LevelIndex=0
+
+  Level Config.asset — thêm entry levelIndex=1:
+    { levelIndex=1, difficulty=Normal, totalEnemies=40, waveCount=4,
+      waveInterval=10f, spawnInterval=1.5f }
+
+  Inspector assign:
+    TDGameplayMainView.m_StageRepository  → Stage Repository.asset ✅
+    TDGameplayHUDView.m_StageRepository   → Stage Repository.asset ✅
+
+  ── Scene — StageName TMP thêm vào 2 popup ───────────────────────────────────
+
+  GameOverPanel/PopupWindow/StageName
+    RectTransform: anchorMin=(0,1), anchorMax=(1,1), pivot=(0.5,1)
+                   sizeDelta=(0,32), anchoredPosition=(0,-118)
+    TMP: font=OpenSans-Medium SDF, fontSize=22, color=(0.85,0.45,0.45,1) đỏ nhạt
+    Sibling index 3 — ngay dưới TitleText "Operation Failed"
+
+  VictoryPanel/PopupWindow/StageName
+    RectTransform: anchoredPosition=(0,-108), cùng settings
+    TMP: color=(0.85,0.72,0.35,1) vàng nhạt
+    Sibling index 3 — ngay dưới TitleText "Operation Complete"
+
+  ── Flow mới ─────────────────────────────────────────────────────────────────
+
+  App start → TDControl.Init() → SelectedStageId="1-1" → LoadScene DTGamePlay
+  DTGamePlay → GetStage("1-1") → LevelIndex=0 → 20 enemies, 2 waves
+  Win → Next → SelectStage("1-2") → LoadScene DTLoadFirst
+  DTLoadFirst reload → api??= (không tạo mới) → SelectedStageId="1-2" ✓
+  DTGamePlay → GetStage("1-2") → LevelIndex=1 → 40 enemies, 4 waves
+  Win → Next → SelectStage("2-1") → LoadScene DTLoadFirst
+  Stage cuối → GetNextStage = null → không đổi stage → về menu
+
+  ── Còn lại (chưa làm) ───────────────────────────────────────────────────────
+
+  ⬜ Stage Select UI screen (chọn màn trước khi play)
+  ⬜ TDChapterConfig + TDMapVisualConfig (khi implement Map 2 Desert)
+  ⬜ TDMapEnvironmentApplier (apply desert visual cho Stage 2-1)
+  ⬜ ChapterId được đọc trong TDGameplayMainView (hiện chưa dùng)
+
+  ── Result ───────────────────────────────────────────────────────────────────
+    ✅ TDStageConfig + TDStageRepository — stage system mới
+    ✅ SelectedStageId persist qua scene reload (??= singleton)
+    ✅ k_CurrentLevelIndex = 0 bị xóa — levelIndex đọc từ stage config
+    ✅ Next button load đúng stage tiếp theo (không phải về menu)
+    ✅ Stage cuối → Next → về menu (GetNextStage = null)
+    ✅ "Stage 1-1" / "Stage 1-2" hiển thị trong cả 2 popup Win/Lose
+    ✅ 0 compile errors
+
+
+════════════════════════════════════════════════════════════════════════════════
+  ASSET INVENTORY — MAP 2 DESERT/MOUNTAIN/SAND                     [REFERENCE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Scan thực hiện session 36. Tất cả assets dưới đây đã có sẵn trong project,
+  không cần mua thêm.
+
+  ── Ground / Terrain Materials ───────────────────────────────────────────────
+
+  Pack: Synty/PolygonGeneric/Materials/
+    Generic_Dirt.mat          ★ PathTile Map 2 (nâu cát, thay Stone_mobile)
+    Generic_Rock.mat          ★ TowerZone Map 2 tint đá
+    Generic_Mountains.mat       Background mountain mesh
+    Generic_Grass.mat           Map 1 only (xanh lá, không dùng Map 2)
+    Generic_Dirt.mat            ObstacleTile Map 2 (thay Generic_Grass)
+
+  Pack: Synty/PolygonGeneric/Materials/Alts/
+    Generic_01_A/B/C  →  Generic_04_A/B/C   (12 color variants)
+    → Cần mở trong Editor để xác nhận variant nào có tông vàng/cam desert
+
+  Pack: ADG_Textures/ground_vol1/ground2/
+    ground2.mat                 PBR full set (Diffuse, Normal, AO, Height, Metallic)
+    → Có thể dùng làm PathTile realistic hơn nếu muốn
+
+  Pack: Hand Painted Stone Texture/Material/
+    Stone_mobile.mat            Đang dùng cho PathTile Map 1 (xám đá)
+    Stone_normal.mat            Variant chất lượng cao hơn
+
+  ── Obstacle Prefabs (desert style) ──────────────────────────────────────────
+
+  Pack: Synty/PolygonGeneric/Prefabs/Environment/
+
+  Rocks (nhỏ, radius=0, safe cho obstacle):
+    SM_Gen_Env_Rock_01.prefab   ★ đang dùng Map 1
+    SM_Gen_Env_Rock_02.prefab   ★ đang dùng Map 1
+    SM_Gen_Env_Rock_03.prefab   ★ Map 2 (to hơn, radius=0 nếu hẹp)
+    SM_Gen_Env_Rock_04.prefab
+    SM_Gen_Env_Rock_05.prefab
+    SM_Gen_Env_Rock_06.prefab
+    SM_Gen_Env_Rock_Pebbles_01~05.prefab   (rất nhỏ, decoration)
+
+  Dirt Cliffs (★★ rất phù hợp desert canyon):
+    SM_Gen_Env_Dirt_Cliff_01.prefab
+    SM_Gen_Env_Dirt_Cliff_02.prefab
+    SM_Gen_Env_Dirt_Cliff_03.prefab
+    SM_Gen_Env_Dirt_Cliff_04.prefab
+    SM_Gen_Env_Dirt_Cliff_05.prefab
+    SM_Gen_Env_Dirt_Cliff_06.prefab
+    SM_Gen_Env_Dirt_Cliff_07.prefab
+    SM_Gen_Env_Dirt_Cliff_08.prefab
+
+  Stone Cliffs (phong cách canyon):
+    SM_Gen_Env_Cliff_01~04.prefab
+    SM_Gen_Env_Cliff_Arch_01~02.prefab     (cổng đá tự nhiên)
+    SM_Gen_Env_Cliff_Pillar_01.prefab      (cột đá đứng)
+    SM_Gen_Env_Stalactite_01~04.prefab     (măng đá)
+
+  Dead Trees / Khô (không có lá = desert look):
+    SM_Gen_Env_Tree_Dead_01.prefab  ★
+    SM_Gen_Env_Tree_Dead_02.prefab  ★
+    SM_Gen_Env_Tree_Dead_03.prefab  ★
+    SM_Gen_Env_Stump_01~03.prefab   (gốc cây cụt)
+
+  Dry Shrubs (bụi khô):
+    SM_Gen_Env_Shrub_01.prefab  ★
+    SM_Gen_Env_Shrub_02.prefab  ★
+    SM_Gen_Env_Shrub_03.prefab
+
+  ── Background / Atmosphere Prefabs ──────────────────────────────────────────
+
+  Pack: Synty/PolygonGeneric/Prefabs/Environment/
+    SM_Gen_Env_Mountain_01.prefab           ★ núi gần (đặt viền map)
+    SM_Gen_Env_Mountain_02.prefab           ★
+    SM_Gen_Env_Mountain_03.prefab           ★
+    SM_Gen_Env_Background_Mountain_01.prefab  ★ núi xa (background)
+    SM_Gen_Env_Background_Mountain_02.prefab  ★
+    SM_Gen_Env_Background_Mountain_03.prefab  ★
+    SM_Gen_Env_Hill_01~05.prefab              ★ đồi nhỏ viền 4 cạnh
+    SM_Gen_Env_Cloud_01~03.prefab             mây (tùy chọn)
+    SM_Gen_Env_Skydome_01.prefab              sky dome mesh
+
+  Pack: Synty/PolygonStarter/Prefabs/
+    SM_Generic_Mountains_Grass_02.prefab    núi phong cách PolygonStarter
+    SM_Generic_Mountains_Soft_01.prefab
+    SM_Generic_Ground_01~04.prefab          ground tile thay thế
+    SM_Generic_Ground_Flat_01.prefab
+
+  ── Skybox / Lighting ────────────────────────────────────────────────────────
+
+  Pack: Synty/PolygonGeneric/Materials/
+    Skybox_01.mat             ★ có thể tint warm (orange/red) cho desert
+    Generic_SimpleSky.mat       alternative sky
+
+  Pack: SimpleSky/Materials/
+    SimpleSky.mat             ★ đang dùng Map 1 — duplicate → tint warm cho Map 2
+
+  Pack: SimpleSky/Textures/
+    SimpleSky.png             texture gốc của SimpleSky material
+
+  Lighting settings đề xuất Map 2:
+    AmbientColor : (0.50, 0.35, 0.20)   cam đất
+    SunColor     : (1.00, 0.70, 0.30)   vàng sa mạc
+    SkyboxMat    : DesertSky.mat        (duplicate SimpleSky.mat, tint warm)
+
+  ── Kenney Tower Defense Kit ──────────────────────────────────────────────────
+
+  Pack: Kenney/kenney_tower-defense-kit/Models/FBX format/
+    detail-dirt.fbx             decoration đất
+    detail-dirt-large.fbx       decoration đất lớn
+    detail-rocks.fbx            ★ đá nhỏ decoration
+    detail-rocks-large.fbx      ★ đá lớn decoration
+    Texture: variation-a.png    texture atlas duy nhất (cần remat nếu dùng)
+
+  ── Gap — Không có sẵn ───────────────────────────────────────────────────────
+
+  ✗ Sand dune / Sand flat mesh     → fake bằng Generic_Dirt.mat tint vàng
+  ✗ Cactus / xương rồng prefab     → dùng Dead Tree thay thế
+  ✗ Warm/sunset skybox sẵn         → cần tạo DesertSky.mat từ SimpleSky.mat
+  ✗ Desert texture atlas Kenney    → variation-a.png chỉ có 1 color scheme
+
+  ── Obstacle list đề xuất Map 2 ──────────────────────────────────────────────
+
+  Thay thế m_ObstaclePrefabs[] của TDEnemyPathMainView khi Chapter 2:
+    [0] SM_Gen_Env_Dirt_Cliff_01    (lớn, radius=1)
+    [1] SM_Gen_Env_Dirt_Cliff_02    (lớn, radius=1)
+    [2] SM_Gen_Env_Rock_03          (vừa, radius=0)
+    [3] SM_Gen_Env_Rock_05          (vừa, radius=0)
+    [4] SM_Gen_Env_Tree_Dead_01     (cao, radius=0)
+    [5] SM_Gen_Env_Shrub_01         (nhỏ, radius=0)
+
+  ── Implement checklist (khi bắt đầu Map 2) ──────────────────────────────────
+
+  ⬜ Tạo DesertSky.mat (duplicate SimpleSky.mat + tint warm)
+  ⬜ Tạo TDMapVisualConfig.cs (ScriptableObject: mats + obstacles + lighting)
+  ⬜ Tạo VisualConfig_City.asset  (map lại config hiện tại của Map 1)
+  ⬜ Tạo VisualConfig_Desert.asset (Generic_Dirt + Dirt_Cliff list + desert sky)
+  ⬜ Tạo TDChapterConfig.cs + Chapter_01_City.asset + Chapter_02_Desert.asset
+  ⬜ TDGameplayMainView đọc chapter.VisualConfig → Apply() (lighting + obstacles)
+  ⬜ Đặt Background_Mountain + Hill prefabs viền map trong scene (hoặc runtime)
+  ⬜ Kiểm tra Generic_01~04 Alts color variants → chọn tông sand/tan
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 37 — MAP 2 DESERT VISUAL + HP BAR FIX + BUG FIXES          [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-02
+
+  ── Design decision: Stage = Map (simplified) ────────────────────────────────
+
+  Bỏ mô hình Chapter → Visual indirection. Mỗi Stage tự mang visual config
+  riêng — Stage IS Map. Không cần ChapterId hay TDChapterRepository.
+
+  Stages đổi tên:
+    "1-1" → "DEMO-1"  (City,   LevelIndex=0)
+    "1-2" → "DEMO-2"  (Desert, LevelIndex=1)
+    "2-1"  → xóa khỏi repository (không dùng nữa)
+
+  ── TDMapVisualConfig.cs [NEW] ───────────────────────────────────────────────
+
+  ScriptableObject per stage chứa toàn bộ visual assets:
+    MapGroundMaterial    — material của GameMapVisualize plane
+    PathTilePrefab       — prefab PathTile (chứa material path)
+    TowerZonePrefab      — prefab TowerZone
+    ObstacleTilePrefab   — tile dưới obstacle
+    ObstaclePrefabs[]    — danh sách obstacle prefab
+    SkyboxMaterial       — optional skybox override
+    AmbientColor         — optional ambient light color
+
+  ── TDStageConfig.cs [MODIFIED] ──────────────────────────────────────────────
+
+  - ChapterId (int)              ← removed
+  + DisplayName (string)         ← tên hiển thị
+  + VisualConfig (TDMapVisualConfig) ← trực tiếp, không qua ChapterId
+
+  ── Files code thay đổi ──────────────────────────────────────────────────────
+
+  [MODIFIED] TDStageRepository.cs
+    DefaultStageId fallback: "1-1" → "DEMO-1"
+
+  [MODIFIED] TDGameStateControl.cs
+    SelectedStageId default: "1-1" → "DEMO-1"
+
+  [MODIFIED] TDEnemyPathView.cs
+    + OverridePathTilePrefab(GameObject prefab)
+      → gọi sau RegistryValues() để swap PathTile desert/city
+
+  [MODIFIED] TDEnemyPathMainView.cs
+    + m_VisualConfig (TDMapVisualConfig)
+    + ApplyVisual(config):
+        override TowerZonePrefab, ObstacleTilePrefab, ObstaclePrefabs từ config
+    + ImplementPath(): sau RegistryValues() gọi OverridePathTilePrefab(m_VisualConfig?.PathTilePrefab)
+
+  [MODIFIED] TDGameplayMainView.cs
+    + ApplyMapVisual(config): swap MapGroundMaterial, SkyboxMaterial, AmbientColor
+    + InitGameplay():
+        ApplyMapVisual(stage?.VisualConfig)  ← TRƯỚC khi init grid
+        m_TDEnemyPathMainView.ApplyVisual(stage?.VisualConfig)
+        m_TDEnemyPathMainView.SetLevelIndex(stage?.LevelIndex ?? 0)
+
+  ── Assets tạo mới ───────────────────────────────────────────────────────────
+
+  Desert tile prefabs (duplicate từ City, đổi material):
+    PathTile_Desert.prefab     → Generic_Dirt.mat  (nâu cát)
+    TowerZone_Desert.prefab    → Generic_Rock.mat  (đá)
+    ObstacleTile_Desert.prefab → Generic_Dirt.mat
+
+  Visual Config SOs:
+    Assets/1.Assets/Resources/Configs/VisualConfigs/
+      CityVisual.asset    → all null (keep Inspector defaults — City map)
+      DesertVisual.asset  → Generic_Dirt ground + desert tile prefabs + 6 obstacles
+
+  Stage SOs updated:
+    Stage_1-1.asset → StageId="DEMO-1", DisplayName="DEMO-1", LevelIndex=0, VisualConfig=CityVisual
+    Stage_1-2.asset → StageId="DEMO-2", DisplayName="DEMO-2", LevelIndex=1, VisualConfig=DesertVisual
+    Stage Repository → m_Stages = [DEMO-1, DEMO-2]  (Stage_2-1 removed)
+
+  ── Desert obstacle list (DesertVisual.asset) ─────────────────────────────────
+
+  Index 0-1 = small (dùng cho narrow wall) | 2-5 = any size:
+    [0] SM_Gen_Env_Shrub_01     (nhỏ, radius=0)
+    [1] SM_Gen_Env_Shrub_02     (nhỏ, radius=0)
+    [2] SM_Gen_Env_Rock_03      (vừa, radius=0)
+    [3] SM_Gen_Env_Rock_05      (vừa, radius=0)
+    [4] SM_Gen_Env_Tree_Dead_01 (cao mảnh)
+    [5] SM_Gen_Env_Tree_Dead_02 (cao mảnh variant)
+
+  Dirt_Cliff_01/02 bị loại: bounds quá lớn → radius=1+ → chiếm 3×3 cells.
+
+  AmbientColor = (0.50, 0.35, 0.20, 1) — warm desert lighting.
+
+  ── Flow mới ─────────────────────────────────────────────────────────────────
+
+  App start → SelectedStageId="DEMO-1" → CityVisual (all null = giữ City defaults)
+  Win DEMO-1 → Next → SelectStage("DEMO-2") → reload scene
+  DTGamePlay → GetStage("DEMO-2") → DesertVisual → apply dirt ground + desert tiles/obstacles
+  Win DEMO-2 → Next → GetNextStage=null → về menu
+
+  ── HP Bar Y-Offset Fix ───────────────────────────────────────────────────────
+
+  Bug: HPBar_Enemy và HPBar_Operator cùng m_YOffset=-0.3f → đè lên nhau khi
+       operator block enemy trên cùng 1 cell.
+
+  Fix [TDHPBarView.cs]: không thay đổi code, chỉ set khác nhau per-prefab.
+    HPBar_Enemy.prefab    → m_YOffset = -0.3  (cao hơn)
+    HPBar_Operator.prefab → m_YOffset = -0.6  (thấp hơn, cách 0.3 world units)
+
+  ── Bug Fix: Enemy không move sau scene reload ───────────────────────────────
+
+  Root cause: TDPauseControl là C# singleton, persist qua scene load.
+    Khi Victory/GameOver popup gọi Pause() → Time.timeScale=0.
+    Scene mới load: timeScale vẫn=0 → enemy spawn nhưng Update() dùng
+    Time.deltaTime=0 → đứng yên. Pause/Resume thủ công fix vì Resume()
+    restore timeScale=1.
+
+  Fix [TDGameplayMainView.cs — InitGameplay()]:
+    + TDPauseControl.api?.Resume();  ← gọi trước mọi init khác
+    → Mỗi lần load gameplay scene đều force resume timeScale về đúng giá trị.
+
+  ── Result ───────────────────────────────────────────────────────────────────
+    ✅ TDMapVisualConfig.cs — visual system per stage
+    ✅ TDStageConfig bỏ ChapterId, thêm VisualConfig trực tiếp
+    ✅ Stage DEMO-1 (City) + DEMO-2 (Desert) — flow Next button đúng
+    ✅ Desert: ground dirt, path dirt, TowerZone rock, 6 obstacle desert style
+    ✅ HP bar enemy/operator không còn đè nhau (YOffset -0.3 vs -0.6)
+    ✅ Enemy move ngay khi scene load — không cần pause/resume thủ công
+    ✅ 0 compile errors
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 38 — RETREAT PANEL AUTO-DISPLAY BUG FIX                     [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-02
+
+  ── Bug report ───────────────────────────────────────────────────────────────
+
+  "Lâu lâu place tower hoặc operator xong button retreat tự display luôn"
+  → Không phải mọi lần, chỉ đôi khi (race condition).
+
+  ── Root cause ───────────────────────────────────────────────────────────────
+
+  Cùng 1 frame khi user thả ngón/click để đặt unit:
+    1. TDSlotHolderMainView.Update() chạy trước → Instantiate tower/operator
+       → BoxCollider active ngay lập tức
+    2. TDOperatorSelectionView.Update() chạy sau → HandleTapInput() nhận
+       cùng input event → Physics.Raycast hit unit vừa Instantiate
+       → SelectOperator() / SelectTower() → show retreat panel
+
+  Thứ tự Update() phụ thuộc Script Execution Order → intermittent (lâu lâu)
+  vì chỉ xảy ra khi TDSlotHolderMainView chạy trước TDSelectionView.
+
+  ── Fix ──────────────────────────────────────────────────────────────────────
+
+  [MODIFIED] TDSlotHolderMainView.cs
+    + public static bool IsPlacingUnit { get; private set; }
+    Set = true  : khi ghost Instantiate (bắt đầu placement)
+    Set = false : khi đặt thành công (m_CurrentTower = null sau place)
+    Set = false : khi CancelPlacement() (cancel hoặc nhấc ngón sớm)
+
+  [MODIFIED] TDOperatorSelectionView.cs — HandleTapInput():
+    + if (TDSlotHolderMainView.IsPlacingUnit) return;
+    → Guard ngay sau "if (!tapped) return", trước IsPointerOverUI check
+    → Khi placement mode active → SelectionView bỏ qua toàn bộ tap input
+
+  ── Result ───────────────────────────────────────────────────────────────────
+    ✅ Retreat panel không còn tự hiện sau khi đặt tower/operator
+    ✅ Fix không ảnh hưởng tap selection bình thường (flag false khi idle)
+    ✅ 0 compile errors
+
+
 ================================================================================
   END OF CHANGELOG
 ================================================================================

@@ -13,9 +13,10 @@ MonoBehaviour:
   m_Name: Melee Operator Config
   m_EditorClassIdentifier: 
   m_Operators:
-  - cost: 15
-    hp: 100
-    damage: 10
+  - operatorType: 0
+    cost: 15
+    hp: 1000
+    damage: 50
     attackSpeed: 2
     blockCount: 2
     operatorPrefab: {fileID: 1664552536257148490, guid: 9a61bc503e79c8744b91dd5cbf4c7917, type: 3}
