@@ -1,6 +1,6 @@
 ================================================================================
   TOWER DEFENSE — GAME DESIGN, TECHNICAL REFERENCE & DEVELOPMENT ROADMAP
-  Last updated: 2026-05-30  (session 27 — Toon Shader + Outline + HP Bar ZTest Always Fix)
+  Last updated: 2026-06-03  (session 39 — Dynamic Multi Start/End Gate System)
 ================================================================================
 
 
@@ -13,25 +13,22 @@ File: Assets/3.Scenes/DTGamePlay.unity
 ── Camera ──────────────────────────────────────────────────────────────────────
   GameObject         : Main Camera
   Projection         : Orthographic  ← switched from Perspective (session 4)
-  orthographicSize   : 14
-  Position           : (24.5, 15, 3.0)    ← updated session 20 (was 23.3,15,2.02)
-  Rotation Euler     : X=30°, Y=0°, Z=0°   ← pitch 30°
+  orthographicSize   : 13            ← updated session 29 (was 14)
+  Position           : (24.5, 13.7, 3.0)  ← updated session 29 (was (24.5,15,3.0))
+  Rotation Euler     : X=40°, Y=0°, Z=0°  ← Arknights isometric pitch [s29] (was 30°)
   Aspect target      : 16:9 (1920×1080)
 
   Visible area on ground plane (Y=0):
-    Width  X : 2 × 14 × (16/9) ≈ 49.8 world units  → grid 44u fits with ~3u buffer each side
-    Depth  Z : camera sees Z ≈ 5..53 at ground
-    Camera center on ground: Z = 3.0 + 15/tan(30°) ≈ 29
+    Width  X : 2 × 13 × (16/9) ≈ 46.2 world units
+    Depth  Z : 2 × 13 / sin(40°) ≈ 40.4 world units
 
 ── Ground / Playable area ──────────────────────────────────────────────────────
   GameMapVisualize
     Type       : Unity Plane mesh (native 10×10)
-    Scale      : (4.4, 5, 2.6)  → 44u × 26u world   ← updated session 20 (was 4.2×2.4)
-    Position   : (23.3, 0, 27.7)                     ← updated session 20 (was 23.3,0,28)
-    Bounds X   : [1.3, 45.3]    ← aligned with CityGround tile boundaries [s20]
-    Bounds Z   : [14.7, 40.7]   ← aligned with CityGround tile boundaries [s20]
-    MeshRenderer : enabled (material: ground2)
-    TDGridVisualizerView : disabled (gizmos hidden) [s20]
+    Scale      : (4.0, 5.0, 3.0)  → 40u × 30u world  ← updated session 29 (was 4.4,5,2.6)
+    Position   : (24.5, 0, 23)                         ← updated session 29 (was 23.3,0,27.7)
+    MeshRenderer : enabled (material: ground2 / per-stage VisualConfig)
+    TDGridVisualizerView : disabled (gizmos hidden)
 
 ── Environment objects (ArkEnvironment children) ───────────────────────────────
   CityGround   : 322+ mesh tiles in gameplay zone, 2u×2u each, boundaries at
@@ -47,15 +44,17 @@ File: Assets/3.Scenes/DTGamePlay.unity
   Pipes/Beams  : contracted by EnvironmentContractor
 
 ── Spawn / PathView ────────────────────────────────────────────────────────────
-  PathView/CreatePoint  : pos (1, 0, 27.7)    ← updated session 20 (was 2,0,29)
-    → Just outside plane left edge (plane X starts at 1.3)
-    → Z=27.7 aligned with START row world Z = cell(0,6) center
+  Enemy spawn: CellToWorld(group.StartCell) — dynamic từ TDPathGroup.SpawnWorldPos
+  → Không còn PathView/CreatePoint Transform (xóa s29)
 
-── Gates (Phase 4.5 + 4.6 — DONE) ─────────────────────────────────────────────
-  GateStart  : spawned at world (2.3, 0, 27.7)  = grid (0,6)   ← updated s20 (was 3.3,0,29)
-  GateEnd    : spawned at world (44.3, 0, 27.7) = grid (21,6)  ← updated s20 (was 43.3,0,29)
-  → Instantiated runtime bởi TDEnemyPathMainView.SpawnGates()
-  → Visual: 3D wireframe box (Arknights-style), redesigned session 6 (Phase 4.6)
+── Gates (Phase 4.5 + 4.6 + Phase 22 — DONE) ──────────────────────────────────
+  Multi-gate support (s39): số lượng và vị trí từ TDStageConfig
+    StartGateCount + EndGateCount + MapLayout → TDGatePlacer.Place()
+    → TDPathGroup per gate pair → SpawnGates() instantiate tất cả
+  Default (DEMO-1/DEMO-2): StartGateCount=1, EndGateCount=1, Layout=LeftToRight
+    GateStart: snap về even coord trên Left border (centerY=6)
+    GateEnd  : snap về even coord trên Right border (centerX=18)
+  Visual: 3D wireframe box (Arknights-style s6), rotate per BorderSide (s39)
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -63,26 +62,25 @@ File: Assets/3.Scenes/DTGamePlay.unity
 ════════════════════════════════════════════════════════════════════════════════
 
   CONFIG_GRID_CELL_SIZE = 2f                  (TDConstant.cs)
-  Plane bounds         = (44, 26) world units (scale 4.4×2.6 × Unity plane 10)  [updated s20]
-  Grid width  = Floor(44 / 2f) = 22           (TDGridMainModel.cs runtime)       [updated s20]
-  Grid height = Floor(26 / 2f) = 13           (TDGridMainModel.cs runtime)       [updated s20]
-  Total cells = 286                                                               [updated s20]
+  Plane bounds         = (40, 30) world units (scale 4.0×3.0 × Unity plane 10)  [updated s29]
+  Grid width  = Floor(40 / 2f) = 20           (TDGridMainModel.cs runtime)       [updated s29]
+  Grid height = Floor(30 / 2f) = 15           (TDGridMainModel.cs runtime)       [updated s29]
+  Total cells = 300                                                               [updated s29]
 
   Offset calculation (TDGridMainModel.cs):
-    offsetX = planePos.x - (mapSize.x/2) + (cellSize/2) = 23.3 - 22 + 1 = 2.3  [updated s20]
-    offsetZ = planePos.z - (mapSize.z/2) + (cellSize/2) = 27.7 - 13 + 1 = 15.7 [updated s20]
+    offsetX = planePos.x - (mapSize.x/2) + (cellSize/2) = 24.5 - 20 + 1 = 5.5  [updated s29]
+    offsetZ = planePos.z - (mapSize.z/2) + (cellSize/2) = 23   - 15 + 1 = 9.0  [updated s29]
 
-  Cell (x,y) → world = (x*2 + 2.3,  0,  y*2 + 15.7)
-    Cell (0,  0)  → world (2.3,  0, 15.7)   ← bottom-left
-    Cell (21, 12) → world (44.3, 0, 39.7)   ← top-right
-    Cell (0,  6)  → world (2.3,  0, 27.7)   ← START / GateStart  [updated s20]
-    Cell (21, 6)  → world (44.3, 0, 27.7)   ← END   / GateEnd    [updated s20]
+  Cell (x,y) → world = (x*2 + 5.5,  0,  y*2 + 9.0)
+    Cell (0,  0)  → world (5.5,  0, 9.0)    ← bottom-left
+    Cell (19, 14) → world (43.5, 0, 37.0)   ← top-right
+    Cell (0,  6)  → world (5.5,  0, 21.0)   ← default START gate (centerY=6, even snap)
+    Cell (18, 6)  → world (41.5, 0, 21.0)   ← default END gate   (lastCol=18, even snap)
 
-  CityGround tile alignment (verified s20):
-    GameMapVisualize edges land EXACTLY on CityGround 2u-tile boundaries:
-    X: left=1.3, right=45.3  ←→  CityGround X boundaries 1.3+n×2
-    Z: bot=14.7, top=40.7    ←→  CityGround Z boundaries 14.7+n×2
-    → Each game cell (2u×2u) corresponds to exactly 1 CityGround floor tile
+  Start/End dynamic calculation (s29):
+    centerY = height/2 (integer) = 7; if odd → centerY-- → 6
+    lastCol = width-1  = 19;       if odd → lastCol--  → 18
+    → Start=(0,6), End=(18,6) for LeftToRight layout (default)
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -292,45 +290,50 @@ File: Assets/3.Scenes/DTGamePlay.unity
 
 
 ════════════════════════════════════════════════════════════════════════════════
- 5. PATH GENERATION ALGORITHM (TDPathGeneratorControl)
+ 5. PATH GENERATION ALGORITHM [CURRENT — Maze Extraction, s29+]
 ════════════════════════════════════════════════════════════════════════════════
 
-  Input  : start (Vector2Int), end (Vector2Int), yMin, yMax (zone bounds)
-  Output : Vector2Int[] waypoints, mỗi cặp liên tiếp cùng X HOẶC cùng Y
+  ⚠️  THAY THẾ: Y-zones zigzag (TDPathGeneratorControl) và BuildDefinedPath bị xóa s29.
+  ⚠️  TDPathGeneratorControl.cs: DELETED s29. TDObstacleControl.cs: DELETED s29.
 
-  Algorithm:
-    1. Enter zone: enterY = Random(yMin, yMax)
-       if enterY != start.y → add (start.x, enterY)
+  ALGORITHM: Recursive Backtracker Maze Extraction (TDMazePathGenerator.cs)
 
-    2. Zigzag loop:
-       while (curX + minStep <= end.x - 1):
-         stepX = Random(minStep, maxStep); nextX = min(curX+stepX, end.x-1)
-         add (nextX, curY); curX = nextX
-         nextY = PickDifferentY(curY, yMin, yMax, minDelta)
-         add (curX, nextY); curY = nextY
+  GenerateForGroups(gridDTO, groups):
+    foreach group in groups:
+      PathCount = CONFIG_NUM_PATHS  (3 corridors/group)
+      foreach run in 0..PathCount:
+        Carve(gridDTO, group, allGroups) → 1 corridor
+        combinedPathCells |= corridor.cells
+    SetAllWalls() 1 lần cuối → restore isWalkable trên combined
 
-    3. Exit: if curX != end.x → add (end.x, curY)
+  Carve(gridDTO, group, allGroups):
+    1. SetAllWalls() — đặt tất cả ô isWalkable=false
+    2. Block gate cells của groups KHÁC (ngăn A* shortcut qua cổng sai)
+    3. CarveFrom(startCell): iterative Stack<Vector2Int>
+       Room cells tại even (x,y) coords; passage cells giữa 2 room
+       Shuffle 4 hướng random → carve đến room chưa thăm
+    4. A* extract path từ group.StartCell → group.EndCell
+    5. minLength = gridWidth; retry ≤ 10 lần nếu path.Count < minLength
+       Fallback: giữ path dài nhất tìm được
+    6. Unblock gate cells đã bị block ở bước 2
 
-  Tunables:
-    CONFIG_PATH_MIN_STEP_X         = 2
-    CONFIG_PATH_MAX_STEP_X         = 5
-    CONFIG_PATH_MIN_VERTICAL_DELTA = 2
+  Wall cells  (!isWalkable after GenerateForGroups) = tower placement spots
+  Corridor    (isWalkable after GenerateForGroups)  = enemy path
+
+  Key constants:
+    CONFIG_NUM_PATHS                = 3   (corridors per group)
+    CONFIG_MAZE_OBSTACLE_WALL_RATIO = 0.15f (15% wall cells → obstacle decoration)
+    CONFIG_MAZE_EXTRA_PASSAGE_RATE  = 0.45f (reserved, not yet used)
 
 
 ════════════════════════════════════════════════════════════════════════════════
- 6. BUILD DEFINED PATH ALGORITHM (TDaStarPathControl.BuildDefinedPath)
+ 6. BUILD DEFINED PATH ALGORITHM [REMOVED — s29]
 ════════════════════════════════════════════════════════════════════════════════
 
-  Input  : gridDTO, start, end, waypoints[]
-  Output : List<IGridCellDTO>
-
-  BuildDefinedPath:
-    path=[]; cur=start
-    foreach wp in waypoints: AppendStraightSegment(path, cur, wp); cur=wp
-    AppendStraightSegment(path, cur, end)
-    path.Add(cell(end))
-
-  AppendStraightSegment: move X first, then Y (Manhattan walk, no A*)
+  ⚠️  REMOVED: BuildDefinedPath, AppendStraightSegment, ComputeWaypointPath xóa khỏi
+      TDaStarPathControl.cs session 29.
+  Còn giữ: ComputePath() (A*), ReconstructPath() — dùng bởi Carve().
+  TDaStarPathControl implements IPathFinder (s39) → inject vào TDMazePathGenerator.
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -445,45 +448,47 @@ File: Assets/3.Scenes/DTGamePlay.unity
 
 
 ════════════════════════════════════════════════════════════════════════════════
- 9. OBSTACLE PLACEMENT (TDObstacleControl)
+ 9. OBSTACLE PLACEMENT [CURRENT — s29+, major rework s30/s32/s35]
 ════════════════════════════════════════════════════════════════════════════════
 
-  Tunables:
-    CONFIG_OBSTACLE_COUNT            = 12
-    CONFIG_OBSTACLE_EXCLUSION_RADIUS = 2
-    CONFIG_OBSTACLE_SPACING          = 3
-  Inspector: TDEnemyPathMainView.m_ObstaclePrefabs[5]
+  ⚠️  TDObstacleControl.cs DELETED (s29) — logic di chuyển vào TDEnemyPathMainView.
 
-  ── Multi-cell Footprint System (Session 20) ─────────────────────────────────
+  Tunables (TDConstant.cs):
+    CONFIG_MAZE_OBSTACLE_WALL_RATIO = 0.15f  (15% valid wall cells → obstacle)
+    gateBuffer = 2                            (exclusion radius around start/end)
 
-  Each obstacle has a footprint radius (0 = 1×1 cell, 1 = 3×3 cells, etc.)
-  Auto-computed at runtime by ComputeFootprintRadii() in TDEnemyPathMainView:
-    1. Instantiate each prefab briefly (inactive)
-    2. Encapsulate all Renderer bounds in a single Bounds
-    3. radius = max(0, CeilToInt(max(size.x, size.z) / (2 × cellSize) - 0.5f))
-    4. Destroy temp instance
+  Inspector: TDEnemyPathMainView.m_ObstaclePrefabs[]  (per-stage via VisualConfig)
 
-  Formula results for current 5 prefabs (cellSize=2):
-    Rock_01  → radius=1 (3×3 blocked)
-    Rock_05  → radius=1 (3×3 blocked)
-    Bush_02  → radius=1 (3×3 blocked)
-    Shrub_03 → radius=0 (1×1 blocked)
-    Tree_01  → radius=1 (3×3 blocked)
+  ── Obstacle Tiers (current — City map) ──────────────────────────────────────
+  Index 0-1 = "small" (narrow wall slot OK):
+    [0] SM_Gen_Env_Rock_01        radius=0, 1×1 footprint
+    [1] SM_Gen_Env_Rock_02        radius=0
+  Index 2-5 = "any size" (used when hasVerticalWall true):
+    [2] SM_Gen_Env_Bush_01
+    [3] SM_Gen_Env_Bush_02
+    [4] SM_Gen_Env_Bush_Large_01
+    [5] SM_Gen_Env_Grass_Tall_01
 
-  PlaceObstacles() pre-assigns a random prefab index at selection time so
-  the visual spawned and the blocked footprint always match.
+  ── ObstacleTile Prefab (s30 NEW) ────────────────────────────────────────────
+    Path: Assets/1.Assets/Resources/Prefabs/ObstacleTile.prefab
+    Cube scale (2,1,2); Generic_Grass.mat (City) / Generic_Dirt.mat (Desert)
+    Không có BoxCollider
 
-  onObstaclesPlaced signature (Session 20):
-    Action<List<Vector2Int> centers, List<int> prefabIndices, List<Vector2Int> allBlocked>
-    centers      → where to Instantiate the visual
-    prefabIndices → which m_ObstaclePrefabs[] index per center
-    allBlocked    → ALL grid cells blocked (center + footprint cells)
-                   used to SetOccupiedCell AND exclude from valid tower cells
+  ── Visual 3-tier phân cấp ───────────────────────────────────────────────────
+    Corridor  → PathTile      (stone/dirt per stage)  — enemy path
+    Wall empty → TowerZone    (light grey/rock)        — tower placement
+    Wall + obs → ObstacleTile (grass/dirt) + obstacle  — decoration
 
-  Flow after PlaceObstacles:
-    OnObstaclesPlaced → spawn visuals + SetOccupiedCell(allBlocked)
-                      → ComputeValidTowerCells(allBlocked excluded)
-    OnValidTowerCellsReady → spawn TowerZone tiles on valid cells
+  ── Placement Flow (OnValidTowerCellsReady) ──────────────────────────────────
+  1. Filter: skip cell nếu isWalkable || !IsValidPlacement (occupied/path check)
+  2. Exclusion: gateBuffer=2 quanh mọi gate (tất cả groups)
+  3. Ratio: 15% wall cells → obstacle selection
+     - hasVerticalWall (hasNorth AND hasSouth) = true → any prefab (0-5)
+     - else → only Rock_01/02 (index 0-1, small)
+  4. Phase 1.5: spawn ObstacleTile dưới mỗi obstacle cell
+  5. Phase 2: TowerZone trên wall cells không có obstacle
+  6. Footprint: radius auto-computed từ Renderer.bounds; footprint expand wall-only
+     (không lan sang corridor cells — bug fix s30)
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -567,38 +572,37 @@ File: Assets/3.Scenes/DTGamePlay.unity
 
   ── Grid ─────────────────────────────────────────────────────────────────
   CONFIG_GRID_CELL_SIZE          = 2f
-  CONFIG_PATH_MIN_GRID_Y         = 0
-  CONFIG_ENEMY_START_POINT       = (0,  6)  → world (2.3,  0, 27.7)  [updated s20]
-  CONFIG_ENEMY_END_POINT         = (21, 6)  → world (44.3, 0, 27.7)  [updated s20 — was (20,6)]
+  [REMOVED s29] CONFIG_PATH_MIN_GRID_Y
+  [REMOVED s29] CONFIG_ENEMY_START_POINT  (dynamic via TDGatePlacer)
+  [REMOVED s29] CONFIG_ENEMY_END_POINT    (dynamic via TDGatePlacer)
 
-  ── Path generation ──────────────────────────────────────────────────────
-  CONFIG_PATH_Y_ZONES            = [(7,12), (0,5), (2,10)]            [updated s20 — was (7,11),(0,5),(2,9)]
-  CONFIG_PATH_MIN_STEP_X         = 2
-  CONFIG_PATH_MAX_STEP_X         = 5
-  CONFIG_PATH_MIN_VERTICAL_DELTA = 2
+  ── Path generation (Maze — current) ─────────────────────────────────────
+  CONFIG_NUM_PATHS                = 3   (corridors per group)
+  CONFIG_MAZE_OBSTACLE_WALL_RATIO = 0.15f
+  CONFIG_MAZE_EXTRA_PASSAGE_RATE  = 0.45f  (reserved, unused)
 
-  ── Obstacles ────────────────────────────────────────────────────────────
-  CONFIG_OBSTACLE_COUNT             = 12
-  CONFIG_OBSTACLE_EXCLUSION_RADIUS  = 2
-  CONFIG_OBSTACLE_SPACING           = 3
+  [REMOVED s29] CONFIG_PATH_Y_ZONES, CONFIG_PATH_MIN/MAX_STEP_X, CONFIG_PATH_MIN_VERTICAL_DELTA
+  [REMOVED s29] CONFIG_OBSTACLE_COUNT, CONFIG_OBSTACLE_EXCLUSION_RADIUS, CONFIG_OBSTACLE_SPACING
 
   ── Wave system ──────────────────────────────────────────────────────────
-  CONFIG_MAX_WAVES                  = 10
-  CONFIG_ENEMIES_NUMBER             = 5
-  CONFIG_ENEMY_SPAWN_DELAY_MS       = 2000
-  CONFIG_WAVE_INTERVAL_MS           = 10000
+  [REMOVED] CONFIG_MAX_WAVES, CONFIG_ENEMIES_NUMBER, CONFIG_ENEMY_SPAWN_DELAY_MS, CONFIG_WAVE_INTERVAL_MS
+  → Thay bằng LevelConfig SO fields (levelIndex, difficulty, totalEnemies, waveCount, ...)
 
   ── Enemy ────────────────────────────────────────────────────────────────
-  CONFIG_ENEMY_MOVE_SPEED        = 3f     ← DEPRECATED (Phase 11: từ EnemyData SO)
-  CONFIG_ENEMY_HEALTH            = 300f   ← DEPRECATED (Phase 11: từ EnemyData SO)
-  CONFIG_ENEMY_VISUAL_SCALE      = 1.5f   ← DEPRECATED (Phase 11: baked vào từng prefab)
+  [REMOVED] CONFIG_ENEMY_MOVE_SPEED, CONFIG_ENEMY_HEALTH, CONFIG_ENEMY_VISUAL_SCALE
 
-  Enemy stats nguồn thực tế (Phase 11):
+  Enemy stats nguồn thực tế (Phase 11+):
     HP    = EnemyData.baseHP    × DifficultyRatioTable.hpMult
     Speed = EnemyData.baseSpeed × DifficultyRatioTable.speedMult
     Scale = baked vào prefab (Slime=1.5, Fast=0.56, Tank=0.74, Boss=0.32)
 
-  ── Player / Gates [Phase 4.5] ───────────────────────────────────────────
+  EnemyData attack stats (s28):
+    Normal: attackDamage=10,  attackSpeed=1.0
+    Fast  : attackDamage=5,   attackSpeed=1.5
+    Tank  : attackDamage=25,  attackSpeed=0.5
+    Boss  : attackDamage=50,  attackSpeed=0.75
+
+  ── Player / Gates ───────────────────────────────────────────────────────
   CONFIG_PLAYER_STARTING_LIVES   = 20
   PREFAB_GATE_START              = "GateStart"
   PREFAB_GATE_END                = "GateEnd"
@@ -614,10 +618,10 @@ File: Assets/3.Scenes/DTGamePlay.unity
   CONFIG_PATH_OFFSET_Y           = 0.1f
   CONFIG_NUM_PATHS               = 3   (legacy, use CONFIG_PATH_Y_ZONES.Length)
 
-  ── HUD / Win/Lose (Phase 8 — DONE session 18+19) ────────────────────────
-  CONFIG_PLAYER_STARTING_GOLD       = 10     ← khởi điểm gold
-  CONFIG_GOLD_PASSIVE_RATE          = 5f     ← giây per +1 gold passive
-  CONFIG_LIFE_LOW_THRESHOLD         = 5      ← <= threshold → life text đỏ
+  ── HUD / Win/Lose (Phase 8 — DONE s18-19+s33) ──────────────────────────
+  CONFIG_PLAYER_STARTING_GOLD       = 10
+  CONFIG_GOLD_PASSIVE_RATE          = 5f
+  CONFIG_LIFE_LOW_THRESHOLD         = 5
   PATH_GAMEPLAY_HUD_BACK_BUTTON     = "Header/HUDButtonRight/BackButton"
   PATH_GAMEPLAY_HUD_SETTING_BUTTON  = "Header/HUDButtonRight/SettingButton"
   PATH_GAMEPLAY_HUD_ENEMY_COUNT     = "Header/MapInfo/EnemyCount/TxtValue"
@@ -630,7 +634,24 @@ File: Assets/3.Scenes/DTGamePlay.unity
   PATH_GAMEPLAY_HUD_CURRENCY        = "Bottom/Currency/TxtValue"
   PATH_GAMEPLAY_HUD_PAUSE_PANEL     = "PausePanel"
   PATH_GAMEPLAY_HUD_RESUME_BUTTON   = "PausePanel/ResumeButton"
-  PATH_GAMEPLAY_SCREEN_FLASH        = "FlashScreen"  ← child của Container (session 19)
+  PATH_GAMEPLAY_SCREEN_FLASH        = "FlashScreen"
+
+  ── Win/Lose Popup Paths (Phase 8 — s33) ────────────────────────────────
+  PATH_GAMEOVER_STAT_ENEMIES  = "GameOverPanel/PopupWindow/Stats/EnemiesRow/Value"
+  PATH_GAMEOVER_STAT_LIVES    = "GameOverPanel/PopupWindow/Stats/LivesRow/Value"
+  PATH_GAMEOVER_STAT_GOLD     = "GameOverPanel/PopupWindow/Stats/GoldRow/Value"
+  PATH_GAMEOVER_STAGE_NAME    = "GameOverPanel/PopupWindow/StageName"
+  PATH_VICTORY_STAT_ENEMIES   = "VictoryPanel/PopupWindow/Stats/EnemiesRow/Value"
+  PATH_VICTORY_STAT_LIVES     = "VictoryPanel/PopupWindow/Stats/LivesRow/Value"
+  PATH_VICTORY_STAT_GOLD      = "VictoryPanel/PopupWindow/Stats/GoldRow/Value"
+  PATH_VICTORY_STAGE_NAME     = "VictoryPanel/PopupWindow/StageName"
+
+  ── Operator Retreat/Selection (Phase 17 — s34/35) ───────────────────────
+  PATH_OPERATOR_ACTION_PANEL      = "OperatorActionPanel"
+  PATH_OPERATOR_BTN_RETREAT       = "OperatorActionPanel/BtnRetreat"
+  OPERATOR_PANEL_W  = 96; OPERATOR_PANEL_H = 110
+  OPERATOR_BTN_SIZE = 88; OPERATOR_ICON_SIZE = 60
+  OPERATOR_PANEL_WORLD_Y_OFFSET = 2.4f
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -644,17 +665,17 @@ File: Assets/3.Scenes/DTGamePlay.unity
 
   Session 4 (Orthographic):
     Step5: Perspective→Ortho, orthoSize=20, pitch 48→35°
-    Step6: orthoSize=11 (too small) → grid resize 20×12→14×8, cellSize 2→3
-    Step7: orthoSize=12, pitch 35→30°, Y 22→15, Z→2
+    Step6: orthoSize=11 → grid 14×8 cellSize 2→3
+    Step7: orthoSize=12, pitch 35→30°, Y 22→15
     Step8: 14×8 cellSize=3 → 21×12 cellSize=2, orthoSize 12→14
-    Step9 (session 20): pos adjusted (23.3,15,2.02) → (24.5,15,3.0) for better view framing
-    FINAL: pos (24.5,15,3.0), pitch=30°, orthoSize=14
+    Step9 (s20): pos (23.3,15,2.02) → (24.5,15,3.0)
+    Step10 (s29): pos (24.5,15,3.0) → (24.5,13.7,3.0); pitch 30° → 40° (Arknights style); orthoSize 14→13
+    FINAL: pos (24.5,13.7,3.0), pitch=40°, orthoSize=13
 
   ── Plane evolution ────────────────────────────────────────────────────────
-  Session 2-3: (5,5,5)→(3,5,3)→(4,5,3)→(4,5,2.4) pos (23.3,0,28) → 40×24
-  Session 4: (6,5,3.6)→(4.2,5,2.4) → world 42×24, grid 21×12
-  Session 20: (4.2,5,2.4) pos(23.3,0,28) → (4.4,5,2.6) pos(23.3,0,27.7) → 44×26, grid 22×13
-              CityGround alignment achieved; edges at X[1.3,45.3] Z[14.7,40.7] (FINAL)
+  Session 2-3: (5,5,5)→(4,5,2.4) pos (23.3,0,28) → 40×24
+  Session 20: (4.4,5,2.6) pos(23.3,0,27.7) → 44×26, grid 22×13
+  Session 29: (4.4,5,2.6) pos(23.3,0,27.7) → (4.0,5,3.0) pos(24.5,0,23) → 40×30, grid ~20×15 (FINAL)
 
   ── Tower ghost scale history ──────────────────────────────────────────────
   0.5f → 1.5f (session 4) → 1.0f (session 4 final)
@@ -792,10 +813,12 @@ File: Assets/3.Scenes/DTGamePlay.unity
   ─────────────────────────────────────────────────────────────────────────────
 
   ╔══════════════════════════════════════════════════════════════════════════╗
-  ║  PHASE 5 — Multi-start / Màn 2                          [TODO]            ║
+  ║  PHASE 5 — Multi-start / Multi-gate                     [✅ DONE s39]    ║
   ╚══════════════════════════════════════════════════════════════════════════╝
-    CONFIG_START_POINTS = Vector2Int[] nhiều điểm spawn
-    Mỗi start → 1-2 paths riêng đến END
+    Superseded bởi Phase 22 (Dynamic Multi-Gate System — session 39).
+    TDStageConfig.StartGateCount/EndGateCount + MapLayout + GateAssignmentMode.
+    TDGatePlacer: section-based even-coord placement trên bất kỳ border nào.
+    4 strategy: RoundRobin, Random, PerWave, Simultaneous (OCP — thêm mode = thêm class).
 
   ─────────────────────────────────────────────────────────────────────────────
 
@@ -955,13 +978,17 @@ File: Assets/3.Scenes/DTGamePlay.unity
   ─────────────────────────────────────────────────────────────────────────────
 
   ╔══════════════════════════════════════════════════════════════════════════╗
-  ║  PHASE 8 — Win/Lose Conditions + HUD           [⚠️ PARTIAL s17-19]     ║
+  ║  PHASE 8 — Win/Lose Conditions + HUD                    [✅ DONE s33]   ║
   ╚══════════════════════════════════════════════════════════════════════════╝
-    ✅ HUD Top Bar: BackButton(quit), EnemyCount, LifePoint(đỏ ≤5), SpeedToggle, PauseButton.
-    ✅ Gold: passive +1/5s; kill reward; SpendGold khi đặt; holder disable khi thiếu gold.
-    ✅ TDGoldControl, TDGameStateControl, TDSpeedControl, TDGameplayHUDView wired ✅.
+    ✅ HUD Top Bar: BackButton, EnemyCount, LifePoint(đỏ ≤5), SpeedToggle, PauseButton.
+    ✅ Gold: passive +1/5s; kill reward; SpendGold khi đặt; holder disable.
+    ✅ TDGoldControl, TDGameStateControl, TDSpeedControl, TDGameplayHUDView wired.
     ✅ Win/Lose: Victory=AllWavesSpawned+AllRemoved; Defeat=lives≤0; IsGameEnded guard.
-    ⬜ CÒN LẠI: VictoryPanel UI + GameOverPanel UI (stubs OnVictory/OnGameOver đã có).
+    ✅ GameOverPanel (s33): border_lose_frame.png đỏ, stats (Enemies/Lives/Gold), Retry.
+    ✅ VictoryPanel  (s33): border_win_frame.png vàng, stars row, stats, Retry + Next.
+    ✅ Stage name "Stage DEMO-1" trong cả 2 popup (s36).
+    ✅ Pause auto khi popup hiện; game.resume khi scene reload (s37 fix).
+    ✅ Next button → load stage tiếp theo; stage cuối → về menu (s36).
 
   ─────────────────────────────────────────────────────────────────────────────
 
@@ -1058,35 +1085,113 @@ File: Assets/3.Scenes/DTGamePlay.unity
   ─────────────────────────────────────────────────────────────────────────────
 
   ╔══════════════════════════════════════════════════════════════════════════╗
-  ║  PHASE 17 — Retreat Mechanic                            [TODO]            ║
+  ║  PHASE 17 — Retreat Mechanic                            [✅ DONE s34/35] ║
   ╚══════════════════════════════════════════════════════════════════════════╝
 
-  Requires Phase 16 (IPlacedUnit.OnRemove()) complete trước.
+  ── Operator Retreat (s34) ───────────────────────────────────────────────────
+    TDOperatorRetreatControl [NEW]: Retreat(view) → AddGold(Cost/2) + view.DoRetreat()
+    TDOperatorView.DoRetreat(): OnRemove() + EventBus.OperatorDied + Destroy
+    TDOperatorSelectionView [NEW]:
+      + Tap → Physics.Raycast → hit TDOperatorView/TDTowerWeaponView → Select
+      + Select: SetSelected(true), show OperatorActionPanel, UpdatePanelPosition
+      + IsPlacingUnit guard (s38): skip tap khi đang place unit (race condition fix)
+    SelectionIndicator: gold diamond Quad, Overlay ZTest=Always shader (s35)
+    OperatorKnight.prefab: + SelectionIndicator child + CapsuleCollider trigger
 
-  ── Design ───────────────────────────────────────────────────────────────────
-    Trigger: Click operator đang đứng trên map → hiện Retreat UI button
-    Flow:
-      User click Retreat
-      → TDOperatorView.Retreat()
-          → play retreat animation
-          → TDOperatorRegistry.WithdrawOperator(cell):
-              ForceUnblock() tất cả enemy (m_CurrentPathIndex++, resume)
-              UnregisterOperator(cell)
-          → IPlacedUnit.OnRemove()
-          → Destroy(gameObject) sau animation
+  ── Tower Retreat (s35) ──────────────────────────────────────────────────────
+    TDTowerRetreatControl [NEW]: Retreat(view) → AddGold(Cost/2) + view.DoRetreat()
+    TDTowerWeaponView.DoRetreat(): OnRemove() + UnoccupyCell() + Destroy
+    IGridMainModel + TDGridMainModel: + UnoccupyCell(Vector3) — tái sử dụng ô
+    13 tower prefabs: + BoxCollider trigger center=(0,1,0) size=(1,2,1)
 
-    Tách biệt Die() vs Retreat():
-      Die()     = bị tiêu diệt bởi enemy → unregister → Destroy
-      Retreat() = chủ động của player    → unregister → Destroy
+  ── Retreat Panel ────────────────────────────────────────────────────────────
+    OperatorActionPanel: anchor center (0.5,0.5), 96×110
+    BtnRetreat: 88×88, dark red #B81E1E, Icon 60×60 (PictoIcon_Exit.Png)
+    LblRetreat: "Retreat" 13pt pink
+    Panel offset: (-70, +30) screen pixels → không che operator
 
-    Gold refund: TBD (0% hoặc 50% tùy balance)
-    Cooldown per operator type: optional
+  ⚠️ Còn lại: Retreat cooldown chưa implement; IsValidOperatorPlacement chưa tổng quát.
 
-  ── Files cần thêm/sửa ───────────────────────────────────────────────────────
-    TDOperatorView: + Retreat() method, tách logic unregister thành OnRemove()
-    TDOperatorRegistry: + WithdrawOperator(cell) (alias UnregisterOperator với flag)
-    TDSlotHolderMainView: detect click vào placed operator → show Retreat button
-    TDGameplayHUDView: Retreat button UI (hoặc world-space button trên operator)
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 18.5 — Enemy Animation Fix + Operator Weapon     [✅ DONE s28]   ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+    Enemy: EnemyData.attackDamage/Speed set đúng; Attack state thêm cho Slime/SwarmFast/TurtleTank.
+    DragonBoarBoss: conditionless transition removed; Walk set default state.
+    DragonBoarBossCTRL.controller [NEW duplicate từ gốc, không sửa gốc].
+    OperatorKnight: Sword (OHS05_Sword.prefab) gắn vào prop_r bone, Toon_Sword.mat.
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 19 — Maze Path Generation System                 [✅ DONE s29]   ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+    Thay Y-zones zigzag bằng Recursive Backtracker maze extraction.
+    TDMazePathGenerator.cs [NEW]; CarveFrom iterative Stack; SetAllWalls per run.
+    Wall cells = tower spots; corridor = enemy path.
+    Camera: pos (24.5,13.7,3), X=40°, orthoSize=13 (Arknights isometric).
+    GameMapVisualize: (24.5,0,23), scale (4.0,5.0,3.0) → 40×30 world units, ~20×15 cells.
+    Dynamic start/end: snap về even coord; Start=(0,6), End=(18,6).
+    DELETED: TDPathGeneratorControl.cs (zigzag), TDObstacleControl.cs.
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 19.5 — Obstacle + HP Bar Overhaul                [✅ DONE s30-32]║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+    ObstacleTile.prefab [NEW s30]; footprint không lan corridor; 6 obstacle prefabs nhỏ.
+    Obstacle ratio: 30%→15%; ObstacleTile chia theo vertical wall space (narrow = rock only).
+    HP bar YOffset: serialized per-prefab (Enemy=-0.3, Operator=-0.6) — Arknights dưới chân.
+    HP bar fill: ProceduralImage Fill fix (s31); HPBar_ProceduralAlwaysOnTop.mat (s32).
+    Obstacle spawn guard: gate buffer=2 + IsValidPlacement double-check (s32).
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 20 — Stage System                                [✅ DONE s36]   ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+    TDStageConfig.cs + TDStageRepository.cs [NEW]: StageId, DisplayName, LevelIndex, VisualConfig.
+    TDGameStateControl.SelectedStageId persist qua reload (??= singleton).
+    SetLevelIndex() thay k_CurrentLevelIndex=0 hardcode.
+    VictoryNextBtn → GetNextStage → SelectStage → LoadScene.
+    StageName TMP trong cả 2 popup.
+    SO: Stage Repository.asset + Stage_1-1 (DEMO-1) + Stage_1-2 (DEMO-2).
+    Level Config thêm levelIndex=1 (40 enemies, 4 waves).
+    Bug fix: TDInitializeModel.Reset() trên Retry (InvalidOperationException fix).
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 21 — Map Visual Config + Desert Stage            [✅ DONE s37]   ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+    TDMapVisualConfig.cs [NEW SO]: MapGroundMaterial, PathTilePrefab, TowerZonePrefab,
+      ObstacleTilePrefab, ObstaclePrefabs[], SkyboxMaterial, AmbientColor.
+    TDStageConfig: bỏ ChapterId → VisualConfig trực tiếp.
+    Stage IDs: "1-1"→"DEMO-1" (City), "1-2"→"DEMO-2" (Desert).
+    CityVisual.asset (all null = default); DesertVisual.asset (dirt/rock/6 desert obstacles).
+    PathTile_Desert/TowerZone_Desert/ObstacleTile_Desert prefabs [NEW].
+    AmbientColor desert: (0.50, 0.35, 0.20) warm.
+    Bug fix: TDPauseControl.Resume() force gọi ở InitGameplay() đầu scene load.
+
+  ─────────────────────────────────────────────────────────────────────────────
+
+  ╔══════════════════════════════════════════════════════════════════════════╗
+  ║  PHASE 22 — Dynamic Multi Start/End Gate System         [✅ DONE s39]   ║
+  ╚══════════════════════════════════════════════════════════════════════════╝
+    TDPathGroup.cs [NEW pure DTO]: StartCell, EndCell, BorderSide, SpawnWorldPos, Corridors.
+    IGateAssignmentStrategy.cs [NEW]: SelectForWave(groups, waveIdx) → List<(group, corridor)>.
+    IPathFinder.cs [NEW slim]: ComputePath(grid, start, end) → List<IGridCellDTO>.
+    TDGatePlacer.cs [NEW static]: section-based even-coord placement per border; FacingRotation.
+    4 strategies: RoundRobin, Random, PerWave, Simultaneous (OCP pattern).
+    TDStageConfig thêm: StartGateCount, EndGateCount, MapLayout, GateAssignmentMode.
+    6 MapLayout: LeftToRight/RightToLeft/TopToBottom/BottomToTop/Diagonal_TL_BR/Diagonal_BL_TR.
+    Maze fix: block gate cells của group khác trước A* → ngăn cross-gate shortcut.
+    CarveFrom: iterative Stack (fix stack overflow risk).
+    BUG-02 fix: Initialize(actualEnemyCount) thay vì config.totalEnemies.
+    Path diversity: pathsPerGroup = CONFIG_NUM_PATHS (không chia cho groupCount).
+    Min path length = gridWidth; retry ≤ 10 lần + fallback tới path dài nhất.
+    SOLID: SRP(TDPathGroup=DTO), OCP(strategies), DIP(IPathFinder inject).
 
   ─────────────────────────────────────────────────────────────────────────────
 
@@ -1191,10 +1296,35 @@ File: Assets/3.Scenes/DTGamePlay.unity
       OutlineFeature added to URP-Balanced-Renderer.asset (DepthNormalOutlines)
       Custom/UI_AlwaysOnTop shader (ZTest Always) → HPBar depth bug FIXED
 
-  ⬜  Phase 17 — Retreat Mechanic (PLANNED, sau Phase 16)
-      TDOperatorView.Retreat() tách riêng với Die()
-      TDOperatorRegistry.WithdrawOperator(cell) → ForceUnblock + unregister
-      Gold refund: TBD; cooldown per OperatorType: optional
+  ✅  Phase 17 — Retreat Mechanic                               DONE s34/35
+      TDOperatorRetreatControl + TDTowerRetreatControl + TDOperatorSelectionView
+      SelectionIndicator diamond; OperatorActionPanel "Retreat"; 13 tower BoxColliders
+      UnoccupyCell() → cell freed after tower retreat
+
+  ✅  Phase 18.5 — Enemy Attack Anim + Operator Weapon          DONE s28
+      EnemyData attackDamage/Speed set; Attack state cho Slime/SwarmFast/TurtleTank.
+      DragonBoarBossCTRL [NEW] — Walk default, conditionless transition removed.
+      OperatorKnight: Sword (OHS05) gắn prop_r bone, Toon_Sword.mat.
+
+  ✅  Phase 19 — Maze Path Generation                           DONE s29
+      Zigzag + BuildDefinedPath removed. TDMazePathGenerator (Recursive Backtracker).
+      Camera Arknights 40°, map 40×30, grid ~20×15.
+
+  ✅  Phase 19.5 — Obstacle + HP Bar Overhaul                   DONE s30/31/32
+      ObstacleTile.prefab; footprint wall-only; 6 obstacles; HP bar ProceduralImage fix.
+      YOffset Arknights dưới chân (-0.3/-0.6). Obstacle gate buffer + IsValidPlacement guard.
+
+  ✅  Phase 20 — Stage System                                   DONE s36
+      TDStageConfig + TDStageRepository; SelectedStageId persist; Next button works.
+      DEMO-1 (City, LevelIndex=0), DEMO-2 (Desert, LevelIndex=1).
+
+  ✅  Phase 21 — Map Visual Config + Desert                     DONE s37
+      TDMapVisualConfig per stage; CityVisual + DesertVisual assets.
+      TDPauseControl.Resume() force gọi ở InitGameplay().
+
+  ✅  Phase 22 — Multi-Gate System                              DONE s39
+      TDPathGroup DTO; 4 strategies (OCP); 6 MapLayout; IPathFinder DIP inject.
+      Cross-gate block fix; iterative CarveFrom; min path length guarantee.
 
   ⚠️  PlacementPanel missing trong scene hierarchy
       TDSlotHolderMainView.InitPlacementPanel(): transform.Find(GAMEPLAY_PLACEMENT_PANEL) = null
@@ -1208,6 +1338,23 @@ File: Assets/3.Scenes/DTGamePlay.unity
       → xóa file nếu không còn sử dụng để tránh compile conflict
   ⚠️  Operator death animation: Destroy ngay sau TriggerSafe("Die")
       → cần thêm delay (tương tự EnemyData.dieDuration) để animation play xong
+  ⚠️  Retreat cooldown chưa implement (s34/35 TODO)
+      TDOperatorRetreatControl.Retreat() không có cooldown delay.
+
+  ⚠️  IsValidOperatorPlacement() chưa tổng quát
+      Hiện chỉ check IsValidOperatorCell && !HasOperatorAt. Cần phân biệt path cell types.
+
+  ⚠️  ToonOutlineVolume chưa đặt vào DTGamePlay.unity
+      ToonOutlineProfile.asset cần Global Volume (isGlobal=true) trong scene (s27).
+
+  ⚠️  Dead code cần xóa (s39 TODO):
+      - TDaStarPathControl: FindPath, FindMultiplePaths, events, IPathFinderDTO
+      - IPathFinderDTO interface
+      - CONFIG_MAZE_EXTRA_PASSAGE_RATE = 0.45f chưa dùng
+
+  ⚠️  Stage Select UI screen chưa có
+      Hiện auto-start DEMO-1; cần màn hình chọn stage trước khi play.
+
   ⚠️  HUD dùng text symbol thay sprite icon (session 17 review)
       ☠ ♥ ♦ là text character trong TextMeshPro, không phải Image sprites
       → Kém professional, không nhất quán với Arknights style
@@ -1339,42 +1486,59 @@ File: Assets/3.Scenes/DTGamePlay.unity
      │      HPBar_AlwaysOnTop.mat assigned vào cả 2 HPBar prefabs
      │
   ✅ Phase 18  (Toon Shader + Outline + HP Bar Depth Fix) ── DONE (session 27)
-     │   5 Toon materials: Toon_Slime/TurtleTank/SwarmFast/DragonBoarBoss/OperatorKnight
-     │   Shader: Toon Shaders Pro/URP/Toon; 3-band, rim light, specular dot
-     │   YAML patch trực tiếp vào prefab files; brightness điều chỉnh (GIStrength=1)
-     │   OutlineFeature added to URP-Balanced-Renderer.asset
-     │   ToonOutlineProfile.asset (DepthNormalOutlines) — Volume cần đặt thủ công vào DTGamePlay
-     │   Custom/UI_AlwaysOnTop shader (ZTest Always); HPBar_AlwaysOnTop.mat → 2 HPBar prefabs
+     │   5 Toon materials (Toon Shaders Pro/URP/Toon); 3-band, rim, specular
+     │   OutlineFeature → URP-Balanced-Renderer.asset; ToonOutlineProfile.asset
+     │   UI_AlwaysOnTop shader (ZTest Always); HPBar_AlwaysOnTop.mat
+     │   ⚠️ ToonOutlineVolume cần đặt thủ công vào DTGamePlay.unity
      │
-  ⬜ Phase 17  (Retreat Mechanic)       ── TODO (requires Phase 16 ✓)
-     │   TDOperatorView.Retreat() + TDOperatorRegistry.WithdrawOperator(cell)
-     │   UI: click placed operator → Retreat button
-     │   Tách biệt Die() (forced) vs Retreat() (voluntary)
+  ✅ Phase 18.5 (Enemy Anim Fix + Operator Weapon) ── DONE (session 28)
+     │   Attack states đầy đủ cho 4 enemy types; DragonBoarBossCTRL [NEW]
+     │   Toon_Sword.mat + OHS05_Sword gắn prop_r bone OperatorKnight
      │
-  ⚠️  Phase 8   (Win/Lose + HUD)         ── PARTIAL (session 17+18)
-     │   ✅ HUD scene elements: top bar, gold counter, tower bar (session 17)
-     │   ✅ Control layer: TDGoldControl, TDGameStateControl, TDSpeedControl (session 18)
-     │   ✅ View: TDGameplayHUDView — cache + events + FlashScreen (session 18)
-     │   ✅ Wiring: Die→gold, Die→state, OnAllWavesSpawned, Pause→SpeedMultiplier (session 18)
-     │   ✅ TDGameplayMainView stripped — chỉ giữ init logic (session 18)
-     │   ⬜ VictoryPanel UI + GameOverPanel UI (stubs đã có)
-     │   ⬜ PausePanel wiring trong TDGameplayHUDView
-     │   ⬜ Inspector: gắn TDGameplayHUDView vào Container; goldReward trong SO
+  ✅ Phase 19  (Maze Path Gen + Camera/Map) ── DONE (session 29)
+     │   TDMazePathGenerator Recursive Backtracker; iterative CarveFrom
+     │   Camera 40° orthoSize=13 pos(24.5,13.7,3); Map 40×30 grid ~20×15
+     │   DELETED: TDPathGeneratorControl, TDObstacleControl
      │
-  ✅ Phase 8.5 (Pause + Enemy Pool)     ── DONE (session 10)
+  ✅ Phase 19.5 (Obstacle + HP Bar Overhaul) ── DONE (session 30-32)
+     │   ObstacleTile.prefab; footprint wall-only; ratio 0.15; 6 prefabs
+     │   HP bar ProceduralImage; YOffset below feet (-0.3/-0.6); gate buffer
      │
-  ⬜ Phase 9   (Polish + Perf)          ── final pass
+  ✅ Phase 17  (Retreat Mechanic)        ── DONE (session 34/35)
+     │   TDOperatorRetreatControl + TDTowerRetreatControl + TDOperatorSelectionView
+     │   SelectionIndicator diamond; Retreat panel; 13 tower BoxColliders
+     │   TDSlotHolderMainView.IsPlacingUnit guard (s38)
+     │
+  ✅ Phase 8   (Win/Lose + HUD)          ── DONE (session 17-19+33)
+     │   ✅ HUD Control: TDGoldControl, TDGameStateControl, TDSpeedControl
+     │   ✅ View: TDGameplayHUDView cache + events + FlashScreen
+     │   ✅ VictoryPanel + GameOverPanel (s33): border images, stats, buttons
+     │   ✅ Stage name in popups (s36); Pause auto on popup
+     │
+  ✅ Phase 8.5 (Pause + Enemy Pool)      ── DONE (session 10)
+     │
+  ✅ Phase 19  (Maze Path Gen)           ── DONE (session 29)
+     │
+  ✅ Phase 19.5 (Obstacle + HP Bar)      ── DONE (session 30/31/32)
+     │
+  ✅ Phase 20  (Stage System)            ── DONE (session 36)
+     │
+  ✅ Phase 21  (Map Visual Config)       ── DONE (session 37)
+     │
+  ✅ Phase 22  (Multi-Gate System)       ── DONE (session 39)
+     │
+  ⬜ Phase 9   (Polish + Perf)           ── final pass
 
-  ── Thứ tự implement đề xuất (cập nhật session 27) ──────────────────────
-  ✅ Phase 10 → ✅ Phase 7 → ✅ Phase 11 → ✅ Phase 12 → ✅ Phase 13 → ✅ Phase 14 → ✅ Phase 15 → ✅ Phase 16 → ✅ Phase 3.9 → ✅ Phase HP → ✅ Phase 18 → ⬜ Phase 17 (Retreat) → ⚠️ Phase 8 (VictoryPanel/GameOverPanel) → ⬜ Phase 9 (Polish)
+  ── Thứ tự implement đề xuất (cập nhật session 39) ──────────────────────
+  ✅→✅→✅→✅→...→ ✅ Phase 22 (Multi-Gate) → ⬜ Phase 9 (Polish)
 
-  Lý do thứ tự:
-    Phase 10 trước Phase 7  : area damage cần grid-cell range → tránh viết lại (DONE)
-    Phase 7 DONE            : Single/Multiple/AOE + homing TDAttackVFX (DONE)
-    Phase 11 song song P7   : multi-enemy độc lập với combat ammo logic
-    Phase 12 DONE           : range visualization dùng TDOffsetRangeDTO từ Phase 10
-    Phase 8 sau Phase 7     : Win/Lose cần combat hoàn chỉnh để test đúng
-    Phase 9 cuối            : polish sau khi core gameplay stable
+  Remaining (Phase 9):
+    ⬜ Stage Select UI screen
+    ⬜ VFX/Audio subscribe TDGameEventBus
+    ⬜ Camera shake on life lost
+    ⬜ DEF/RES stats cho enemy; Air Drone tier
+    ⬜ ToonOutlineVolume trong DTGamePlay.unity
+    ⬜ Dead code cleanup (IPathFinderDTO, old TDaStarPathControl methods)
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -2979,6 +3143,404 @@ File: Assets/3.Scenes/DTGamePlay.unity
        Fix plan: tăng Canvas.sortingOrder (hiện =5) hoặc tạo Sorting Layer "UI_3D"
                  và assign cho tất cả HP bar canvas → render sau toàn bộ 3D geometry
        Status: TODO (user yêu cầu ghi chú, chưa fix)
+
+
+================================================================================
+  27. SESSION 28 — ENEMY ATTACK ANIMATION FIX + OPERATOR WEAPON        [✅ DONE]
+================================================================================
+
+  ── Enemy Attack Animation ────────────────────────────────────────────────────
+  EnemyData SO: attackDamage/attackSpeed set đúng (Normal:10/1.0, Fast:5/1.5, Tank:25/0.5, Boss:50/0.75)
+  Slime.controller: thêm Walk/Attack/GetHit/Die states (trước: chỉ WalkFWD, không có params)
+  SwarmFast-Game.controller: + Attack state (Swarm09_Attack.fbx)
+  TurtleTank-Game.controller: + Attack state (Attack01_TurtleShell_Anim.fbx)
+  DragonBoarCTRL: conditionless Idle→BasicAttack transition xóa; Walk default state.
+    → DragonBoarBossCTRL.controller [NEW duplicate] gắn vào DragonBoarBoss.prefab
+    → Original DragonBoarCTRL không bị thay đổi.
+
+  ── OperatorKnight Weapon ────────────────────────────────────────────────────
+  Sword (OHS05_Sword.prefab) gắn dưới prop_r bone (right hand weapon attachment).
+  Toon_Sword.mat [NEW]: silver/steel tint, blue-steel shadow, blue-white rim.
+  localRotation: (0, 0, -90) — ước tính cho T-pose (cần fine-tune trong Inspector).
+
+
+================================================================================
+  28. SESSION 29 — MAZE EXTRACTION REFACTOR + CAMERA/MAP REWORK         [✅ DONE]
+================================================================================
+
+  ── Architecture change ───────────────────────────────────────────────────────
+  Thay thế Y-zones zigzag bằng Recursive Backtracker maze extraction (Arknights B1 style).
+  DELETED: TDPathGeneratorControl.cs (zigzag), TDObstacleControl.cs.
+
+  TDMazePathGenerator.cs [NEW]:
+    GenerateMultiplePaths(gridDTO, start, end, N): gen N mazes → N paths → unified grid
+    CarveFrom(): iterative Stack<Vector2Int>, room cells tại even (x,y)
+    SetAllWalls(): reset grid trước mỗi maze run
+
+  TDaStarPathControl: xóa BuildDefinedPath/AppendStraightSegment/ComputeWaypointPath; giữ ComputePath.
+  TDEnemyPathMainControl: GenerateAllPaths() → call MazePathGenerator.
+  TDEnemyPathMainView: start/end dynamic snap về even coord;
+    OnValidTowerCellsReady: 30% wall → obstacle (footprint-aware), 70% wall → TowerZone.
+    ComputeFootprintRadii(): từ Renderer.bounds thực tế.
+  TDGameplayMainView: xóa MarkHUDZoneAsNonWalkable() (no-op).
+  TDConstant: xóa CONFIG_PATH_Y_ZONES, CONFIG_OBSTACLE_COUNT, ...
+              thêm CONFIG_MAZE_EXTRA_PASSAGE_RATE, CONFIG_MAZE_OBSTACLE_WALL_RATIO, CONFIG_NUM_PATHS.
+
+  ── Camera + Map (s29) ───────────────────────────────────────────────────────
+  Camera: pos (24.5, 13.7, 3), X=40°, orthoSize=13 (Arknights isometric style)
+  GameMapVisualize: pos (24.5, 0, 23), scale (4.0, 5.0, 3.0) → 40×30 world units
+  Grid: ~20×15 cells; Start=(0,6), End=(18,6) — dynamic even-coord snap.
+  Enemy spawn: CellToWorld(m_StartPoint) — không còn CreatePoint Transform.
+
+  ── Bug fixes trong session ──────────────────────────────────────────────────
+  start=(0,7) odd coord → CarveFrom stuck → Fix: snap centerY về even.
+  Enemy spawn tại CreatePoint cũ → Fix: CellToWorld(m_StartPoint).
+
+
+================================================================================
+  29. SESSION 30 — OBSTACLE SYSTEM OVERHAUL + HP BAR Y-OFFSET BUG FIX  [✅ DONE]
+================================================================================
+
+  ── Obstacle Fixes ───────────────────────────────────────────────────────────
+  Bug #1: footprint radius lớn lan sang corridor → TowerZone trên corridor → enemy "đi trên wall"
+    Fix: footprint expand chỉ trong validWallCells (không block corridor).
+  Bug #2: Rock/Pine trees bounds lớn → radius=1+ → chiếm nhiều cells
+    Fix: thay bằng Rock_01/02, Bush_01/02/Large_01, Grass_Tall_01 (radius=0, small).
+
+  ObstacleTile.prefab [NEW]: Cube (2,1,2), Generic_Grass.mat, không có BoxCollider.
+  CONFIG_MAZE_OBSTACLE_WALL_RATIO: 0.30f → 0.15f (30% → quá nhiều; 15% ≈ 18-22 per run).
+
+  ── HP Bar Y-Offset Fix ──────────────────────────────────────────────────────
+  Root cause: WORLD_Y_OFFSET = 0.12f hardcoded → bar nằm dưới chân enemy.
+  Fix [TDHPBarView.cs]: const → [SerializeField] float m_YOffset = 2.5f
+  HPBar_Enemy.prefab: m_YOffset = 2.5; HPBar_Operator.prefab: m_YOffset = 1.8.
+
+
+================================================================================
+  30. SESSION 31 — HP BAR FILL VISUAL BUG FIX                           [✅ DONE]
+================================================================================
+
+  Root cause #1 — HPBar_Enemy: 2 Fill children chồng nhau
+    Fill gốc (standard Image, inactive) ← m_Fill trỏ vào đây → không render
+    Fill mới (ProceduralImage, active)  ← render nhưng không được UpdateHP control
+    Fix: TDHPBarView.m_Fill → ProceduralImage (fileID 35834, active)
+    Propagate tự động sang 4 enemy prefabs (Slime/SwarmFast/TurtleTank/DragonBoarBoss).
+
+  Root cause #2 — Unity Image.fillAmount ignored khi sprite=null
+    HPBar_Operator Fill (standard Image, sprite=null) → OnPopulateMesh bỏ qua fillAmount.
+    Fix: upgrade Fill sang ProceduralImage (fileID 48972) cho HPBar_Operator.prefab.
+
+  TDHPBarView.cs: xóa code tạm (UISprite assign + debug log).
+
+
+================================================================================
+  31. SESSION 32 — HP BAR ALWAYS-ON-TOP + OBSTACLE SPAWN FIX            [✅ DONE]
+================================================================================
+
+  ── ProceduralImage AlwaysOnTop ──────────────────────────────────────────────
+  ProceduralImage.Init() luôn reset material → inspector material bị xóa.
+  Fix #1: ProceduralImage.cs — chỉ reset nếu m_Material == null.
+  Fix #2: ProceduralImageEditor.cs — expose m_Material field trong Inspector.
+  ProceduralUIImage_AlwaysOnTop.shader [NEW]: copy shader gốc, Queue=Overlay, ZTest Always.
+  HPBar_ProceduralAlwaysOnTop.mat [NEW]: rounded corners + ZTest Always.
+
+  ── HP Bar Position (Arknights style) ────────────────────────────────────────
+  m_YOffset: Enemy 2.5 → -0.3; Operator 1.8 → -0.3 (dưới chân unit).
+  Session 37 fix: Enemy=-0.3, Operator=-0.6 (tránh đè nhau khi block trên cùng cell).
+
+  ── Obstacle Spawn Fixes ─────────────────────────────────────────────────────
+  Bug: obstacle spawn sát/trên end gate → Fix: gateBuffer=2 cells exclusion zone.
+  Bug: obstacle spawn trên path cells → Fix: IsValidPlacement() guard + isWalkable double-check.
+
+  Win/Lose Border Asset Analysis:
+    border_win_frame.png: panel-transparent-border-000 tint Gold (1.0, 0.75, 0.15)
+    border_lose_frame.png: panel-transparent-border-005 tint DarkRed (0.65, 0.08, 0.08)
+
+
+================================================================================
+  32. SESSION 33 — WIN/LOSE POPUP DESIGN (Phase 8 Complete)              [✅ DONE]
+================================================================================
+
+  ── UI Hierarchy ─────────────────────────────────────────────────────────────
+
+  GameOverPanel [Image overlay: #2E0808 @53%] [LayoutElement.ignoreLayout=true]
+    └─ PopupWindow [1440×750]
+         ├─ BgFill        [#0F0709]
+         ├─ BorderFrame   [border_lose_frame.png, dark red tint]
+         ├─ TitleText     ["Operation Failed", #CC2828, ~94pt]
+         ├─ StageName     [TMP, 22pt red — s36]
+         ├─ Stats         → EnemiesRow / LivesRow / GoldRow
+         └─ RetryButton
+
+  VictoryPanel [Image overlay: #0A0A28 @53%]
+    └─ PopupWindow [1440×820]
+         ├─ BgFill        [#07081A]
+         ├─ BorderFrame   [border_win_frame.png, gold tint]
+         ├─ TitleText     ["Operation Complete", #D4A830, ~91pt]
+         ├─ StageName     [TMP, 22pt gold — s36]
+         ├─ StarsRow      [3 star TMPs ★★★]
+         ├─ Stats         → EnemiesRow / LivesRow / GoldRow
+         ├─ RetryButton
+         └─ NextButton    [gold — → next stage (s36)]
+
+  ── TDGameplayHUDView Changes ────────────────────────────────────────────────
+  + m_GameOverPanel, m_VictoryPanel, m_GameOver/VictoryStat*, m_StageName fields
+  + OnGameOver(): TDPauseControl.Pause() + populate stats + panel.SetActive(true)
+  + OnVictory():  TDPauseControl.Pause() + populate stats + panel.SetActive(true)
+  + OnNextClicked() (s36): GetNextStage → SelectStage → LoadScene; null → về menu
+
+  Stats:
+    GameOver: Enemies=killed/total; Lives=lost=start-current; Gold=current
+    Victory:  Enemies=killed/total; Lives=remaining/starting; Gold=current
+
+  Size: 1440px = 75% của 1920px canvas. Iteration: v1(560×300) → v2(1100×600) → v3(1440×750).
+
+
+================================================================================
+  33. SESSION 34 — BUG FIXES + ANIMATOR + MOBILE PLACEMENT + OPERATOR RETREAT
+================================================================================
+
+  ── Bug Fixes ────────────────────────────────────────────────────────────────
+  Retry InvalidOperationException:
+    Root cause: TDInitializeModel pure C# singleton persist qua reload; TCS SetResult lần 2.
+    Fix: TDInitializeModel.Reset() → m_api = null; gọi ở đầu InitGameplay().
+
+  DragonBoarBoss walk animation:
+    Root cause: conditionless Idle→BasicAttack transition → enemy attack ngay sau spawn.
+    Fix: DragonBoarBossCTRL.controller [NEW duplicate] — xóa transition đó; Walk = default.
+
+  ── Mobile Placement Fixes (Arknights-style) ──────────────────────────────────
+  Fix 1: Phase 1 + nhấc ngón = auto cancel (Arknights behavior).
+  Fix 2: Phase 2 entry guard: && IsValidPlacement(m_LastSnappedPos) — ô invalid = Phase 1.
+  Fix 3: Phase 2 exit: kéo ngón về center (sqrMag ≤ threshold²) → reset về Phase 1.
+
+  ── Operator Retreat System ──────────────────────────────────────────────────
+  TDOperatorRetreatControl.cs [NEW]: Retreat(view) → AddGold(Cost/2) + DoRetreat()
+  TDOperatorSelectionView.cs [NEW]:
+    HandleTapInput(): Physics.Raycast → TDOperatorView → Select
+    Select(op): SetSelected(true), show OperatorActionPanel, UpdatePanelPosition
+    WorldToScreenPoint(operator + Y offset) → panel position
+  TDOperatorView: + Cost, OperatorType props; + SetSelected(bool); + DoRetreat()
+  Scene: OperatorActionPanel dưới Container (96×108, BtnRetreat, LblRetreat "Rút lui")
+  TDControl: + TDOperatorRetreatControl.api
+
+
+================================================================================
+  34. SESSION 35 — OPERATOR/TOWER SELECTION + RETREAT COMPLETE          [✅ DONE]
+================================================================================
+
+  ── IsValidOperatorPlacement Fix (Mobile) ─────────────────────────────────────
+  Bug: Phase 2 entry dùng IsValidPlacement() → path cells (occupied=true) fail → operator
+       không bao giờ vào Phase 2 trên Android. (Chỉ ảnh hưởng UNITY_ANDROID build)
+  Fix: IsValidOperatorPlacement() = IsValidOperatorCell && !HasOperatorAt; dispatch theo towerType.
+
+  ── SelectionIndicator (Diamond) ────────────────────────────────────────────
+  OperatorKnight.prefab: + "SelectionIndicator" child (Quad):
+    localRotation: (90, 45, 0) → flat nằm ngang, diamond shape
+    localScale: (2.6, 2.6, 1); activeSelf: false
+  SelectionIndicator.shader [NEW]: Queue=Overlay, ZTest Always, ZWrite Off
+  SelectionIndicator.mat [NEW]: gold (1, 0.85, 0.1, 0.55)
+  + CapsuleCollider (trigger): center=(0,1,0), radius=0.45, height=2 cho raycast
+
+  ── Retreat Panel Redesign ────────────────────────────────────────────────────
+  OperatorActionPanel: anchor center, sizeDelta (96×110); Background removed (user request)
+  BtnRetreat: 88×88, dark red #B81E1E @92%, Icon 60×60
+  LblRetreat: "Retreat" (đổi từ "Rút lui"), pink 13pt
+  Panel offset: (+= new Vector2(-70, 30)) → không che khuất operator
+
+  ── Obstacle Spawn Double-check ──────────────────────────────────────────────
+  TDEnemyPathMainView.OnValidTowerCellsReady: skip nếu cell.isWalkable==true (path leak guard)
+  Prefab size check: hasVerticalWall = hasNorth && hasSouth → large prefabs; else Rock only
+
+  ── Tower Retreat System ─────────────────────────────────────────────────────
+  TDTowerRetreatControl.cs [NEW]: Retreat(view) → AddGold(Cost/2) + view.DoRetreat()
+  TDTowerWeaponView: + Cost, m_PlacedWorldPos; + DoRetreat()
+  IGridMainModel + TDGridMainModel: + UnoccupyCell(Vector3) → m_OccupiedCell[x,z] = false
+  TDOperatorSelectionView: unified cho cả operator + tower
+    m_SelectedOperator + m_SelectedTower; raycast detect cả 2 types
+    OnRetreatClicked: dispatch OperatorRetreatControl || TowerRetreatControl
+  13 tower prefabs: + BoxCollider trigger center=(0,1,0) size=(1,2,1)
+
+
+================================================================================
+  35. SESSION 36 — STAGE SYSTEM + NEXT BUTTON + STAGE NAME IN POPUPS    [✅ DONE]
+================================================================================
+
+  ── Design ───────────────────────────────────────────────────────────────────
+  Arknights model: stage-first config. TDStageConfig per màn; TDStageRepository ordered list.
+  Scope minimal: không có Stage Select UI; chỉ DEMO-1 → DEMO-2 flow.
+
+  ── Files mới ────────────────────────────────────────────────────────────────
+  TDStageConfig.cs [NEW ScriptableObject]: StageId, DisplayName, LevelIndex, VisualConfig
+  TDStageRepository.cs [NEW SO]: List<TDStageConfig>; GetStage(id); GetNextStage(id)
+
+  ── Files sửa ────────────────────────────────────────────────────────────────
+  TDGameStateControl: + SelectedStageId { get } = "DEMO-1"; + SelectStage(id)
+    Initialize() KHÔNG reset SelectedStageId.
+  TDControl: TDGameStateControl.api ??= (không tạo mới → SelectedStageId persist)
+  TDGameplayMainView: + [SerializeField] m_StageRepository; InitGameplay() → SetLevelIndex.
+  TDEnemyPathMainView: k_CurrentLevelIndex = 0 → m_LevelIndex; + SetLevelIndex(int)
+  TDGameplayHUDView: + m_StageRepository; + OnNextClicked(); + m_*StageName TMP fields
+    OnVictory/OnGameOver: set StageName.text = "Stage {SelectedStageId}"
+    VictoryNextBtn → OnNextClicked → GetNextStage → LoadScene (null → về menu)
+
+  ── SO Assets ────────────────────────────────────────────────────────────────
+  Stage Repository.asset: [Stage_1-1 (DEMO-1), Stage_1-2 (DEMO-2)]
+  Stage_1-1.asset (DEMO-1): LevelIndex=0, VisualConfig=CityVisual
+  Stage_1-2.asset (DEMO-2): LevelIndex=1, VisualConfig=DesertVisual
+  Level Config.asset: + entry levelIndex=1 (Normal, 40 enemies, 4 waves, interval=10s, spawn=1.5s)
+
+  ── Flow ─────────────────────────────────────────────────────────────────────
+  Start → DEMO-1 → play (20 enemies, 2 waves) → Win → Next → DEMO-2 (40 enemies, 4 waves)
+  Win DEMO-2 → Next → GetNextStage=null → về menu (không đổi stage)
+
+
+================================================================================
+  36. SESSION 37 — MAP 2 DESERT VISUAL + HP BAR FIX + BUG FIXES         [✅ DONE]
+================================================================================
+
+  ── TDMapVisualConfig.cs [NEW ScriptableObject] ──────────────────────────────
+  MapGroundMaterial, PathTilePrefab, TowerZonePrefab, ObstacleTilePrefab,
+  ObstaclePrefabs[], SkyboxMaterial, AmbientColor.
+
+  ── TDStageConfig refactor ────────────────────────────────────────────────────
+  - ChapterId (int) REMOVED; + DisplayName; + VisualConfig (TDMapVisualConfig) trực tiếp.
+  TDStageRepository.DefaultStageId: "1-1" → "DEMO-1"
+  TDGameStateControl.SelectedStageId default: "1-1" → "DEMO-1"
+
+  ── Desert Visual Assets ─────────────────────────────────────────────────────
+  PathTile_Desert.prefab     → Generic_Dirt.mat  (nâu cát)
+  TowerZone_Desert.prefab    → Generic_Rock.mat  (đá)
+  ObstacleTile_Desert.prefab → Generic_Dirt.mat
+  CityVisual.asset:   all null (keep defaults — City map)
+  DesertVisual.asset: Generic_Dirt ground + desert tile prefabs + 6 obstacles:
+    [0] SM_Gen_Env_Shrub_01/02 (small, radius=0)
+    [2] SM_Gen_Env_Rock_03/05  (medium)
+    [4] SM_Gen_Env_Tree_Dead_01/02 (tall)
+  AmbientColor desert: (0.50, 0.35, 0.20, 1) — warm
+
+  ── Code Changes ─────────────────────────────────────────────────────────────
+  TDEnemyPathView: + OverridePathTilePrefab(prefab) — swap PathTile per stage
+  TDEnemyPathMainView: + m_VisualConfig; + ApplyVisual(config): swap Zone/Obstacle/Tile
+  TDGameplayMainView: + ApplyMapVisual(config): swap ground mat + skybox + ambient
+
+  ── HP Bar Fix (s37) ─────────────────────────────────────────────────────────
+  Bug: Enemy và Operator cùng m_YOffset=-0.3 → đè lên nhau khi block.
+  Fix: HPBar_Enemy=-0.3, HPBar_Operator=-0.6 (cách 0.3 world units).
+
+  ── Enemy Movement Fix (s37) ─────────────────────────────────────────────────
+  Bug: Enemy đứng yên khi scene reload sau Victory/GameOver.
+  Root cause: TDPauseControl persist qua reload; Pause() set timeScale=0; scene load nhưng không Resume.
+  Fix [TDGameplayMainView.InitGameplay()]: + TDPauseControl.api?.Resume() — trước mọi init khác.
+
+
+================================================================================
+  37. SESSION 38 — RETREAT PANEL AUTO-DISPLAY BUG FIX                   [✅ DONE]
+================================================================================
+
+  ── Bug Report ───────────────────────────────────────────────────────────────
+  "Lâu lâu place tower/operator xong retreat panel tự hiện luôn" (race condition, không phải mọi lần).
+
+  Root cause:
+    Cùng 1 frame: TDSlotHolderMainView.Update() Instantiate unit → BoxCollider active ngay.
+    TDOperatorSelectionView.Update() chạy sau → HandleTapInput() nhận cùng input → Raycast hit
+    unit vừa spawn → SelectOperator/SelectTower → show panel.
+    Thứ tự Update() phụ thuộc Script Execution Order → intermittent.
+
+  Fix [TDSlotHolderMainView.cs]:
+    + public static bool IsPlacingUnit { get; private set; }
+    Set = true  khi ghost Instantiate; Set = false khi đặt xong hoặc CancelPlacement().
+
+  Fix [TDOperatorSelectionView.cs — HandleTapInput()]:
+    + if (TDSlotHolderMainView.IsPlacingUnit) return;
+    Guard ngay sau "if (!tapped) return" → skip toàn bộ tap khi placement mode active.
+
+
+================================================================================
+  38. SESSION 39 — DYNAMIC MULTI START/END GATE SYSTEM                  [✅ DONE]
+================================================================================
+
+  ── Design Analysis ──────────────────────────────────────────────────────────
+  "Bất kỳ đâu" = bất kỳ border nào (Left/Right/Top/Bottom).
+  GateMode: quyết định TDPathGroup nào dùng mỗi wave.
+  Layout:   quyết định start/end border.
+  Mỗi group: 1 cặp gate + PathCount corridors (maze runs độc lập).
+
+  ── Files mới (9 files) ──────────────────────────────────────────────────────
+  TDPathGroup.cs [pure DTO]: StartCell, EndCell, BorderSide, SpawnWorldPos, Corridors, PathCount
+  IGateAssignmentStrategy.cs: SelectForWave(groups, waveIndex) → List<(group, corridor)>
+  IPathFinder.cs [slim]: ComputePath(grid, start, end) → List<IGridCellDTO>
+  TDGatePlacer.cs [static]:
+    Place(count, border, w, h): section-based even-coord, Left/Right theo Y, Top/Bottom theo X
+    GetBorders(MapLayout) → (startBorder, endBorder)
+    FacingRotation(BorderSide) → Quaternion
+  RoundRobinStrategy.cs:  wave i → group i % groupCount → random corridor
+  RandomStrategy.cs:      random group → random corridor
+  PerWaveStrategy.cs:     wave i → group i % groupCount (cả wave = 1 group)
+  SimultaneousStrategy.cs: tất cả groups song song → Task.WhenAll
+
+  ── Files đã sửa (7 files) ───────────────────────────────────────────────────
+  Enums.cs: + BorderSide {Left,Right,Top,Bottom}; + MapLayout {6 variants}; + GateAssignmentMode {4 modes}
+  TDStageConfig: + StartGateCount [Range 1-3]; + EndGateCount [Range 1-2]; + MapLayout; + GateAssignmentMode
+  TDaStarPathControl: + implements IPathFinder
+  TDMazePathGenerator:
+    - GenerateMultiplePaths(start, end, N) REMOVED
+    + inject IPathFinder qua constructor (DIP fix)
+    + GenerateForGroups(gridDTO, groups): foreach group → PathCount runs → union combinedPathCells
+      SetAllWalls 1 lần cuối sau tất cả groups (fix wipe problem)
+    + CarveFrom: iterative Stack<Vector2Int> (fix stack overflow risk)
+    + Cross-gate block: trước A* trong mỗi Carve() block gate cells của groups khác
+  TDEnemyPathMainControl: major refactor
+    - onGetAllPaths, onWaveStart, onGetEnemyPos REMOVED
+    + onGroupsReady: Action<List<TDPathGroup>>
+    + BuildPathGroups(stage, gridDTO): Universal pairing; cross-pairing khi 2s2e
+    + InitEnemyPath(gridDTO, groups); GenerateAllPaths(gridDTO, groups)
+    + ComputeValidTowerCells(gridDTO, groups): exclude buffer quanh ALL gates
+    + StartWaveLoop: strategy.SelectForWave() → assignments → Task.WhenAll (Simultaneous)
+    + BuildWavePlans public; GetActualEnemyCount (BUG-02 fix)
+  TDEnemyPathMainView: major refactor
+    - m_StartPoint, m_EndPoint, m_GateStartView (single) REMOVED
+    + m_PathGroups; m_GateStartViews List
+    + ApplyStageConfig(TDStageConfig); ImplementPath() → BuildPathGroups → SpawnGates
+    + SpawnGates(groups): FacingRotation per gate
+    + OnGroupsReady(): visualize corridors, ComputeValidTowerCells, BUG-02 fix
+    + BuildGridZones() tách từ God Method (SRP)
+  TDControl: + TDMazePathGenerator inject IPathFinder; + CreateStrategy() factory method
+  TDGameplayMainView: + ApplyStageConfig; + SetStrategy
+
+  ── Post-session Fixes (cùng ngày) ─────────────────────────────────────────
+  BUG: Path quá ngắn/ít quanh co
+    Fix 1: pathsPerGroup = CONFIG_NUM_PATHS (không chia cho groupCount)
+    Fix 2: Carve() retry ≤ 10 lần nếu path.Count < gridWidth; fallback path dài nhất
+
+  BUG: Enemy đi qua gate của group khác
+    Fix: Trước A* trong Carve(): block tạm gate cells của groups khác → A* buộc tìm đường qua maze
+
+  ── Concepts ──────────────────────────────────────────────────────────────────
+  GateMode:
+    RoundRobin  : wave i → group i % groupCount → random corridor
+    Random      : random group mỗi wave → random corridor
+    PerWave     : cả wave gắn 1 group cố định (wave index % groupCount)
+    Simultaneous: tất cả groups spawn song song → Task.WhenAll
+
+  MapLayout:
+    LeftToRight    → S:Left,  E:Right   (classic, default)
+    RightToLeft    → S:Right, E:Left
+    TopToBottom    → S:Top,   E:Bottom
+    BottomToTop    → S:Bottom,E:Top
+    Diagonal_TL_BR → S:Top,   E:Right
+    Diagonal_BL_TR → S:Bottom,E:Right
+
+  SOLID compliance:
+    S: TDPathGroup = pure DTO; BuildGridZones() tách khỏi OnGroupsReady
+    O: Strategy Pattern — thêm mode = thêm class, không sửa StartWaveLoop
+    I: IPathFinder slim (1 method) thay IPathFinderDTO bloated
+    D: TDMazePathGenerator inject IPathFinder; TDPathGroup không có View ref
+
+  ── Còn lại ──────────────────────────────────────────────────────────────────
+  ⬜ Xóa dead code TDaStarPathControl (FindPath, FindMultiplePaths, IPathFinderDTO)
+  ⬜ CONFIG_MAZE_EXTRA_PASSAGE_RATE = 0.45f chưa dùng → xóa
+  ⬜ Tách thêm OnValidTowerCellsReady (vẫn còn God Method nhỏ)
 
 
 ================================================================================

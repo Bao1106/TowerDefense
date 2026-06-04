@@ -8,13 +8,14 @@ using UnityEngine;
 public class OperatorData : IDeployableDTO
 {
     public OperatorType operatorType;
+    public DeployZone   deployZone = DeployZone.PathCell;
     public int cost;
     public float hp;
     public float damage;
     public float attackSpeed;
 
-    [Range(1, 3)]
-    [Tooltip("Bao nhiêu enemy bị chặn cùng lúc [1..3]")]
+    [Range(0, 3)]
+    [Tooltip("Bao nhiêu enemy bị chặn cùng lúc. TowerZone operator = 0")]
     public int blockCount;
 
     [Tooltip("Prefab của operator này")]
@@ -32,7 +33,7 @@ public class OperatorData : IDeployableDTO
     float IDeployableDTO.Damage => damage;
     float IDeployableDTO.AttackSpeed => attackSpeed;
     AttackType IDeployableDTO.AttackType => AttackType.Multiple;
-    int IDeployableDTO.MaxTargets => Mathf.Clamp(blockCount, 1, 3);
+    int IDeployableDTO.MaxTargets => deployZone == DeployZone.TowerZone ? 0 : Mathf.Clamp(blockCount, 1, 3);
     Vector2Int[] IDeployableDTO.RangeOffsets => rangeOffsets?.Length > 0
         ? rangeOffsets
         : new[] { Vector2Int.zero };

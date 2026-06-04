@@ -114,16 +114,11 @@ public class TDOperatorSelectionView : MonoBehaviour
     {
         if (!HasSelected || Camera.main == null) return;
 
-        Transform anchor = m_SelectedOperator != null
-            ? m_SelectedOperator.transform
-            : m_SelectedTower.transform;
+        Vector3 worldAnchor = m_SelectedOperator != null
+            ? GetIndicatorUpperLeftEdge(m_SelectedOperator)
+            : m_SelectedTower.transform.position + Vector3.up * TDConstant.OPERATOR_PANEL_WORLD_Y_OFFSET;
 
-        Vector3 worldAnchor = anchor.position
-                              + Vector3.up * TDConstant.OPERATOR_PANEL_WORLD_Y_OFFSET;
-        Vector2 screenPt    = Camera.main.WorldToScreenPoint(worldAnchor);
-
-        // Shift sang trái và lên để không che khuất operator
-        screenPt += new Vector2(-70f, 30f);
+        Vector2 screenPt = Camera.main.WorldToScreenPoint(worldAnchor);
 
         if (m_Canvas.renderMode == RenderMode.ScreenSpaceOverlay)
         {
@@ -136,6 +131,38 @@ public class TDOperatorSelectionView : MonoBehaviour
                 m_Canvas.worldCamera, out Vector2 localPt);
             m_ActionPanel.localPosition = localPt;
         }
+    }
+
+    // Tìm midpoint của cạnh upper-left của diamond indicator trong world space.
+    // Diamond có 4 tips = 4 midpoint của cạnh Quad → dùng transform.right và transform.up.
+    // Project 4 tips lên screen → tip cao nhất (topIdx) và trái nhất (leftIdx) → midpoint = upper-left edge center.
+    private static Vector3 GetIndicatorUpperLeftEdge(TDOperatorView op)
+    {
+        Transform t = op.SelectionIndicatorTransform;
+        if (t == null)
+            return op.transform.position + Vector3.up * TDConstant.OPERATOR_PANEL_WORLD_Y_OFFSET;
+
+        Vector3 center = t.position;
+        float   halfS  = t.lossyScale.x * 0.5f;
+
+        Vector3[] tips =
+        {
+            center + t.right * halfS,
+            center + t.up    * halfS,
+            center - t.right * halfS,
+            center - t.up    * halfS,
+        };
+
+        Camera cam     = Camera.main;
+        int    topIdx  = 0;
+        int    leftIdx = 0;
+        for (int i = 1; i < tips.Length; i++)
+        {
+            if (cam.WorldToScreenPoint(tips[i]).y > cam.WorldToScreenPoint(tips[topIdx]).y)  topIdx  = i;
+            if (cam.WorldToScreenPoint(tips[i]).x < cam.WorldToScreenPoint(tips[leftIdx]).x) leftIdx = i;
+        }
+
+        return (tips[topIdx] + tips[leftIdx]) * 0.5f;
     }
 
     // ── Retreat ───────────────────────────────────────────────────────────────

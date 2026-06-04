@@ -1,72 +1,115 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-// Recursive Backtracker maze generator — multi-path variant.
+// Recursive Backtracker maze generator — multi-group variant.
 //
-// GenerateMultiplePaths():
-//   Gen maze N lần độc lập, mỗi lần extract 1 path (A* shortest).
-//   Combine tất cả path cells → final grid walkable layout.
-//   → N corridors khác nhau, tower spots = mọi cell KHÔNG thuộc bất kỳ path nào.
+// GenerateForGroups():
+//   Với mỗi TDPathGroup, gen PathCount mazes độc lập.
+//   Mỗi maze run: reset grid → CarveFrom(group.StartCell) → A* extract 1 path.
+//   Gom tất cả path cells vào combinedPathCells HashSet → restore 1 lần cuối.
+//   → Tránh SetAllWalls() wipe kết quả của group trước.
 //
-// Grid layout (cellSize=2):
-//   Room cells tại even (x,y) — carved by backtracker
-//   Wall cells tại odd coordinates — carved khi connect 2 rooms
+// CarveFrom: iterative Stack thay vì recursion → tránh StackOverflow trên grid lớn.
 public class TDMazePathGenerator
 {
     public static TDMazePathGenerator api;
 
-    // Entry point: gen N mazes, extract 1 path each, combine into unified grid
-    public List<List<IGridCellDTO>> GenerateMultiplePaths(IGridDTO gridDTO,
-        Vector2Int start, Vector2Int end, int pathCount)
+    private readonly IPathFinder m_PathFinder;
+
+    public TDMazePathGenerator(IPathFinder pathFinder)
     {
-        var allPaths         = new List<List<IGridCellDTO>>();
+        m_PathFinder = pathFinder;
+    }
+
+    // Entry point: gen paths cho tất cả groups, populate group.Corridors
+    public void GenerateForGroups(IGridDTO gridDTO, List<TDPathGroup> groups)
+    {
         var combinedPathCells = new HashSet<Vector2Int>();
 
-        for (int i = 0; i < pathCount; i++)
+        foreach (var group in groups)
         {
-            // Reset grid → all walls
-            SetAllWalls(gridDTO);
+            group.Corridors = new List<List<IGridCellDTO>>();
 
-            // Gen new maze (Random shuffle → different layout each run)
-            var visited = new bool[gridDTO.width, gridDTO.height];
-            CarveFrom(gridDTO, visited, start.x, start.y);
-            gridDTO.GetCell(end.x, end.y).isWalkable = true;
-
-            // Extract shortest path qua maze corridor
-            var startCell = gridDTO.GetCell(start.x, start.y);
-            var endCell   = gridDTO.GetCell(end.x,   end.y);
-            var path      = TDaStarPathControl.api.ComputePath(gridDTO, startCell, endCell);
-
-            if (path != null && path.Count > 0)
+            for (int i = 0; i < group.PathCount; i++)
             {
-                allPaths.Add(path);
-                foreach (var cell in path)
-                    combinedPathCells.Add(cell.position);
-                Debug.Log($"<color=cyan>[MazeGen] Path {i + 1}/{pathCount}: {path.Count} cells</color>");
-            }
-            else
-            {
-                Debug.LogWarning($"<color=orange>[MazeGen] Path {i + 1} failed — no route found</color>");
+                var path = Carve(gridDTO, group, groups);
+                if (path != null && path.Count > 0)
+                {
+                    group.Corridors.Add(path);
+                    foreach (var cell in path)
+                        combinedPathCells.Add(cell.position);
+
+                    Debug.Log($"<color=cyan>[MazeGen] Group {groups.IndexOf(group)} path {i + 1}/{group.PathCount}: {path.Count} cells</color>");
+                }
+                else
+                {
+                    Debug.LogWarning($"<color=orange>[MazeGen] Group {groups.IndexOf(group)} path {i + 1} failed</color>");
+                }
             }
         }
 
-        // Build final grid: union of all path cells = walkable, rest = wall (tower spots)
+        // Final: restore tất cả path cells vào grid
         SetAllWalls(gridDTO);
         foreach (var pos in combinedPathCells)
             gridDTO.GetCell(pos.x, pos.y).isWalkable = true;
 
-        // Safety: start & end luôn walkable
-        gridDTO.GetCell(start.x, start.y).isWalkable = true;
-        gridDTO.GetCell(end.x,   end.y).isWalkable   = true;
+        // Safety: start/end luôn walkable
+        foreach (var group in groups)
+        {
+            gridDTO.GetCell(group.StartCell.x, group.StartCell.y).isWalkable = true;
+            gridDTO.GetCell(group.EndCell.x,   group.EndCell.y).isWalkable   = true;
+        }
 
         int corridorCount = combinedPathCells.Count;
         int wallCount     = gridDTO.width * gridDTO.height - corridorCount;
-        Debug.Log($"<color=cyan>[MazeGen] Final grid: {corridorCount} corridor cells, {wallCount} wall cells (tower spots)</color>");
-
-        return allPaths;
+        Debug.Log($"<color=cyan>[MazeGen] Final grid: {corridorCount} corridor cells, {wallCount} wall cells</color>");
     }
 
     // ── Private ───────────────────────────────────────────────────────────────
+
+    // Reset → carve → A* extract. Retry tối đa MAX_ATTEMPTS lần cho đến khi
+    // path đủ dài (>= gridDTO.width). Fallback về path dài nhất tìm được.
+    // allGroups: block gate cells của các groups khác trước khi A* chạy
+    // → tránh path của group này đi xuyên qua gate của group khác.
+    private List<IGridCellDTO> Carve(IGridDTO gridDTO, TDPathGroup group, List<TDPathGroup> allGroups)
+    {
+        const int MAX_ATTEMPTS = 10;
+        int       minLength    = gridDTO.width;
+
+        List<IGridCellDTO> best = null;
+
+        for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++)
+        {
+            SetAllWalls(gridDTO);
+            var visited = new bool[gridDTO.width, gridDTO.height];
+            CarveFrom(gridDTO, visited, group.StartCell.x, group.StartCell.y);
+            gridDTO.GetCell(group.EndCell.x, group.EndCell.y).isWalkable = true;
+
+            // Block gate cells của groups khác — A* không được route qua đó
+            foreach (var other in allGroups)
+            {
+                if (other == group) continue;
+                gridDTO.GetCell(other.StartCell.x, other.StartCell.y).isWalkable = false;
+                gridDTO.GetCell(other.EndCell.x,   other.EndCell.y).isWalkable   = false;
+            }
+
+            var startCell = gridDTO.GetCell(group.StartCell.x, group.StartCell.y);
+            var endCell   = gridDTO.GetCell(group.EndCell.x,   group.EndCell.y);
+            var path      = m_PathFinder.ComputePath(gridDTO, startCell, endCell);
+
+            if (path != null && path.Count >= minLength)
+            {
+                Debug.Log($"<color=cyan>[MazeGen] path ok attempt {attempt + 1}: {path.Count} cells (min={minLength})</color>");
+                return path;
+            }
+
+            if (best == null || (path != null && path.Count > best.Count))
+                best = path;
+        }
+
+        Debug.LogWarning($"<color=orange>[MazeGen] fallback after {MAX_ATTEMPTS} attempts: {best?.Count ?? 0} cells</color>");
+        return best;
+    }
 
     private void SetAllWalls(IGridDTO grid)
     {
@@ -75,28 +118,41 @@ public class TDMazePathGenerator
                 grid.GetCell(x, y).isWalkable = false;
     }
 
-    // Depth-first recursive backtracker
-    // Room cells tại even (x,y), wall cell giữa 2 rooms được carved khi connect
-    private void CarveFrom(IGridDTO grid, bool[,] visited, int cx, int cy)
+    // Iterative Recursive Backtracker — tránh StackOverflow trên grid lớn.
+    // Room cells tại even (x,y); corridor cells (walls giữa 2 rooms) tại odd coords.
+    private void CarveFrom(IGridDTO grid, bool[,] visited, int startX, int startY)
     {
-        visited[cx, cy] = true;
-        grid.GetCell(cx, cy).isWalkable = true;
-
         int[] dx   = {  0,  2,  0, -2 };
         int[] dy   = {  2,  0, -2,  0 };
         int[] dirs = {  0,  1,  2,  3 };
-        Shuffle(dirs);
 
-        foreach (int d in dirs)
+        var stack = new Stack<Vector2Int>();
+        stack.Push(new Vector2Int(startX, startY));
+
+        while (stack.Count > 0)
         {
-            int nx = cx + dx[d];
-            int ny = cy + dy[d];
+            var cur = stack.Peek();
+            grid.GetCell(cur.x, cur.y).isWalkable = true;
+            visited[cur.x, cur.y] = true;
 
-            if (!IsValidRoomCell(nx, ny, grid)) continue;
-            if (visited[nx, ny]) continue;
+            Shuffle(dirs);
+            bool moved = false;
 
-            grid.GetCell(cx + dx[d] / 2, cy + dy[d] / 2).isWalkable = true;
-            CarveFrom(grid, visited, nx, ny);
+            foreach (int d in dirs)
+            {
+                int nx = cur.x + dx[d];
+                int ny = cur.y + dy[d];
+
+                if (!IsValidRoomCell(nx, ny, grid)) continue;
+                if (visited[nx, ny])                continue;
+
+                grid.GetCell(cur.x + dx[d] / 2, cur.y + dy[d] / 2).isWalkable = true;
+                stack.Push(new Vector2Int(nx, ny));
+                moved = true;
+                break;
+            }
+
+            if (!moved) stack.Pop();
         }
     }
 

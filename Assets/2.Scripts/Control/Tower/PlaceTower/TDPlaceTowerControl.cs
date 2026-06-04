@@ -23,31 +23,25 @@ public class TDPlaceTowerControl
         if (!TDGridMainModel.api.IsValidPlacement(position)) return;
 
         Vector3 nearestPosition = TDGridMainModel.api.GetNearestGridPosition(position);
-        Vector3 placedPosition = new(nearestPosition.x, TDConstant.CONFIG_TOWER_PLACE_Y, nearestPosition.z);
-        Quaternion rotation = currentTower.transform.rotation;
+        Vector3 placedPosition  = new(nearestPosition.x, TDConstant.CONFIG_TOWER_PLACE_Y, nearestPosition.z);
+        Quaternion rotation     = currentTower.transform.rotation;
 
         TDTowerFactoryControl.api.CreateUnit(slotInfo.prefab, placedPosition, rotation, slotInfo);
         TDGridMainModel.api.SetOccupiedCell(nearestPosition);
         onPlaceTowerSuccess?.Invoke(true);
     }
 
-    // ── Operator ──────────────────────────────────────────────────────────────
+    // ── Operator — dispatch qua IOperatorBehavior strategy ────────────────────
 
     private void CheckPlaceOperator(Vector3 position, GameObject currentTower, TDTowerSlotInfo slotInfo)
     {
-        if (TDOperatorRegistry.api == null) return;
+        var data = TDFlyweightOperatorDataSettings.api.GetData(slotInfo.operatorType);
+        if (data == null) return;
 
-        Vector3 nearestPos = TDGridMainModel.api.GetNearestGridPosition(position);
-        Vector2Int cell = TDGridMainModel.api.WorldToCell(nearestPos);
+        var behavior = TDControl.CreateOperatorBehavior(data.deployZone);
+        if (!behavior.CanPlace(position)) return;
 
-        if (!TDOperatorRegistry.api.IsValidOperatorCell(cell)) return;
-        if (TDOperatorRegistry.api.HasOperatorAt(cell)) return;
-
-        Vector3 placedPos = new(nearestPos.x, TDConstant.CONFIG_OPERATOR_PLACE_Y, nearestPos.z);
-        Quaternion rotation = currentTower.transform.rotation;
-
-        // RegisterOperator đã chuyển vào TDOperatorView.Init() — không gọi ở đây nữa
-        TDTowerFactoryControl.api.CreateUnit(slotInfo.prefab, placedPos, rotation, slotInfo);
+        behavior.Place(position, currentTower.transform.rotation, slotInfo);
         onPlaceTowerSuccess?.Invoke(true);
     }
 }

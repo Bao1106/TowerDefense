@@ -37,19 +37,27 @@ Material:
     - _AlphaToMask: 0
     - _Blend: 0
     - _BlendOp: 0
+    - _BorderWidth: 0.015
     - _Cull: 2
     - _Cutoff: 0.5
     - _DstBlend: 0
     - _DstBlendAlpha: 0
+    - _FillAlpha: 0.08
+    - _GlowAlpha: 0.35
+    - _GlowWidth: 0.06
+    - _PulseAlpha: 0.55
+    - _PulseSpeed: 1
     - _QueueOffset: 0
     - _SampleGI: 0
     - _SrcBlend: 1
     - _SrcBlendAlpha: 1
     - _Surface: 0
+    - _TipLength: 0.07
+    - _TipWidth: 0.025
     - _ZWrite: 1
     m_Colors:
     - _BaseColor: {r: 1, g: 0.85, b: 0.1, a: 0.55}
-    - _Color: {r: 1, g: 0.85, b: 0.1, a: 0.55}
+    - _Color: {r: 1, g: 0.85, b: 0.1, a: 0.6}
   m_BuildTextureStacks: []
 --- !u!114 &8753179250460988210
 MonoBehaviour:

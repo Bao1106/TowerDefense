@@ -15,7 +15,8 @@ public class TDSpeedControl
 
     public void Initialize()
     {
-        SpeedMultiplier = SPEED_NORMAL;
+        SpeedMultiplier    = SPEED_NORMAL;
+        Time.timeScale     = SPEED_NORMAL;
         onSpeedChanged?.Invoke(SpeedMultiplier);
     }
 

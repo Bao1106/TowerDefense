@@ -20,6 +20,9 @@ public class TDPlayerLifeControl
         CurrentLives--;
         onLifeChanged?.Invoke(CurrentLives);
         if (CurrentLives <= 0)
+        {
             onGameOver?.Invoke();
+            TDGameEventBus.GameOver();
+        }
     }
 }

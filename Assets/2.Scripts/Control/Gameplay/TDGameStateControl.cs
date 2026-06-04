@@ -54,6 +54,7 @@ public class TDGameStateControl
         {
             IsGameEnded = true;
             onVictory?.Invoke();
+            TDGameEventBus.Victory();
         }
     }
 }

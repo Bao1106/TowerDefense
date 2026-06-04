@@ -22,7 +22,8 @@ public class TDSlotHolderMainView : MonoBehaviour
 
     private int m_CurrentSlotIndex = -1;
     private GameObject m_CurrentTower;
-    private TowerType m_CurrentTowerType;
+    private TowerType    m_CurrentTowerType;
+    private OperatorType m_CurrentOperatorType;
 
     private List<Vector3> m_ValidTowerPositions = new List<Vector3>();
     private readonly List<GameObject> m_HighlightTiles      = new List<GameObject>();
@@ -345,12 +346,19 @@ public class TDSlotHolderMainView : MonoBehaviour
         m_CurrentRotationIndex = 0;
         m_IsDirectionSelected = false;
         m_LastSnappedPos = Vector3.negativeInfinity;
-        m_CurrentTowerType = slot.towerType;
+        m_CurrentTowerType    = slot.towerType;
+        m_CurrentOperatorType = slot.operatorType;
         m_LastRangeCell = new Vector2Int(int.MinValue, int.MinValue);
         m_LastRangeRotIndex = -1;
 
         if (slot.towerType == TowerType.Operator)
-            ShowOperatorHighlights();
+        {
+            var opData = TDFlyweightOperatorDataSettings.api?.GetData(m_CurrentOperatorType);
+            if (opData?.deployZone == DeployZone.TowerZone)
+                ShowHighlights();       // TowerZone operator — highlight tower zone tiles (green)
+            else
+                ShowOperatorHighlights(); // PathCell operator — highlight path cells (blue)
+        }
         else
             ShowHighlights();
 
@@ -461,9 +469,7 @@ public class TDSlotHolderMainView : MonoBehaviour
         Object.Destroy(go.GetComponent<MeshCollider>());
 
         var rend = go.GetComponent<MeshRenderer>();
-        var mat  = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
-        mat.color = new Color(0.1f, 0.45f, 1f, 0.75f); // xanh dương — melee placement
-        rend.material = mat;
+        rend.sharedMaterial = TDStageMaterialCache.OperatorHighlight;
 
         return go;
     }
@@ -481,9 +487,7 @@ public class TDSlotHolderMainView : MonoBehaviour
         Destroy(go.GetComponent<MeshCollider>());
 
         var rend = go.GetComponent<MeshRenderer>();
-        var mat  = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
-        mat.color = new Color(0.15f, 0.85f, 0.25f, 1f);
-        rend.material = mat;
+        rend.sharedMaterial = TDStageMaterialCache.TowerHighlight;
 
         return go;
     }
@@ -579,9 +583,9 @@ public class TDSlotHolderMainView : MonoBehaviour
 
     private bool IsValidOperatorPlacement(Vector3 worldPos)
     {
-        if (TDOperatorRegistry.api == null) return false;
-        Vector2Int cell = TDGridMainModel.api.WorldToCell(worldPos);
-        return TDOperatorRegistry.api.IsValidOperatorCell(cell)
-            && !TDOperatorRegistry.api.HasOperatorAt(cell);
+        var data = TDFlyweightOperatorDataSettings.api?.GetData(m_CurrentOperatorType);
+        if (data == null) return false;
+        var behavior = TDControl.CreateOperatorBehavior(data.deployZone);
+        return behavior.CanPlace(worldPos);
     }
 }

@@ -132,6 +132,7 @@ public class TDEnemyView : MonoBehaviour
 
         TDGoldControl.api?.AddGold(m_GoldReward);
         TDGameStateControl.api?.OnEnemyRemoved();
+        TDGameEventBus.EnemyDied(transform.position, EnemyType);
 
         TriggerSafe(TRIGGER_DIE);
 
@@ -222,6 +223,7 @@ public class TDEnemyView : MonoBehaviour
         else
         {
             m_HasReachedEnd = true;
+            TDGameEventBus.LifeLost(transform.position);
             TDPlayerLifeControl.api.LoseLife();
             TDGameStateControl.api?.OnEnemyRemoved(); // enemy thoát cũng tính là removed
             ReturnToPool();

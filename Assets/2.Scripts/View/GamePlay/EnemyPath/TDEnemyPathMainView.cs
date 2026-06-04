@@ -2,20 +2,19 @@ using System.Collections.Generic;
 using System.Threading;
 using UnityEngine;
 using Object = UnityEngine.Object;
-using UnityEngine.Serialization;
 
 public class TDEnemyPathMainView : MonoBehaviour
 {
-    [SerializeField] private GameObject[]          m_ObstaclePrefabs;
-    [SerializeField] private GameObject            m_ObstacleTilePrefab;   // tile đất/tự nhiên dưới obstacle
-    [SerializeField] private GameObject            m_GateStartPrefab;
-    [SerializeField] private GameObject            m_GateEndPrefab;
-    [FormerlySerializedAs("m_EnemyDataSettings")] [SerializeField] private TDFlyweightEnemyDataSettings   flyweightEnemyDataSettings;
-    [SerializeField] private TDLevelConfigSettings m_LevelConfigSettings;
-    [SerializeField] private GameObject            m_TowerZonePrefab;
-
-    private int              m_LevelIndex;
+    [SerializeField] private GameObject[]                m_ObstaclePrefabs;
+    [SerializeField] private GameObject                  m_ObstacleTilePrefab;
+    [SerializeField] private GameObject                  m_GateStartPrefab;
+    [SerializeField] private GameObject                  m_GateEndPrefab;
+    [SerializeField] private TDFlyweightEnemyDataSettings flyweightEnemyDataSettings;
+    [SerializeField] private TDLevelConfigSettings        m_LevelConfigSettings;
+    [SerializeField] private GameObject                   m_TowerZonePrefab;
+    private int               m_LevelIndex;
     private TDMapVisualConfig m_VisualConfig;
+    private TDStageConfig     m_ActiveStage;
 
     public void SetLevelIndex(int levelIndex) => m_LevelIndex = levelIndex;
 
@@ -28,30 +27,23 @@ public class TDEnemyPathMainView : MonoBehaviour
         if (config.ObstaclePrefabs?.Length > 0) m_ObstaclePrefabs   = config.ObstaclePrefabs;
     }
 
-    private Vector2Int m_StartPoint, m_EndPoint;
-    private TDGateView m_GateStartView;
-    private CancellationTokenSource m_WaveCts;
+    public void ApplyStageConfig(TDStageConfig stage) => m_ActiveStage = stage;
 
-    private List<List<IGridCellDTO>> m_AllPaths = new List<List<IGridCellDTO>>();
-    private readonly List<GameObject> m_TowerZoneTiles    = new List<GameObject>();
+    // Groups + gate views — index tương ứng nhau
+    private List<TDPathGroup> m_PathGroups  = new List<TDPathGroup>();
+    private List<TDGateView>  m_GateStartViews = new List<TDGateView>();
+
+    private CancellationTokenSource m_WaveCts;
+    private readonly List<GameObject> m_TowerZoneTiles = new List<GameObject>();
     private IGridDTO       m_GridDTO;
     private TDEnemyPathView m_EnemyPathView;
 
     public void Initialize(IGridDTO initGridDTO)
     {
-        // Dynamic: left/right edge tại center row
-        // Snap về even coordinate — maze Recursive Backtracker chỉ carve room cells tại even (x,y)
-        int centerY = TDGridMainModel.api.height / 2;
-        if (centerY % 2 != 0) centerY--;
+        m_GridDTO       = initGridDTO;
+        m_EnemyPathView = GameObject.Find(TDConstant.GAMEPLAY_ENEMY_PATH_VIEW)
+                                    .GetComponent<TDEnemyPathView>();
 
-        int lastCol = TDGridMainModel.api.width - 1;
-        if (lastCol % 2 != 0) lastCol--;
-
-        m_StartPoint = new Vector2Int(0,       centerY);
-        m_EndPoint   = new Vector2Int(lastCol, centerY);
-        m_EnemyPathView = GameObject.Find(TDConstant.GAMEPLAY_ENEMY_PATH_VIEW).GetComponent<TDEnemyPathView>();
-
-        m_GridDTO = initGridDTO;
         TDEnemyPathMainControl.api.InitEnemyPools(flyweightEnemyDataSettings, transform);
         ImplementPath();
     }
@@ -59,47 +51,63 @@ public class TDEnemyPathMainView : MonoBehaviour
     private async void ImplementPath()
     {
         await TDInitializeModel.api.createGridCompletion.Task;
+
         m_EnemyPathView.RegistryValues();
         m_EnemyPathView.OverridePathTilePrefab(m_VisualConfig?.PathTilePrefab);
         RegistryEvents();
 
-        TDEnemyPathMainControl.api.InitEnemyPath(m_GridDTO, m_StartPoint, m_EndPoint);
-        SpawnGates();
+        // Build path groups theo stage config
+        var stage  = m_ActiveStage;
+        var groups = TDEnemyPathMainControl.api.BuildPathGroups(stage, m_GridDTO);
+        m_PathGroups = groups;
 
-        // Maze: GenerateAllPaths → onGetAllPaths → OnGetAllPaths → ComputeValidTowerCells → tower tiles
-        TDEnemyPathMainControl.api.GenerateAllPaths(m_GridDTO, m_StartPoint, m_EndPoint);
+        TDEnemyPathMainControl.api.InitEnemyPath(m_GridDTO, groups);
+        SpawnGates(groups);
+        TDEnemyPathMainControl.api.GenerateAllPaths(m_GridDTO, groups);
     }
 
-    private void SpawnGates()
+    // Spawn 1 start gate + 1 end gate per group, rotate theo border
+    private void SpawnGates(List<TDPathGroup> groups)
     {
+        m_GateStartViews.Clear();
         Vector3[,] grid = TDGridMainModel.api.GetGrid();
 
-        if (m_GateStartPrefab != null)
+        foreach (var group in groups)
         {
-            Vector3 startWorld = grid[m_StartPoint.x, m_StartPoint.y];
-            var go = Object.Instantiate(m_GateStartPrefab, startWorld, Quaternion.identity, transform);
-            m_GateStartView = go.GetComponent<TDGateView>();
-            TDGridMainModel.api.SetOccupiedCell(startWorld);
-        }
-        else
-            Debug.LogWarning("<color=orange>TDEnemyPathMainView: m_GateStartPrefab not assigned</color>");
+            if (m_GateStartPrefab != null)
+            {
+                Vector3    pos      = grid[group.StartCell.x, group.StartCell.y];
+                Quaternion rotation = TDGatePlacer.FacingRotation(group.StartBorder);
+                var        go       = Object.Instantiate(m_GateStartPrefab, pos, rotation, transform);
+                m_GateStartViews.Add(go.GetComponent<TDGateView>());
+                TDGridMainModel.api.SetOccupiedCell(pos);
+            }
+            else
+            {
+                m_GateStartViews.Add(null);
+                Debug.LogWarning("<color=orange>TDEnemyPathMainView: m_GateStartPrefab not assigned</color>");
+            }
 
-        if (m_GateEndPrefab != null)
-        {
-            Vector3 endWorld = grid[m_EndPoint.x, m_EndPoint.y];
-            Object.Instantiate(m_GateEndPrefab, endWorld, Quaternion.identity, transform);
-            TDGridMainModel.api.SetOccupiedCell(endWorld);
+            if (m_GateEndPrefab != null)
+            {
+                Vector3    pos      = grid[group.EndCell.x, group.EndCell.y];
+                // End gate nhìn ngược lại → FacingRotation của border đối diện
+                Quaternion rotation = TDGatePlacer.FacingRotation(OppositeOf(group.StartBorder));
+                Object.Instantiate(m_GateEndPrefab, pos, rotation, transform);
+                TDGridMainModel.api.SetOccupiedCell(pos);
+            }
+            else
+            {
+                Debug.LogWarning("<color=orange>TDEnemyPathMainView: m_GateEndPrefab not assigned</color>");
+            }
         }
-        else
-            Debug.LogWarning("<color=orange>TDEnemyPathMainView: m_GateEndPrefab not assigned</color>");
     }
 
     private void RegistryEvents()
     {
-        TDEnemyPathMainControl.api.onGetEnemyPos          += OnGetEnemyPos;
-        TDEnemyPathMainControl.api.onGetAllPaths          += OnGetAllPaths;
-        TDEnemyPathMainControl.api.onWaveStart            += OnWaveStart;
-        TDEnemyPathMainControl.api.onValidTowerCellsReady += OnValidTowerCellsReady;
+        TDEnemyPathMainControl.api.onGroupsReady          += OnGroupsReady;
+        TDEnemyPathMainControl.api.onWaveGroupStart        += OnWaveGroupStart;
+        TDEnemyPathMainControl.api.onValidTowerCellsReady  += OnValidTowerCellsReady;
     }
 
     private void OnDestroy()
@@ -107,106 +115,102 @@ public class TDEnemyPathMainView : MonoBehaviour
         m_WaveCts?.Cancel();
         m_WaveCts?.Dispose();
 
-        TDEnemyPathMainControl.api.onGetEnemyPos          -= OnGetEnemyPos;
-        TDEnemyPathMainControl.api.onGetAllPaths          -= OnGetAllPaths;
-        TDEnemyPathMainControl.api.onWaveStart            -= OnWaveStart;
-        TDEnemyPathMainControl.api.onValidTowerCellsReady -= OnValidTowerCellsReady;
+        TDEnemyPathMainControl.api.onGroupsReady          -= OnGroupsReady;
+        TDEnemyPathMainControl.api.onWaveGroupStart        -= OnWaveGroupStart;
+        TDEnemyPathMainControl.api.onValidTowerCellsReady  -= OnValidTowerCellsReady;
     }
 
-    private void OnWaveStart(int waveIdx) => m_GateStartView?.PlaySpawnEffect();
-
-    private void OnGetAllPaths(List<List<IGridCellDTO>> allPaths)
+    private void OnWaveGroupStart(int waveIdx, int groupIdx)
     {
-        m_AllPaths = allPaths;
-        if (m_AllPaths.Count == 0) return;
+        if (groupIdx >= 0 && groupIdx < m_GateStartViews.Count)
+            m_GateStartViews[groupIdx]?.PlaySpawnEffect();
+    }
 
-        m_EnemyPathView.VisualizeAllPaths(m_AllPaths);
+    private void OnGroupsReady(List<TDPathGroup> groups)
+    {
+        if (groups == null || groups.Count == 0) return;
 
-        // Maze B1: wall cells = valid tower spots — compute and spawn tower zone tiles
-        TDEnemyPathMainControl.api.ComputeValidTowerCells(m_GridDTO, m_StartPoint, m_EndPoint);
+        // Visualize tất cả corridors từ mọi group
+        var allCorridors = new List<List<IGridCellDTO>>();
+        foreach (var g in groups)
+            allCorridors.AddRange(g.Corridors);
+
+        m_EnemyPathView.VisualizeAllPaths(allCorridors);
+
+        TDEnemyPathMainControl.api.ComputeValidTowerCells(m_GridDTO, groups);
 
         if (m_LevelConfigSettings == null)
         {
-            Debug.LogError("<color=red>TDEnemyPathMainView: m_LevelConfigSettings not assigned in Inspector!</color>");
+            Debug.LogError("<color=red>TDEnemyPathMainView: m_LevelConfigSettings not assigned!</color>");
             return;
         }
 
         LevelConfig config = m_LevelConfigSettings.GetLevel(m_LevelIndex);
         if (config == null) return;
 
-        TDGameStateControl.api?.Initialize(config.totalEnemies);
+        // BUG-02 fix: dùng actual enemy count từ wave plans thực tế
+        var wavePlans   = TDEnemyPathMainControl.api.BuildWavePlans(config);
+        int actualCount = TDEnemyPathMainControl.api.GetActualEnemyCount(wavePlans);
+        TDGameStateControl.api?.Initialize(actualCount);
 
-        // Spawn tại world pos của start cell — không dùng CreatePoint cố định
-        Vector3 spawnWorldPos = TDGridMainModel.api.CellToWorld(m_StartPoint);
         m_WaveCts = new CancellationTokenSource();
-        TDEnemyPathMainControl.api.StartWaveLoop(spawnWorldPos, m_AllPaths, config, m_WaveCts.Token);
-    }
-
-    private void OnGetEnemyPos(Vector2Int startPoint, Vector2Int endPoint)
-    {
-        m_StartPoint = startPoint;
-        m_EndPoint   = endPoint;
+        TDEnemyPathMainControl.api.StartWaveLoop(groups, wavePlans, config, m_WaveCts.Token);
     }
 
     private void OnValidTowerCellsReady(List<Vector3> validPositions)
     {
+        BuildGridZones(validPositions);
+    }
+
+    // ── Grid Zone Spawning (SRP: tách từ God Method) ──────────────────────────
+
+    private void BuildGridZones(List<Vector3> validPositions)
+    {
         if (m_TowerZonePrefab == null)
         {
-            Debug.LogWarning("[TDEnemyPathMainView] m_TowerZonePrefab not assigned — tower zone tiles skipped");
+            Debug.LogWarning("[TDEnemyPathMainView] m_TowerZonePrefab not assigned — skipped");
             return;
         }
 
         bool hasObstacles    = m_ObstaclePrefabs != null && m_ObstaclePrefabs.Length > 0;
         int[] footprintRadii = hasObstacles ? ComputeFootprintRadii() : null;
 
-        // Lọc thêm: bỏ mọi cell đã là path theo gridDTO (double-check với isWalkable)
-        var filteredPositions = new List<Vector3>(validPositions.Count);
+        // Double-check: bỏ path cells lọt vào
+        var filtered     = new List<Vector3>(validPositions.Count);
         int pathLeakCount = 0;
         foreach (var pos in validPositions)
         {
             var cell = TDGridMainModel.api.WorldToCell(pos);
-            if (m_GridDTO.GetCell(cell.x, cell.y).isWalkable)
-            {
-                pathLeakCount++;
-                continue; // bỏ qua path cell lọt vào
-            }
-            filteredPositions.Add(pos);
+            if (m_GridDTO.GetCell(cell.x, cell.y).isWalkable) { pathLeakCount++; continue; }
+            filtered.Add(pos);
         }
         if (pathLeakCount > 0)
-            Debug.LogWarning($"<color=orange>[PathView] {pathLeakCount} path cells leaked into validPositions — filtered out</color>");
+            Debug.LogWarning($"<color=orange>[PathView] {pathLeakCount} path cells leaked — filtered</color>");
 
-        // Shuffle để random hoá vị trí obstacle
-        var positions = filteredPositions;
-        for (int i = positions.Count - 1; i > 0; i--)
+        // Shuffle để random hoá obstacle placement
+        for (int i = filtered.Count - 1; i > 0; i--)
         {
             int j = Random.Range(0, i + 1);
-            (positions[i], positions[j]) = (positions[j], positions[i]);
+            (filtered[i], filtered[j]) = (filtered[j], filtered[i]);
         }
 
-        int obstacleCount = Mathf.RoundToInt(positions.Count * TDConstant.CONFIG_MAZE_OBSTACLE_WALL_RATIO);
+        int obstacleCount = Mathf.RoundToInt(filtered.Count * TDConstant.CONFIG_MAZE_OBSTACLE_WALL_RATIO);
 
-        // Build lookup để giới hạn footprint chỉ trong wall cells — tránh spawn tile trên corridor
         var validWallCells = new HashSet<Vector2Int>();
         foreach (var pos in validPositions)
             validWallCells.Add(TDGridMainModel.api.WorldToCell(pos));
 
-        // Phase 1: place obstacles + block footprint cells (chỉ wall cells)
-        var blockedCells  = new HashSet<Vector2Int>();
-        var obstacleCells = new HashSet<Vector2Int>(); // wall cells có obstacle (cần ObstacleTile)
-
         GameObject tilePrefabForObstacle = m_ObstacleTilePrefab != null ? m_ObstacleTilePrefab : m_TowerZonePrefab;
+
+        // Phase 1: place obstacles
+        var blockedCells  = new HashSet<Vector2Int>();
+        var obstacleCells = new HashSet<Vector2Int>();
 
         for (int i = 0; i < obstacleCount && hasObstacles; i++)
         {
-            Vector3    center     = new Vector3(positions[i].x, 0f, positions[i].z);
-
-            // Safety: skip if cell was occupied after validPositions was computed
+            Vector3    center     = new Vector3(filtered[i].x, 0f, filtered[i].z);
             if (!TDGridMainModel.api.IsValidPlacement(center)) continue;
 
-            // Kiểm tra vertical wall space (N/S)
-            // Nếu không có wall cell ở trên hoặc dưới (path cell hoặc out of bounds)
-            // → chỉ chọn prefab nhỏ chiếm 1 cell (index 0-1: Rock_01, Rock_02)
-            // → tránh model lớn visually overflow vào path tile từ camera isometric
             Vector2Int centerCell = TDGridMainModel.api.WorldToCell(center);
             var nbNorth = new Vector2Int(centerCell.x, centerCell.y + 1);
             var nbSouth = new Vector2Int(centerCell.x, centerCell.y - 1);
@@ -214,54 +218,45 @@ public class TDEnemyPathMainView : MonoBehaviour
                                 && !m_GridDTO.GetCell(nbNorth.x, nbNorth.y).isWalkable;
             bool hasSouthWall = TDGridMainModel.api.IsInBounds(nbSouth)
                                 && !m_GridDTO.GetCell(nbSouth.x, nbSouth.y).isWalkable;
-            // Cần BOTH N và S đều là wall → mới cho dùng prefab to
-            // Chỉ 1 phía wall → prefab nhỏ thôi (Rock_01, Rock_02)
             bool hasVerticalWall = hasNorthWall && hasSouthWall;
 
-            // Không đủ wall dọc cả 2 phía → chỉ dùng small prefab (Rock_01, Rock_02)
             int maxPIdx = hasVerticalWall ? m_ObstaclePrefabs.Length : Mathf.Min(2, m_ObstaclePrefabs.Length);
-            int        pIdx       = Random.Range(0, maxPIdx);
-            int        radius     = footprintRadii != null ? footprintRadii[pIdx] : 0;
-            Quaternion rotation   = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
+            int pIdx    = Random.Range(0, maxPIdx);
+            int radius  = footprintRadii != null ? footprintRadii[pIdx] : 0;
 
-            Object.Instantiate(m_ObstaclePrefabs[pIdx], center, rotation, transform);
+            Object.Instantiate(m_ObstaclePrefabs[pIdx], center, Quaternion.Euler(0f, Random.Range(0f, 360f), 0f), transform);
+
             for (int dx = -radius; dx <= radius; dx++)
                 for (int dz = -radius; dz <= radius; dz++)
                 {
                     var cell = new Vector2Int(centerCell.x + dx, centerCell.y + dz);
-                    if (!TDGridMainModel.api.IsInBounds(cell)) continue;
-                    if (!validWallCells.Contains(cell)) continue; // bỏ qua corridor cells
-
+                    if (!TDGridMainModel.api.IsInBounds(cell))    continue;
+                    if (!validWallCells.Contains(cell))           continue;
                     blockedCells.Add(cell);
                     obstacleCells.Add(cell);
                     TDGridMainModel.api.SetOccupiedCell(TDGridMainModel.api.CellToWorld(cell));
                 }
         }
 
-        // Phase 1.5: spawn ObstacleTile (tile đất tự nhiên) dưới mọi obstacle footprint wall cell
+        // Phase 1.5: obstacle tiles
         foreach (var cell in obstacleCells)
         {
             Vector3 w = TDGridMainModel.api.CellToWorld(cell);
-            Object.Instantiate(tilePrefabForObstacle,
-                new Vector3(w.x, 0f, w.z), Quaternion.identity, transform);
+            Object.Instantiate(tilePrefabForObstacle, new Vector3(w.x, 0f, w.z), Quaternion.identity, transform);
         }
 
-        // Phase 2: TowerZone tiles chỉ trên wall cells không có obstacle
-        foreach (var pos in positions)
+        // Phase 2: tower zone tiles
+        foreach (var pos in filtered)
         {
             var cell = TDGridMainModel.api.WorldToCell(pos);
             if (blockedCells.Contains(cell)) continue;
-
-            var tile = Object.Instantiate(m_TowerZonePrefab,
-                new Vector3(pos.x, 0f, pos.z), Quaternion.identity, transform);
+            var tile = Object.Instantiate(m_TowerZonePrefab, new Vector3(pos.x, 0f, pos.z), Quaternion.identity, transform);
             m_TowerZoneTiles.Add(tile);
         }
 
-        Debug.Log($"[TDEnemyPathMainView] {m_TowerZoneTiles.Count} tower tiles | {obstacleCount} obstacles | {obstacleCells.Count} obstacle cells");
+        Debug.Log($"[TDEnemyPathMainView] {m_TowerZoneTiles.Count} tower tiles | {obstacleCount} obstacles");
     }
 
-    // Tính footprint radius từ Renderer.bounds thực tế của prefab
-    // radius=0 → 1×1 cell | radius=1 → 3×3 cells
     private int[] ComputeFootprintRadii()
     {
         float cellSize = TDConstant.CONFIG_GRID_CELL_SIZE;
@@ -270,10 +265,8 @@ public class TDEnemyPathMainView : MonoBehaviour
         for (int i = 0; i < m_ObstaclePrefabs.Length; i++)
         {
             if (m_ObstaclePrefabs[i] == null) continue;
-
             var inst = Object.Instantiate(m_ObstaclePrefabs[i]);
             inst.SetActive(false);
-
             Bounds b     = new Bounds();
             bool   first = true;
             foreach (var r in inst.GetComponentsInChildren<Renderer>(true))
@@ -282,7 +275,6 @@ public class TDEnemyPathMainView : MonoBehaviour
                 else b.Encapsulate(r.bounds);
             }
             Object.Destroy(inst);
-
             if (!first)
             {
                 float halfMax = Mathf.Max(b.size.x, b.size.z) * 0.5f;
@@ -293,4 +285,13 @@ public class TDEnemyPathMainView : MonoBehaviour
         Debug.Log($"[EnemyPathMainView] FootprintRadii: [{string.Join(", ", radii)}]");
         return radii;
     }
+
+    private static TDEnums.BorderSide OppositeOf(TDEnums.BorderSide border) => border switch
+    {
+        TDEnums.BorderSide.Left   => TDEnums.BorderSide.Right,
+        TDEnums.BorderSide.Right  => TDEnums.BorderSide.Left,
+        TDEnums.BorderSide.Top    => TDEnums.BorderSide.Bottom,
+        TDEnums.BorderSide.Bottom => TDEnums.BorderSide.Top,
+        _                         => TDEnums.BorderSide.Right,
+    };
 }

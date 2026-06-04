@@ -1436,6 +1436,1334 @@
     ✅ 0 compile errors
 
 
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 39 — DYNAMIC MULTI START/END GATE SYSTEM                   [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-03
+
+  ── Design Analysis (trước implement) ───────────────────────────────────────
+
+  "Bất kỳ đâu" = bất kỳ border nào (Left/Right/Top/Bottom), không phải interior.
+  Arknights-style: enemy luôn enter từ rìa map.
+
+  GateMode: quyết định cổng nào (TDPathGroup nào) mỗi wave dùng.
+  Layout:   quyết định start/end nằm ở border nào của map.
+  Path enemy đi: phụ thuộc vào Corridors của group được chọn
+    → mỗi group có PathCount corridors (maze runs độc lập)
+    → random chọn 1 corridor trong group mỗi wave.
+
+  Flow đầy đủ:
+    Layout → TDGatePlacer → vị trí gates
+    → TDPathGroup[] (mỗi group: 1 cặp gate + N corridors)
+    → GateMode/Strategy → chọn group cho wave
+    → Random → chọn corridor trong group
+    → TDEnemyView.SetPath(corridor) → enemy đi
+
+  ── SOLID compliance của new code ────────────────────────────────────────────
+
+  S: TDPathGroup = pure DTO; BuildGridZones() tách khỏi OnGroupsReady()
+  O: GateAssignmentMode → Strategy Pattern (thêm mode = thêm class mới)
+  L: không vi phạm
+  I: IPathFinder (slim) thay vì IPathFinderDTO (bloated)
+  D: TDMazePathGenerator inject IPathFinder qua constructor; TDPathGroup không có View ref
+
+  ── Files mới tạo (9 files) ──────────────────────────────────────────────────
+
+  [NEW] Assets/2.Scripts/Model/Info/Gate/TDPathGroup.cs
+    Pure DTO: StartCell, EndCell, BorderSide, SpawnWorldPos, Corridors, PathCount
+    Không giữ bất kỳ View reference nào.
+
+  [NEW] Assets/2.Scripts/Model/Info/Gate/IGateAssignmentStrategy.cs
+    interface SelectForWave(groups, waveIndex) → List<(group, corridor)>
+    OCP: thêm mode = thêm class, không sửa StartWaveLoop.
+
+  [NEW] Assets/2.Scripts/Model/Info/AStarPath/Interfaces/IPathFinder.cs
+    interface ComputePath(grid, start, end) → List<IGridCellDTO>
+    Slim — chỉ 1 method. TDaStarPathControl implement.
+
+  [NEW] Assets/2.Scripts/Control/PathControl/TDGatePlacer.cs
+    static class:
+      Place(count, border, gridWidth, gridHeight) → List<Vector2Int>
+        Section-based placement, always even coordinates (maze room cells).
+        Left/Right: sections theo Y. Top/Bottom: sections theo X.
+      GetBorders(MapLayout) → (startBorder, endBorder)
+      FacingRotation(BorderSide) → Quaternion (gate nhìn vào trong map)
+
+  [NEW] Assets/2.Scripts/Control/PathControl/GateStrategy/RoundRobinStrategy.cs
+    wave i → group i % groupCount → random corridor
+
+  [NEW] Assets/2.Scripts/Control/PathControl/GateStrategy/RandomStrategy.cs
+    random group mỗi wave → random corridor
+
+  [NEW] Assets/2.Scripts/Control/PathControl/GateStrategy/PerWaveStrategy.cs
+    wave i → group i % groupCount (semantic: toàn wave gắn 1 group cố định)
+
+  [NEW] Assets/2.Scripts/Control/PathControl/GateStrategy/SimultaneousStrategy.cs
+    tất cả groups spawn song song mỗi wave → Task.WhenAll
+
+  ── Files đã sửa (7 files) ───────────────────────────────────────────────────
+
+  [MODIFIED] Assets/2.Scripts/Model/Config/Enum/Enums.cs
+    + enum BorderSide { Left, Right, Top, Bottom }
+    + enum MapLayout { LeftToRight, RightToLeft, TopToBottom, BottomToTop,
+                       Diagonal_TL_BR, Diagonal_BL_TR }
+    + enum GateAssignmentMode { RoundRobin, Random, PerWave, Simultaneous }
+
+  [MODIFIED] Assets/2.Scripts/Model/Config/TDStageConfig.cs
+    + [Header("Gates")]
+    + [Range(1,3)] int StartGateCount = 1
+    + [Range(1,2)] int EndGateCount   = 1
+    + MapLayout         Layout         = LeftToRight
+    + GateAssignmentMode GateMode      = RoundRobin
+
+  [MODIFIED] Assets/2.Scripts/Control/PathControl/TDaStarPathControl.cs
+    + implement IPathFinder (thêm vào class declaration)
+
+  [MODIFIED] Assets/2.Scripts/Control/PathControl/TDMazePathGenerator.cs
+    - GenerateMultiplePaths(start, end, N) ← xóa
+    + Inject IPathFinder qua constructor (DIP fix)
+    + GenerateForGroups(gridDTO, groups):
+        foreach group → PathCount maze runs → collect vào combinedPathCells HashSet
+        SetAllWalls 1 lần cuối → restore tất cả → fix wipe problem
+    + CarveFrom: iterative Stack<Vector2Int> thay recursion (fix stack overflow risk)
+      private Carve(group): SetAllWalls + CarveFrom + A* extract
+
+  [MODIFIED] Assets/2.Scripts/Control/PathControl/TDEnemyPathMainControl.cs
+    - onGetAllPaths, onWaveStart, onGetEnemyPos ← xóa
+    + onGroupsReady: Action<List<TDPathGroup>>
+    + onWaveGroupStart: Action<int waveIdx, int groupIdx>
+    + SetStrategy(IGateAssignmentStrategy)
+    + BuildPathGroups(stage, gridDTO) → List<TDPathGroup>
+        Universal pairing: groupCount = max(startCount, endCount)
+        start[i % startCount] → end[i % endCount]
+        Cross pairing khi 2s2e (endCells.Reverse()) — tăng Y displacement/windiness
+        null guard: fallback defaults khi stage == null
+    + InitEnemyPath(gridDTO, groups): mark tất cả start/end cells
+    + GenerateAllPaths(gridDTO, groups): gọi GenerateForGroups thay vì cũ
+    + ComputeValidTowerCells(gridDTO, groups): exclude buffer quanh ALL gates
+    + StartWaveLoop(groups, wavePlans, config, ct):
+        strategy.SelectForWave() → assignments list
+        chia đều enemies cho mỗi assignment
+        Task.WhenAll cho Simultaneous support
+    + BuildWavePlans(config): public (trước là private static) — BUG-02 fix
+    + GetActualEnemyCount(wavePlans): trả về sum thực tế
+
+  [MODIFIED] Assets/2.Scripts/View/GamePlay/EnemyPath/TDEnemyPathMainView.cs
+    - m_StartPoint, m_EndPoint, m_GateStartView (single) ← xóa
+    + m_PathGroups: List<TDPathGroup>
+    + m_GateStartViews: List<TDGateView>  (index tương ứng group index)
+    + ApplyStageConfig(TDStageConfig stage)
+    + ImplementPath(): BuildPathGroups → InitEnemyPath → SpawnGates → GenerateAllPaths
+    + SpawnGates(groups): loop qua groups, FacingRotation per gate,
+      end gate dùng OppositeOf(startBorder)
+    + OnGroupsReady(): visualize all corridors, ComputeValidTowerCells,
+      BUG-02 fix (BuildWavePlans → GetActualEnemyCount → Initialize(actualCount))
+    + OnWaveGroupStart(waveIdx, groupIdx): play effect đúng gate
+    + BuildGridZones(): tách từ God Method OnValidTowerCellsReady (SRP)
+    + OppositeOf(BorderSide): helper static
+
+  [MODIFIED] Assets/2.Scripts/Control/TDControl.cs
+    + TDMazePathGenerator.api = new TDMazePathGenerator(TDaStarPathControl.api)
+      (inject IPathFinder — trước là new TDMazePathGenerator())
+    + static CreateStrategy(GateAssignmentMode) → IGateAssignmentStrategy
+      (factory method — switch expression)
+
+  [MODIFIED] Assets/2.Scripts/View/GamePlay/TDGameplayMainView.cs
+    + m_TDEnemyPathMainView.ApplyStageConfig(stage)
+    + TDControl.CreateStrategy(stage?.GateMode ?? RoundRobin)
+    + TDEnemyPathMainControl.api.SetStrategy(strategy)
+
+  ── SO Assets updated ────────────────────────────────────────────────────────
+
+  Stage_1-1.asset (DEMO-1): StartGateCount=1, EndGateCount=1, Layout=LeftToRight, GateMode=RoundRobin
+  Stage_1-2.asset (DEMO-2): StartGateCount=1, EndGateCount=1, Layout=LeftToRight, GateMode=RoundRobin
+
+  ── Concepts clarification ───────────────────────────────────────────────────
+
+  GateMode:
+    Quyết định cổng nào (TDPathGroup nào) mỗi wave dùng.
+    RoundRobin  → wave 0→gate0, wave 1→gate1, wave 2→gate0, ...
+    Random      → random gate mỗi wave
+    PerWave     → cả wave gắn 1 gate cố định theo wave index
+    Simultaneous→ tất cả gates spawn song song cùng lúc mỗi wave
+
+  Layout:
+    Quyết định start/end nằm ở border nào.
+    LeftToRight    → S: Left,   E: Right  (classic)
+    RightToLeft    → S: Right,  E: Left
+    TopToBottom    → S: Top,    E: Bottom
+    BottomToTop    → S: Bottom, E: Top
+    Diagonal_TL_BR → S: Top,    E: Right
+    Diagonal_BL_TR → S: Bottom, E: Right
+
+  Path diversity (PathCount):
+    PathCount=1 → 1 đường cố định/group
+    PathCount=3 → 3 corridors khác nhau/group, random mỗi wave
+
+  ── Post-session fixes (cùng ngày) ───────────────────────────────────────────
+
+  BUG: Path quá ngắn / ít quanh co
+    Root cause 1: pathsPerGroup = max(1, 3/2) = 1 (integer division)
+      → mỗi group chỉ có 1 maze run → ít variety, có thể ra path thẳng
+    Root cause 2: minLength threshold chưa implement (design doc §11)
+      → maze ngẫu nhiên không đảm bảo path đủ dài
+
+    Fix 1 [TDEnemyPathMainControl.BuildPathGroups()]:
+      - pathsPerGroup = max(1, CONFIG_NUM_PATHS / groupCount)
+      + pathsPerGroup = CONFIG_NUM_PATHS  // mỗi group luôn đủ 3 corridors
+
+    Fix 2 [TDMazePathGenerator.Carve()]:
+      + minLength = gridDTO.width  // path phải dài ít nhất = chiều ngang map
+      + Retry tối đa 10 lần nếu path < minLength
+      + Fallback về path dài nhất tìm được sau MAX_ATTEMPTS
+
+  BUG: Enemy đi xuyên qua gate của group khác
+    Root cause: CarveFrom có thể carve qua cell của gate khác (even coordinate).
+      A* tìm shortcut đi qua gate đó → path group 0 chứa cell của gate group 1
+      → enemy đi qua cổng sai trước khi đến cổng đúng.
+
+    Fix [TDMazePathGenerator.Carve()]:
+      Signature đổi: Carve(gridDTO, group) → Carve(gridDTO, group, allGroups)
+      Trước khi chạy A*: block tạm tất cả gate cells của groups khác
+        foreach (other in allGroups where other != group)
+            other.StartCell.isWalkable = false
+            other.EndCell.isWalkable   = false
+      → A* buộc tìm đường qua maze thực, không shortcut qua gate khác
+
+  ── Còn lại (chưa làm — refactor codebase cũ) ───────────────────────────────
+
+  ⬜ Xóa dead code TDaStarPathControl (FindPath, FindMultiplePaths, events, IPathFinderDTO)
+  ⬜ Xóa IPathFinderDTO interface hoàn toàn
+  ⬜ Tách OnValidTowerCellsReady (God Method) — đã tách BuildGridZones, còn thêm
+  ⬜ CONFIG_MAZE_EXTRA_PASSAGE_RATE = 0.45f chưa dùng → xóa
+
+  ── Result ───────────────────────────────────────────────────────────────────
+    ✅ Multi start/end gate — config qua Inspector (StartGateCount, EndGateCount)
+    ✅ 6 MapLayout variants (Left/Right/Top/Bottom/2 Diagonal)
+    ✅ 4 GateAssignmentMode strategies (OCP — thêm mode = thêm class)
+    ✅ Cross pairing 2s2e tự động (tăng windiness)
+    ✅ CarveFrom iterative Stack (fix stack overflow risk)
+    ✅ GenerateForGroups fix SetAllWalls wipe problem
+    ✅ IPathFinder inject (DIP fix)
+    ✅ TDPathGroup pure DTO (MVC — không có View ref)
+    ✅ BUG-02 fix: Initialize(actualCount) thay vì config.totalEnemies
+    ✅ Gate visual rotation theo border (FacingRotation)
+    ✅ SO assets updated
+    ✅ 0 compile errors
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 40 — MELEE OPERATOR EXPANSION: DEFENDER + STRIKER           [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-03
+
+  Goal: Phân tích config operator hiện tại, so sánh với Arknights melee archetypes,
+        thêm 2 operator mới (Defender + Striker), tạo prefab + animator controller.
+
+  ── Phân tích Operator Config hiện tại ──────────────────────────────────────
+
+  OperatorData fields: operatorType, cost, hp, damage, attackSpeed, blockCount,
+                       operatorPrefab, icon, rangeOffsets
+  IDeployableDTO contract (hardcoded toàn bộ operator):
+    AttackType = Multiple; MaxTargets = Clamp(blockCount, 1, 3)
+
+  Knight (index 0): cost=15, hp=1000, dmg=50, spd=2.0, block=2, range=(1,0)(2,0)
+
+  Vấn đề phát hiện khi mở rộng:
+    - AttackType hardcode = Multiple → Sniper/Medic sau này cần thay đổi
+    - blockCount clamp min=1 → operator không block cần = 0
+    - Thiếu: def, redeployTime, canDeployOnPath/TowerZone
+
+  ── Design Decision: Melee range classification ─────────────────────────────
+
+  Melee chỉ có 2 loại theo tầm đánh:
+    Close range : rangeOffsets ≤ 2 ô    (Knight, Defender)
+    Long range  : rangeOffsets ≥ 3 ô    (Striker)
+  Không có AOE cho bất kỳ melee operator nào.
+
+  So sánh với Arknights:
+    Defender → Standard Defender (block 3, high HP/DEF, tank)
+    Striker  → Dreadnought Guard variant (long reach spear, block 1, high dmg)
+
+  ── OperatorType Enum [MODIFIED] ────────────────────────────────────────────
+
+  File: Assets/2.Scripts/Model/Config/Enum/Enums.cs
+
+  Trước: Knight
+  Sau:
+    Knight,    // close range ≤2, block 2 — balanced melee
+    Defender,  // close range ≤2, block 3 — high HP tank
+    Striker,   // long range  ≥3, block 1 — reach melee
+
+  ── Melee Operator Config.asset [MODIFIED] ──────────────────────────────────
+
+  File: Assets/1.Assets/Resources/Configs/Melee Operator Config.asset
+  Thêm 2 entry mới:
+
+  Defender (index 1):
+    cost=20, hp=3000, damage=20, attackSpeed=1.0, blockCount=3
+    rangeOffsets: (0,0)(1,0)   ← đánh tại ô đứng + ô trước
+
+  Striker (index 2):
+    cost=18, hp=700, damage=80, attackSpeed=1.5, blockCount=1
+    rangeOffsets: (1,0)(2,0)(3,0)   ← reach 3 ô
+
+  ⚠️ operatorPrefab và icon chưa assign (cần sau khi có prefab)
+
+  ── Asset Research ───────────────────────────────────────────────────────────
+
+  Duyệt 2 pack:
+    RPGTinyHeroWavePBR: MC01–MC24 modular chars, SwordAndShieldStance.controller,
+                        SpearStance.controller, SwordAndShield/Spear animation FBX
+    Synty/SidekickCharacters: Starter_01–04, HumanSpecies_01–04
+
+  Kết luận: dùng Synty Starter_02 (Defender) + Starter_03 (Striker) làm base
+            — cùng humanoid rig với Knight (Starter_01), RPGTinyHero anim retarget OK.
+
+  Animation clips chọn:
+    Defender: Idle_Battle_SwordAndShield.fbx (guid: 0308cf4e)
+              Attack01_SwordAndShield.fbx   (guid: db509ad7)
+    Striker:  Idle_Battle_Spear.fbx         (guid: ae7ea444)
+              Attack01_Spear.fbx            (guid: a43b401)
+  fileID chung cho single-clip FBX: 1827226128182048838
+
+  ── Animator Controllers [NEW] ──────────────────────────────────────────────
+
+  Cả 2 có cùng cấu trúc như OperatorKnight.controller:
+    States: Idle (default) → Attack (trigger "Attack") → Idle (exitTime 0.9)
+    Parameter: Attack (Trigger, type 9)
+
+  Assets/1.Assets/Resources/AnimatorControllers/OperatorDefender.controller
+    Attack state speed = 1.0; clips = SwordAndShield
+
+  Assets/1.Assets/Resources/AnimatorControllers/OperatorStriker.controller
+    Attack state speed = 1.5; clips = Spear
+
+  ── Editor Script [NEW] ─────────────────────────────────────────────────────
+
+  Assets/2.Scripts/Editor/CreateOperatorPrefabs.cs
+    Menu: TowerDefense → Create Operator Prefabs (Defender + Striker)
+
+    Khi chạy:
+      OperatorDefender.prefab ← Starter_02 + OperatorDefender.controller
+                                + Shield10 trên prop_l
+                                + CapsuleCollider (trigger) center(0,1,0) r=0.45 h=2
+                                + HPBar_Operator child
+                                + SelectionIndicator quad
+                                + TDOperatorView component
+      OperatorStriker.prefab  ← Starter_03 + OperatorStriker.controller
+                                + Spear01 trên prop_r
+                                + (same components)
+
+    ⚠️ Sau khi chạy script, cần wire thủ công trong Inspector:
+       TDOperatorView → m_HPBarView = child "HPBar_Operator"
+       TDOperatorView → m_SelectionIndicator = child "SelectionIndicator"
+    ⚠️ Cần apply Toon material (như Knight workflow session 27)
+    ⚠️ Weapon rotation (0,0,-90) là ước tính — có thể cần fine-tune
+    ⚠️ Xóa CreateOperatorPrefabs.cs sau khi dùng xong
+
+  ── Sidekick Tool Analysis ───────────────────────────────────────────────────
+
+  Câu hỏi: Claude + MCP có dùng được Sidekick character generator không?
+  Kết quả: CÓ — khi Unity Editor đang mở + MCP connected.
+
+  Sidekick tool đã install tại: Assets/Synty/SidekickCharacters/Scripts/Editor/
+  API: SidekickRuntime (Assets/.../Runtime/API/SidekickRuntime.cs)
+
+  Public API có thể gọi từ script-execute:
+    new SidekickRuntime(baseModel, material, animController)
+    SidekickRuntime.PopulateToolData(runtime)  ← load part library từ SQLite DB
+    runtime.AllPartsLibrary[CharacterPartType.X]  ← filter parts theo outfit
+    runtime.CreateCharacter(name, parts, combineMesh, processBoneMovement)
+      → trả về GameObject với combined SkinnedMesh
+
+  Part naming convention: SK_OUTFIT_XX_PartIndex_HU01.fbx
+    FANT_KNGT = knight heavy armor (cho Defender)
+    SCFI_CIVL = sci-fi civilian lighter armor (cho Striker)
+
+  MCP timeout issue session này: SSE stream drops sau ~300–900s khi Unity idle.
+  Fix: mở Unity Editor → bắt conversation mới → MCP reconnect tự động.
+  Khi MCP hoạt động, Claude có thể tạo custom character qua Sidekick API
+  thay vì dùng Starter_02/03 preset.
+
+  ── Result ───────────────────────────────────────────────────────────────────
+    ✅ OperatorType enum: Defender + Striker thêm vào
+    ✅ Melee Operator Config.asset: 2 data entry mới với stats cân bằng
+    ✅ OperatorDefender.controller + OperatorStriker.controller tạo mới (YAML)
+    ✅ CreateOperatorPrefabs.cs — Editor script tạo 2 prefabs qua menu
+    ✅ Sidekick Tool API documented, sẵn sàng dùng khi MCP online
+    ⬜ Chạy CreateOperatorPrefabs từ Unity menu (cần Unity mở)
+    ⬜ Wire m_HPBarView + m_SelectionIndicator trong Inspector
+    ⬜ Apply Toon material cho Defender + Striker
+    ⬜ Assign operatorPrefab + icon vào Melee Operator Config.asset
+    ⬜ Fine-tune weapon rotation trong prefab
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 41 — MC OPERATOR PREFABS + OPERATOR CONFIG SETUP            [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-04
+
+  Goal: Tạo 3 prefab operator mới từ RPGTinyHeroWavePBR MC characters;
+        giữ 3 prefab Synty cũ; setup Melee Operator Config đầy đủ 6 entries;
+        thêm enum KnightTiny/DefenderTiny/StrikerTiny.
+
+  ── RPGTinyHeroWavePBR MC Architecture ──────────────────────────────────────
+
+  Khác với Synty Starter (prop_r/prop_l attach point), MC characters có:
+    - weapon_r / weapon_l: tất cả weapon meshes built-in trong skeleton
+    - Chỉ enable 1 weapon tại thời điểm (các cái còn lại activeSelf=false)
+    - MC01 default: OHS09_Sword (weapon_r) + Shield15 (weapon_l) active
+
+  ── 3 Prefabs mới (RPGTinyHeroWavePBR) ──────────────────────────────────────
+
+  Tạo bằng script-execute, unpack hoàn toàn, save về Resources/Prefabs/:
+
+  OperatorKnightTiny.prefab   ← MC01  + OHS09_Sword (weapon_r) + Shield15 (weapon_l)
+                                        OperatorKnight.controller
+  OperatorDefenderTiny.prefab ← MC04  + OHS11_Hammer (weapon_r) + Shield10 (weapon_l)
+                                        OperatorDefender.controller
+  OperatorStrikerTiny.prefab  ← MC07  + Spear01 (weapon_r), no shield
+                                        OperatorStriker.controller
+
+  Mỗi prefab có đầy đủ (wired via SerializedObject):
+    + Animator (controller)
+    + CapsuleCollider (trigger, center=(0,1,0), r=0.45, h=2)
+    + TDOperatorView
+    + HPBar_Operator child (TDHPBarView wired → m_HPBarView ✅)
+    + SelectionIndicator quad (inactive, gold mat, wired → m_SelectionIndicator ✅)
+
+  ── 3 Prefabs cũ (Synty Starter) — giữ tên gốc ─────────────────────────────
+
+  OperatorKnight.prefab   → git checkout restore (Synty Starter_01)
+  OperatorDefender.prefab → recreate từ Synty Starter_02
+                            OHS05_Sword (prop_r) + Shield10 (prop_l)
+                            OperatorDefender.controller
+  OperatorStriker.prefab  → recreate từ Synty Starter_03
+                            Spear01 (prop_r), OperatorStriker.controller
+
+  Lý do giữ Synty: cùng humanoid rig, prop_r/prop_l có sẵn,
+                   phong cách visual khác biệt với MC Tiny variants.
+
+  ── OperatorType Enum [MODIFIED] ────────────────────────────────────────────
+
+  File: Assets/2.Scripts/Model/Config/Enum/Enums.cs
+
+  Trước: Knight, Defender, Striker
+  Sau:
+    Knight,        // Synty Starter_01, close range ≤2, block 2
+    Defender,      // Synty Starter_02, close range ≤2, block 3
+    Striker,       // Synty Starter_03, long range ≥3, block 1
+    KnightTiny,    // MC01 variant — same stats as Knight
+    DefenderTiny,  // MC04 variant — same stats as Defender
+    StrikerTiny,   // MC07 variant — same stats as Striker
+
+  ── Melee Operator Config.asset [UPDATED] ───────────────────────────────────
+
+  6 entries sau khi setup:
+
+  [0] Knight      prefab=OperatorKnight        icon=OperatorKnight (giữ nguyên) ✅
+  [1] Defender    prefab=OperatorDefender       icon=null
+  [2] Striker     prefab=OperatorStriker        icon=null
+  [3] KnightTiny  prefab=OperatorKnightTiny     icon=null
+  [4] DefenderTiny prefab=OperatorDefenderTiny  icon=null
+  [5] StrikerTiny  prefab=OperatorStrikerTiny   icon=null
+
+  Stats Tiny = copy từ base type:
+    KnightTiny:   cost=15, hp=1000, dmg=50,  spd=2.0, block=2, range=(1,0)(2,0)
+    DefenderTiny: cost=20, hp=3000, dmg=20,  spd=1.0, block=3, range=(0,0)(1,0)
+    StrikerTiny:  cost=18, hp=700,  dmg=80,  spd=1.5, block=1, range=(1,0)(2,0)(3,0)
+
+  Bug fix cùng lúc:
+    [0] Knight.operatorPrefab đang trỏ sai → OperatorKnightTiny
+    → Fix về OperatorKnight ✅
+
+  ── RapidIcon Analysis ───────────────────────────────────────────────────────
+
+  Kết luận: Claude + MCP CÓ THỂ dùng RapidIcon API qua script-execute.
+
+  ✅ Gọi được: Utils.RenderIcon_Safe(icon, w, h) — render prefab → Texture2D
+  ✅ Export PNG, import lại, gán Sprite vào config
+  ❌ Không điều khiển RapidIcon Editor Window UI (user-only)
+  ❌ Load/save EditorPrefs session của RapidIcon
+
+  Icon path hiện tại:
+    OperatorKnight.icon = OperatorKnight.png @
+    Assets/1.Assets/Resources/GameIcon/OperatorKnight.png ✅
+    Defender/Striker/Tiny variants: icon=null → cần render sau
+
+  ── Result ───────────────────────────────────────────────────────────────────
+    ✅ 3 MC Tiny prefabs (KnightTiny, DefenderTiny, StrikerTiny) — fully wired
+    ✅ 3 Synty prefabs (Knight, Defender, Striker) — restored/recreated, fully wired
+    ✅ OperatorType enum 3 → 6 values
+    ✅ Melee Operator Config 3 → 6 entries, tất cả prefab đã assign
+    ✅ Knight prefab reference bug fixed
+    ⬜ Icon 5 entries mới → cần render qua RapidIcon
+    ⬜ Weapon rotation Synty prefabs có thể cần fine-tune trong Inspector
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 41 — VFX + POLISH ANALYSIS                                  [ANALYSIS]
+════════════════════════════════════════════════════════════════════════════════
+
+  ── TDGameEventBus — Events sẵn sàng cho VFX ────────────────────────────────
+
+  OnEnemyDied(Vector3, EnemyType)     ← death particles tại pos
+  OnEnemySpawned(Vector3, EnemyType)  ← spawn indicator
+  OnTowerAttacked(Vector3, TowerType) ← muzzle flash tại pos
+  OnOperatorDied(Vector2Int)          ← operator removed effect
+  OnLifeLost(Vector3)                 ← camera shake + screen flash
+  OnWaveStarted(int)                  ← gate glow / wave announcement
+  OnVictory / OnGameOver              ← screen transition FX
+
+  ── VFX Assets có sẵn ────────────────────────────────────────────────────────
+
+  FattyPolyTurretFree/Resources/:
+    Eff_Eexplosion.prefab   ← dùng cho enemy death (scale ~0.3)
+    Eff_Muzzle.prefab       ← tower muzzle flash
+
+  Synty/PolygonGeneric/Shaders/:
+    Generic_ParticlesLit.shadergraph    ← tạo custom particles (lit)
+    Generic_ParticlesUnlit.shadergraph  ← tạo custom particles (unlit)
+
+  Toon Shaders Pro/Textures/Particles/:
+    dirt_03.png             ← particle texture cho ParticleSystem
+
+  KHÔNG có VFX pack riêng → dùng Unity ParticleSystem + Synty shaders.
+
+  ── Phân loại theo effort ────────────────────────────────────────────────────
+
+  🟢 Quick Wins (< 30 phút mỗi cái):
+
+  1. ToonOutlineVolume vào DTGamePlay.unity        [TODO từ s27]
+     → MCP: gameobject-create + Volume component + ToonOutlineProfile.asset
+
+  2. Camera Shake khi mất mạng (OnLifeLost)
+     → 1 Coroutine rung camera ±0.1 units / 0.3s, 0 asset mới
+
+  3. Screen Flash Victory/GameOver
+     → UI Image full-screen alpha 0→flash→0 khi popup mở
+
+  🟡 Medium Effort (~1-2h):
+
+  4. Enemy Death Particles (OnEnemyDied)
+     → TDVFXManager.cs subscribe EventBus, pool-based spawner
+     → Dùng Eff_Eexplosion.prefab scale nhỏ hoặc tạo mới bằng ParticleSystem
+
+  5. Wave Start Gate Effect (OnWaveStarted)
+     → Emission pulse trên GateStart material hoặc ring particle tại gate pos
+
+  6. Tower Muzzle Flash (OnTowerAttacked)
+     → Spawn Eff_Muzzle.prefab tại tower pos, tắt sau 0.5s
+
+  🔴 High Effort (> 2h):
+
+  7. Stage Select UI screen
+     → Panel listing DEMO-1/DEMO-2, wire SelectStage(), cần design mockup
+
+  ── Kiến trúc đề xuất TDVFXManager ──────────────────────────────────────────
+
+  TDVFXManager.cs  (MonoBehaviour, singleton trong DTGamePlay scene)
+    + OnEnable():  subscribe TDGameEventBus.*
+    + OnDisable(): unsubscribe
+    + Pool<ParticleSystem> m_EnemyDeathPool
+    + Pool<ParticleSystem> m_HitPool
+    + Methods:
+        SpawnEnemyDeath(Vector3 pos)
+        SpawnHit(Vector3 pos)
+        CameraShake(float duration, float magnitude)
+
+  ── Thứ tự implement đề xuất ─────────────────────────────────────────────────
+
+  1. ToonOutlineVolume              → 10 phút, visual impact cao ngay
+  2. Camera shake (OnLifeLost)      → 20 phút, feel improvement lớn
+  3. TDVFXManager skeleton + pool   → 30 phút, infrastructure
+  4. Enemy death particles          → 45 phút, Eff_Eexplosion scale down
+  5. Wave start gate effect         → 30 phút
+  6. Stage Select UI                → để sau (game playable không có nó)
+
+
+================================================================================
+  NEXT STEPS — DEVELOPMENT PRIORITY NOTE                      [2026-06-04]
+================================================================================
+
+  Trạng thái hiện tại: Core gameplay loop hoàn chỉnh (35 phases done qua 39 sessions).
+  DEMO-1 (City) + DEMO-2 (Desert), 2-stage flow, retreat mechanic, multi-gate system.
+
+  ── Remaining Work (4 nhóm) ──────────────────────────────────────────────────
+
+  1. New Operators         ← ƯU TIÊN CAO NHẤT
+  2. New Enemies
+  3. VFX + Polish
+  4. Performance
+
+  ── Lý do thứ tự ─────────────────────────────────────────────────────────────
+
+  Operators trước:
+    - Cốt lõi của Arknights là operator diversity tạo ra chiến thuật
+    - Hiện chỉ có Knight (melee blocker) — quá ít để tạo depth
+    - Hệ thống sẵn sàng: OperatorType enum + TDFlyweightOperatorDataSettings + IPlacedUnit
+      → thêm operator mới = chỉ cần enum value + SO data + prefab
+    - Đề xuất thứ tự:
+        a. Sniper  — đứng trên TowerZone, bắn enemy trên đường (khác biệt hoàn toàn vs Knight)
+        b. Medic   — heal operator/tower lân cận (tạo chiều sâu support)
+
+  Enemies sau operators:
+    - 4 type hiện tại (Normal/Fast/Tank/Boss) đủ cho demo, nhưng thiếu variety
+    - Thêm enemy mới có ý nghĩa hơn khi đã có operator mới để counter
+    - Đề xuất:
+        a. Armored  — DEF cao, cần Arts/Caster damage (buộc dùng operator mới)
+        b. Flying   — đi qua obstacle, chỉ bị tấn công bởi air-capable unit
+
+  VFX sau content:
+    - TDGameEventBus đã wire sẵn (OnEnemyDied, OnTowerAttacked, ...)
+    - Implement nhanh, nhưng nên làm sau khi content ổn định
+      (tránh làm VFX 2 lần khi có enemy/operator mới)
+
+  Performance cuối:
+    - Profile trước, optimize sau khi biết bottleneck thực sự
+    - Object pooling (enemies, bullets) đã có — không cần vội
+
+  ── TODO checklist ────────────────────────────────────────────────────────────
+
+  ⬜ [P1] Operator: Sniper (đứng TowerZone, ranged attack)
+  ⬜ [P1] Operator: Medic (heal, support)
+  ⬜ [P2] Enemy: Armored (high DEF, needs Arts damage)
+  ⬜ [P2] Enemy: Flying (bypass obstacles, air-only targeting)
+  ⬜ [P3] VFX: hit effects, death particles, wave start effects (via TDGameEventBus)
+  ⬜ [P3] Polish: Stage Select UI screen (chọn màn trước khi play)
+  ⬜ [P3] Polish: ToonOutlineVolume đặt vào DTGamePlay.unity
+  ⬜ [P3] Polish: Camera shake on life lost
+  ⬜ [P4] Performance: profile & optimize (tile pool, draw calls)
+  ⬜ [P4] Cleanup: dead code TDaStarPathControl cũ, IPathFinderDTO, CONFIG_MAZE_EXTRA_PASSAGE_RATE
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 42 — CUSTOM OPERATORS + DEPLOYZONE STRATEGY PATTERN         [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-04
+
+  ── Custom Operator Analysis ─────────────────────────────────────────────────
+
+  5 custom operator prefabs tại Assets/1.Assets/Resources/Prefabs/CustomOperator/:
+    Tất cả dùng cùng rig family (không phải RPGTinyHero MC, không phải Synty Starter):
+      - 1 combined SkinnedMeshRenderer trên child [mesh]
+      - prop_r / prop_l attach points (weapon gắn ngoài)
+      - ik_hand_gun IK bone
+      - eyeLight_l/r (anime-style eye highlights)
+      - _dyn_ physics chains cho hair, cape, armor
+
+  Phân tích visual → type design:
+    OperatorAce    → hair cape dài (_k suffix), back/hip dynamics → Striker (DoubleSword, PathCell)
+    OperatorGinger → tóc dài 3 hướng, đơn giản              → Sniper (BowAndArrow, TowerZone)
+    OperatorLayla  → không có hair dynamics (helmeted!), armor nặng nhất → Striker (Spear03, PathCell)
+    OperatorMoon   → tóc cực phức tạp 4 chains, mystical     → Caster (MagicWand, TowerZone)
+    OperatorTart   → mũ với headAttach dynamics, to bự       → Defender (Hammer+Shield, PathCell)
+
+  Spear analysis (mesh bounds):
+    Spear02: 430 verts, width=0.178, shaft=0.101 — đơn giản/mảnh
+    Spear03: 1156 verts, width=0.241, shaft=0.101 — dài nhất (2.55u), decorative → Layla chọn
+    Spear04: 836 verts, width=0.248, shaft=0.101 — balanced
+    Spear05: 1507 verts, width=0.369, shaft=0.171 — to/nặng nhất
+
+  ── OperatorType Enum [MODIFIED] ─────────────────────────────────────────────
+
+  File: Assets/2.Scripts/Model/Config/Enum/Enums.cs
+
+  Thêm 5 custom operator values + 1 enum mới:
+
+    // Custom operators (thêm vào sau StrikerTiny)
+    Ace,           // DoubleSword Striker, PathCell — fast dual-wield, block 1
+    Ginger,        // Sniper, TowerZone — BowAndArrow, ranged physical
+    Layla,         // Spear Striker, PathCell — reach melee, block 1
+    Moon,          // Caster, TowerZone — MagicWand, ranged arts
+    Tart,          // Heavy Defender, PathCell — hammer+shield, block 3
+
+    public enum DeployZone
+    {
+        PathCell,   // đặt trên path cell, block enemy
+        TowerZone,  // đặt trên tower zone, ranged attack
+    }
+
+  ── Melee Operator Config.asset [MODIFIED] ────────────────────────────────────
+
+  6 entries cũ (0–5) giữ nguyên. Thêm 5 entries mới:
+
+  [6]  Ace    | cost=18 hp=800  dmg=70  spd=1.8 block=1 | zone=PathCell  | ranges=(1,0)(2,0)(3,0)
+  [7]  Ginger | cost=16 hp=600  dmg=65  spd=1.2 block=0 | zone=TowerZone | ranges=(1,0)→(5,0)
+  [8]  Layla  | cost=18 hp=750  dmg=75  spd=1.5 block=1 | zone=PathCell  | ranges=(1,0)(2,0)(3,0)
+  [9]  Moon   | cost=20 hp=700  dmg=80  spd=1.0 block=0 | zone=TowerZone | ranges=(1,0)→(4,0)
+  [10] Tart   | cost=22 hp=4000 dmg=15  spd=0.8 block=3 | zone=PathCell  | ranges=(0,0)(1,0)
+
+  Tất cả prefab reference đã assign đúng. Icon = null (TODO sau).
+
+  ── DeployZone Strategy Pattern [NEW] ────────────────────────────────────────
+
+  Design decision: if/else trên enum rải rắc nhiều file = Type Code Smell + OCP violation.
+  Giải pháp: Strategy Pattern (giống IGateAssignmentStrategy pattern đã có).
+
+  [NEW] IOperatorBehavior interface
+    Path: Assets/2.Scripts/Control/Tower/OperatorBehavior/IOperatorBehavior.cs
+    Methods:
+      bool CanPlace(Vector3 worldPos)
+      void Place(Vector3 worldPos, Quaternion rotation, TDTowerSlotInfo slotInfo)
+      void OnInit(Vector2Int cell, OperatorData data, TDOperatorView view)
+      bool TryAttack(Vector2Int cell, Vector3 worldPos, OperatorData data)
+      void OnRemove(Vector2Int cell, Vector3 worldPos)
+
+  [NEW] PathCellOperatorBehavior
+    Path: Assets/2.Scripts/Control/Tower/OperatorBehavior/PathCellOperatorBehavior.cs
+    CanPlace  → IsValidOperatorCell(cell) && !HasOperatorAt(cell)
+    Place     → CONFIG_OPERATOR_PLACE_Y, không SetOccupiedCell
+    OnInit    → RegisterOperator + RegisterOperatorView
+    TryAttack → GetBlockedEnemies → TakeDamage (melee)
+    OnRemove  → UnregisterOperator(cell)
+
+  [NEW] TowerZoneOperatorBehavior
+    Path: Assets/2.Scripts/Control/Tower/OperatorBehavior/TowerZoneOperatorBehavior.cs
+    CanPlace  → IsValidPlacement(worldPos) (giống tower)
+    Place     → CONFIG_TOWER_PLACE_Y + SetOccupiedCell (giống tower)
+    OnInit    → no-op (không dùng TDOperatorRegistry)
+    TryAttack → TODO: OverlapSphere targeting (stub, return false)
+    OnRemove  → UnoccupyCell(worldPos)
+
+  Factory [MODIFIED] TDControl.cs:
+    public static IOperatorBehavior CreateOperatorBehavior(DeployZone zone) => zone switch
+    {
+        DeployZone.TowerZone => new TowerZoneOperatorBehavior(),
+        _                    => new PathCellOperatorBehavior(),
+    };
+
+  ── Files refactored ──────────────────────────────────────────────────────────
+
+  [MODIFIED] TDFlyweightOperatorDataSettings.cs (OperatorData class)
+    + deployZone field (DeployZone enum, default PathCell)
+    + blockCount Range đổi [1,3] → [0,3] (TowerZone operator = 0)
+    + IDeployableDTO.MaxTargets: TowerZone → 0, PathCell → Clamp(blockCount, 1, 3)
+
+  [MODIFIED] TDPlaceTowerControl.cs — CheckPlaceOperator():
+    - if/else PathCell/TowerZone branches
+    + GetData(operatorType) → CreateOperatorBehavior(data.deployZone)
+    + behavior.CanPlace() → behavior.Place() (2 dòng, không có branching)
+
+  [MODIFIED] TDOperatorView.cs
+    + m_Behavior: IOperatorBehavior field
+    + Init(): CreateOperatorBehavior(data.deployZone) → m_Behavior.OnInit()
+    + Update(): m_Behavior.TryAttack() → if true: update timer + SetTrigger("Attack")
+    + OnRemove(): m_Behavior.OnRemove(cell, worldPos)
+    - if/else RegisterOperator (chuyển vào PathCellOperatorBehavior)
+    - GetBlockedEnemies attack loop (chuyển vào PathCellOperatorBehavior)
+
+  [MODIFIED] TDSlotHolderMainView.cs
+    + m_CurrentOperatorType field (OperatorType)
+    + OnCreateTower(): lưu slot.operatorType → m_CurrentOperatorType
+    + IsValidOperatorPlacement(): GetData(m_CurrentOperatorType)
+      → CreateOperatorBehavior(data.deployZone) → behavior.CanPlace()
+    - hardcoded IsValidOperatorCell + HasOperatorAt check
+
+  ── SOLID compliance ──────────────────────────────────────────────────────────
+
+  S: Data class (OperatorData) chỉ chứa data ✅
+  O: Thêm DeployZone mới = thêm 1 class mới, không sửa code hiện tại ✅
+  L: N/A ✅
+  I: Interface slim (5 methods liên quan) ✅
+  D: TDOperatorView depend IOperatorBehavior (abstraction), không depend PathCell/TowerZone ✅
+
+  ── Config state: DeployZone per operator ────────────────────────────────────
+
+  PathCell : Knight, Defender, Striker, KnightTiny, DefenderTiny, StrikerTiny, Ace, Layla, Tart
+  TowerZone: Ginger, Moon
+
+  ── Còn lại (chưa làm) ───────────────────────────────────────────────────────
+
+  ⬜ Gắn weapon prefab vào prop_r/prop_l của 5 custom operator prefabs
+  ⬜ Assign Animator Controller cho 5 custom operator prefabs
+  ⬜ TowerZoneOperatorBehavior.TryAttack() — implement OverlapSphere ranged targeting
+  ⬜ ShowOperatorHighlights phân biệt PathCell vs TowerZone (highlight đúng tile type)
+  ⬜ Icon 5 entries mới → render qua RapidIcon
+
+  ── Result ───────────────────────────────────────────────────────────────────
+    ✅ DeployZone enum thêm vào Enums.cs
+    ✅ OperatorData.deployZone field (default PathCell)
+    ✅ IOperatorBehavior interface + 2 implementations
+    ✅ TDControl.CreateOperatorBehavior factory (pattern nhất quán với CreateStrategy)
+    ✅ TDPlaceTowerControl không còn if/else trên DeployZone
+    ✅ TDOperatorView delegate 100% cho behavior (init/attack/remove)
+    ✅ TDSlotHolderMainView dùng behavior.CanPlace()
+    ✅ Config: Ginger + Moon = TowerZone; 9 còn lại = PathCell
+    ✅ 0 compile errors
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 43 — CUSTOM OPERATOR COMPLETION (WEAPONS + ANIM + ICONS)     [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-04
+
+  Goal: Hoàn thành 5 pending items từ Session 42 cho 5 custom operator prefabs
+        (Ace, Ginger, Layla, Moon, Tart).
+
+  ── 1. Weapon Prefabs gắn vào prop_r / prop_l ────────────────────────────────
+
+  Mỗi weapon con được instantiate vào bone prop_r/prop_l với localRot=(0,0,-90).
+
+  OperatorAce:
+    prop_r ← OHS07_Sword.prefab   (guid: 443ccd8f)   dual wield main hand
+    prop_l ← OHS03_Sword.prefab   (guid: 949ce657)   dual wield off hand
+
+  OperatorGinger:
+    prop_r ← Bows.prefab          (guid: 20aa9eda)   compound bow
+
+  OperatorLayla:
+    prop_r ← Spear03.prefab       (guid: 60ec2cc1)   dài nhất (2.55u), decorative
+
+  OperatorMoon:
+    prop_r ← OHS01_Stick.prefab   (guid: d74d166b)   magic wand
+
+  OperatorTart:
+    prop_r ← OHS11_Hammer.prefab  (guid: 2e01e3e0)   heavy hammer
+    prop_l ← Shield10.prefab      (guid: 6bb9e447)   tower shield
+
+  ⚠️ Weapon rotation (0,0,-90) là ước tính theo T-pose — có thể cần fine-tune
+     trong Inspector nếu weapon lệch so với grip animation.
+
+  ── 2. AnimatorController Assign cho 5 custom prefabs ────────────────────────
+
+  3 controllers mới tạo bằng AnimatorController API (Idle→Attack state machine):
+
+  OperatorAce.controller
+    Path: Assets/1.Assets/Resources/AnimatorControllers/OperatorAce.controller
+    Clips: Idle_Battle_DoubleSword.fbx (guid:59239c9a), Attack01_DoubleSword.fbx (guid:f5dbd787)
+    Attack state speed = 1.8
+
+  OperatorGinger.controller
+    Path: Assets/1.Assets/Resources/AnimatorControllers/OperatorGinger.controller
+    Clips: Idle_Battle_BowAndArrow.fbx (guid:7458aa17), Attack01_BowAndArrow.fbx (guid:478630a6)
+    Attack state speed = 1.2
+
+  OperatorMoon.controller
+    Path: Assets/1.Assets/Resources/AnimatorControllers/OperatorMoon.controller
+    Clips: Idle_Battle_MagicWand.fbx (guid:6047a8bb), Attack01_MagicWand.fbx (guid:4659730e)
+    Attack state speed = 1.0
+
+  2 controllers tái dùng (cùng animation phong cách):
+    OperatorLayla ← OperatorStriker.controller  (Spear animation)
+    OperatorTart  ← OperatorDefender.controller (SwordAndShield stance, heavy)
+
+  Tất cả 5 prefab: animator.runtimeAnimatorController đã assign ✅
+
+  Cấu trúc controller đồng nhất với OperatorKnight.controller:
+    Idle (default, loop) → AnyState→Attack (trigger, no exit time, no self-transition)
+    → Attack→Idle (exitTime=0.9, duration=0.1)
+
+  ── 3. TowerZoneOperatorBehavior.TryAttack() implement ───────────────────────
+
+  File: Assets/2.Scripts/Control/Tower/OperatorBehavior/TowerZoneOperatorBehavior.cs
+
+  Trước: return false (TODO stub)
+
+  Sau: Physics.OverlapSphere để tìm TDEnemyView gần nhất trong range.
+
+  Logic:
+    range = (maxOffset + 0.5) × cellSize
+      → maxOffset = Mathf.Max của tất cả rangeOffsets magnitude
+      → +0.5 cell margin để cover enemy đang di chuyển giữa ô
+    Iterate OverlapSphere → filter TryGetComponent<TDEnemyView>
+    → pick nearest (not closest N, no splash — giữ đơn giản)
+    → TakeDamage(data.damage), return true
+
+  Note: enemies không có specific layer → filter bằng TryGetComponent thay vì LayerMask.
+
+  ── 4. ShowOperatorHighlights phân biệt PathCell vs TowerZone ────────────────
+
+  File: Assets/2.Scripts/View/GamePlay/Tower/TDSlotHolderMainView.cs
+
+  OnCreateTower() khi towerType == Operator:
+    Trước: luôn gọi ShowOperatorHighlights() (highlight blue path cells)
+    Sau:
+      opData.deployZone == TowerZone → ShowHighlights()         (green tower zone tiles)
+      opData.deployZone == PathCell  → ShowOperatorHighlights() (blue path cells)
+
+  → TowerZone operators (Ginger, Moon) hiển thị đúng highlight ô tower zone.
+
+  ── 5. Icons cho 10 entries (5 Tiny/Synty + 5 Custom) ───────────────────────
+
+  Phương pháp: Custom Camera+RenderTexture pipeline (RapidIcon không tự động khi editor idle)
+    1. Instantiate prefab off-screen
+    2. OrthographicCamera, size=1.2, fit to Bounds của SkinnedMeshRenderer
+    3. Render → RenderTexture 256×256 → Texture2D → SaveAsPNG
+    4. Reimport Sprite (TextureImporterType.Sprite, mipmapEnabled=false, maxSize=256, uncompressed)
+    5. Assign Sprite vào OperatorData.icon
+
+  10 PNG mới tạo:
+    Assets/1.Assets/Resources/GameIcon/
+      OperatorAce.png          OperatorDefender.png
+      OperatorGinger.png       OperatorStriker.png
+      OperatorLayla.png        OperatorKnightTiny.png
+      OperatorMoon.png         OperatorDefenderTiny.png
+      OperatorTart.png         OperatorStrikerTiny.png
+
+  Melee Operator Config.asset — Icon assignments:
+    [0]  Knight       ← OperatorKnight.png     (cũ, giữ nguyên)
+    [1]  Defender     ← OperatorDefender.png   ✅ (mới)
+    [2]  Striker      ← OperatorStriker.png    ✅ (mới)
+    [3]  KnightTiny   ← OperatorKnightTiny.png ✅ (mới)
+    [4]  DefenderTiny ← OperatorDefenderTiny.png ✅ (mới)
+    [5]  StrikerTiny  ← OperatorStrikerTiny.png ✅ (mới)
+    [6]  Ace          ← OperatorAce.png        ✅ (mới)
+    [7]  Ginger       ← OperatorGinger.png     ✅ (mới)
+    [8]  Layla        ← OperatorLayla.png      ✅ (mới)
+    [9]  Moon         ← OperatorMoon.png       ✅ (mới)
+    [10] Tart         ← OperatorTart.png       ✅ (mới)
+
+  ── Result ───────────────────────────────────────────────────────────────────
+    ✅ Weapon prefabs gắn vào prop_r/prop_l cho tất cả 5 custom operators
+    ✅ AnimatorController assign cho tất cả 5 custom operators
+    ✅ TowerZoneOperatorBehavior.TryAttack() — OverlapSphere range attack
+    ✅ Highlight phân biệt PathCell (xanh) vs TowerZone (xanh lá) operators
+    ✅ 10 icon PNG 256×256 render + reimport, assign vào config [1]–[10]
+    ✅ 0 compile errors
+    ⚠️ Weapon rotation (0,0,-90) có thể cần fine-tune trong Inspector per operator
+
+
+================================================================================
+  NEXT STEPS — DEVELOPMENT PRIORITY NOTE                      [2026-06-04]
+================================================================================
+
+  Trạng thái: 11 operator types đầy đủ config + prefab + icon.
+  Core gameplay loop hoàn chỉnh. Sẵn sàng cho content pass tiếp theo.
+
+  ── TODO checklist ────────────────────────────────────────────────────────────
+
+  ⬜ [P1] Operator: Medic (heal operator/tower lân cận, support role)
+  ⬜ [P2] Enemy: Armored (high DEF, needs Arts/Caster damage to counter)
+  ⬜ [P2] Enemy: Flying (bypass obstacles, air-only targeting)
+  ⬜ [P3] VFX: hit effects, death particles, wave start effects (TDGameEventBus ready)
+  ⬜ [P3] Polish: Stage Select UI screen
+  ⬜ [P3] Polish: ToonOutlineVolume vào DTGamePlay.unity
+  ⬜ [P3] Polish: Camera shake on life lost
+  ⬜ [P4] Performance: profile & optimize (tile pool, draw calls)
+  ⬜ [P4] Cleanup: dead code TDaStarPathControl cũ, IPathFinderDTO, CONFIG_MAZE_EXTRA_PASSAGE_RATE
+  ⬜ Fine-tune weapon rotation cho 5 custom operators (có thể cần per-prefab adjustment)
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 44 — BUGFIXES + SELECTION INDICATOR VFX + RETREAT PANEL ANCHOR  [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-04
+
+  Goal: Fix 2 critical bugs, finalize SelectionIndicator shader, implement
+        camera-aware retreat panel anchor, apply SelectionIndicator to all
+        operator prefabs.
+
+  ── BUG-1: NetworkReachability gate removed (TDControl.cs) ───────────────────
+
+  File: Assets/2.Scripts/Control/TDControl.cs
+
+  Symptom: Gameplay scene never loaded when device was offline (no internet).
+  Cause:   if (Application.internetReachability == NetworkReachability.NotReachable)
+               return;  // silently blocked LoadGameplayScene()
+  Fix:     Removed the guard entirely — game does not require internet.
+  Result:  LoadGameplayScene() now always called unconditionally.
+
+  ── BUG-2: TDGameEventBus events never raised — wired to 6 files ─────────────
+
+  All 7 missing event calls added. OperatorDied was already wired in S43.
+
+  TDEnemyView.cs — Die()
+    + TDGameEventBus.EnemyDied(transform.position, EnemyType);
+
+  TDEnemyView.cs — Update() reached-end branch
+    + TDGameEventBus.LifeLost(transform.position);
+
+  TDEnemyPathMainControl.cs — StartWaveLoop()
+    + TDGameEventBus.WaveStarted(waveIdx);
+
+  TDEnemyPathMainControl.cs — SpawnBatch()
+    + TDGameEventBus.EnemySpawned(spawnWorldPos, type);
+
+  TDGameStateControl.cs — CheckVictory()
+    + TDGameEventBus.Victory();
+
+  TDPlayerLifeControl.cs — LoseLife()
+    + TDGameEventBus.GameOver();  (alongside existing onGameOver?.Invoke())
+
+  TowerZoneOperatorBehavior.cs — TryAttack()
+    + TDGameEventBus.TowerAttacked(worldPos, TowerType.Operator);
+
+  PathCellOperatorBehavior.cs — TryAttack()
+    + TDGameEventBus.TowerAttacked(worldPos, TowerType.Operator);
+
+  ── SelectionIndicator.shader — simplified to border-only ────────────────────
+
+  File: Assets/2.Scripts/Shaders/SelectionIndicator.shader
+
+  User request: "Chỉ cần có border thôi, bên trong trong suốt là dc"
+
+  Before: diamond shape filled + border
+  After:  diamond border only — inside pixels fully transparent
+
+  Key change in fragment shader:
+    float borderMask = inside * step(innerEdge, d);
+    clip(borderMask - 0.001);   // discard all non-border pixels
+    return fixed4(_Color.rgb, _Color.a * borderMask);
+
+  Properties retained: _Color (Color), _BorderWidth (Range 0.005–0.1, default 0.04)
+  Render tags: Queue=Overlay, ZTest Always, ZWrite Off, Blend SrcAlpha OneMinusSrcAlpha
+
+  ── TDOperatorView — SelectionIndicatorTransform property ────────────────────
+
+  File: Assets/2.Scripts/View/GamePlay/Tower/TDOperatorView.cs
+
+  Added:
+    public Transform SelectionIndicatorTransform
+        => m_SelectionIndicator != null ? m_SelectionIndicator.transform : null;
+
+  Used by TDOperatorSelectionView.GetIndicatorUpperLeftEdge() to access diamond
+  indicator transform without breaking encapsulation.
+
+  ── TDOperatorSelectionView — camera-aware retreat panel anchor ──────────────
+
+  File: Assets/2.Scripts/View/GamePlay/Tower/TDOperatorSelectionView.cs
+
+  User request: panel always at the upper-left edge midpoint of the diamond
+                indicator, centered on that edge.
+
+  Replaced hardcoded worldPos + Vector3.up * offset with GetIndicatorUpperLeftEdge():
+
+  Algorithm:
+    1. Compute 4 L1 diamond tips using transform.right / transform.up × halfScale
+       (works for any Quad rotation, including Euler(90,0,45))
+    2. Project all 4 tips to screen space via Camera.main.WorldToScreenPoint
+    3. topIdx  = tip with highest screen Y  (topmost in screen)
+    4. leftIdx = tip with lowest screen X   (leftmost in screen)
+    5. Return (tips[topIdx] + tips[leftIdx]) × 0.5f — midpoint of upper-left edge
+
+  Fallback to op.transform.position + Vector3.up * OPERATOR_PANEL_WORLD_Y_OFFSET
+  when SelectionIndicatorTransform is null.
+
+  Camera-independent: recalculates every frame in Update → correct for any
+  camera angle or movement.
+
+  ── SelectionIndicator applied to 10 operator prefabs ────────────────────────
+
+  Applied via MCP script-execute (PrefabUtility.LoadPrefabContents pattern).
+  Each prefab received a "SelectionIndicator" child matching OperatorKnight setup:
+    Quad mesh, localPosition=(0, 0.12, 0), localEulerAngles=(90, 45, 0)
+    localScale=(2.6, 2.6, 1), activeSelf=false, no MeshCollider
+    Material: Assets/1.Assets/Materials/UI/SelectionIndicator.mat
+
+  Prefabs updated:
+    OperatorDefender.prefab
+    OperatorStriker.prefab
+    OperatorKnightTiny.prefab
+    OperatorDefenderTiny.prefab
+    OperatorStrikerTiny.prefab
+    CustomOperator/OperatorAce/OperatorAce.prefab
+    CustomOperator/OperatorGinger/OperatorGinger.prefab
+    CustomOperator/OperatorLayla/OperatorLayla.prefab
+    CustomOperator/OperatorMoon/OperatorMoon.prefab
+    CustomOperator/OperatorTart/OperatorTart.prefab
+
+  ── Result ───────────────────────────────────────────────────────────────────
+    ✅ BUG-1: Offline gameplay unblocked (NetworkReachability guard removed)
+    ✅ BUG-2: All 7 TDGameEventBus events now raised at correct callsites
+    ✅ SelectionIndicator.shader border-only (inside transparent)
+    ✅ TDOperatorView.SelectionIndicatorTransform exposed
+    ✅ Retreat panel anchor — upper-left diamond edge midpoint (camera-aware)
+    ✅ 10 operator prefabs: SelectionIndicator child applied
+    ✅ 0 compile errors
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 45 — WEAPON ANIM FIX + SPEED BUG + LANA STUDIO + PROJECT REVIEW  [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-04
+
+  ── SelectionIndicator Transform Correction (S44 batch values sai) ────────────
+
+  S44 đã apply batch cho 10 prefabs với values sai:
+    localPosition=(0, 0.12, 0), localEulerAngles=(90, 45, 0), localScale=(2.6, 2.6, 1)
+
+  S44 cũng đã nâng cấp OperatorKnight lên values mới (read actual từ prefab):
+    localPosition=(0, 2, 0), localEulerAngles=(90, 0, 0), localScale=(3, 3, 1)
+
+  Fix: Re-apply batch cho tất cả 11 operator prefabs (OperatorKnight + 10 còn lại)
+  với values chính xác đọc từ OperatorKnight.prefab:
+    localPosition    : (0, 2, 0)     [trước: (0, 0.12, 0)]
+    localEulerAngles : (90, 0, 0)    [trước: (90, 45, 0)]
+    localScale       : (3, 3, 1)     [trước: (2.6, 2.6, 1)]
+    activeSelf       : false
+    Material         : Assets/1.Assets/Materials/UI/SelectionIndicator.mat
+
+  Prefabs updated (tất cả 11):
+    OperatorKnight, OperatorDefender, OperatorStriker
+    OperatorKnightTiny, OperatorDefenderTiny, OperatorStrikerTiny
+    OperatorAce, OperatorGinger, OperatorLayla, OperatorMoon, OperatorTart
+
+  ── BUG-FIX: Weapon không vung theo animation (weapon_r vs prop_r mismatch) ───
+
+  Bug report: "check animator của OperatorKnight => khi attack => weapon không vung theo"
+
+  Root cause analysis:
+    RPGTinyHeroWavePBR animation clips có generic curves cho bone path:
+      root/.../hand_r/weapon_r  và  root/.../hand_l/weapon_l
+    Synty SidekickCharacters rig có:
+      root/.../hand_r/prop_r    và  root/.../hand_l/prop_l
+    → Name mismatch → Unity generic curve binding không match → weapon đứng yên
+
+  Xác nhận qua script-execute đọc AnimationClip bindings của Attack01_SingleSword.fbx:
+    197 curve bindings, 9 unique bone paths
+    KEY: weapon bone path = "root/.../hand_r/weapon_r" (KHÔNG phải prop_r)
+    Tất cả animation types (DoubleSword, BowAndArrow, Spear, MagicWand, SwordAndShield)
+    đều dùng weapon_r + weapon_l
+
+  Fix: Thêm empty GameObject weapon_r/weapon_l làm child của hand_r/hand_l:
+    hand_r/
+      prop_r  (giữ nguyên — cần cho skinning)
+      weapon_r  [NEW] (localPosition=0,0,0 localEulerAngles=0,0,0 localScale=1,1,1)
+        → weapon mesh children di chuyển từ prop_r → weapon_r
+    hand_l/
+      prop_l  (giữ nguyên)
+      weapon_l  [NEW] (identity transform)
+        → shield/off-hand mesh children di chuyển từ prop_l → weapon_l
+
+  Applied qua MCP script-execute (PrefabUtility.LoadPrefabContents) cho tất cả 11 prefabs:
+    OperatorKnight     → weapon_r (OHS09_Sword / OHS05_Sword), weapon_l (Shield15 / Shield10)
+    OperatorDefender   → weapon_r (OHS05_Sword), weapon_l (Shield10)
+    OperatorStriker    → weapon_r (Spear01)
+    OperatorKnightTiny → weapon_r (OHS09_Sword), weapon_l (Shield15)
+    OperatorDefenderTiny → weapon_r (OHS11_Hammer), weapon_l (Shield10)
+    OperatorStrikerTiny → weapon_r (Spear01)
+    OperatorAce        → weapon_r (OHS07_Sword), weapon_l (OHS03_Sword)
+    OperatorGinger     → weapon_r (Bows)
+    OperatorLayla      → weapon_r (Spear03)
+    OperatorMoon       → weapon_r (OHS01_Stick)
+    OperatorTart       → weapon_r (OHS11_Hammer), weapon_l (Shield10)
+
+  ── BUG-FIX: Speed x2 không tăng tốc độ + coin ──────────────────────────────
+
+  Bug report: "khi speed x2, tốc độ + coin vẫn ko tăng"
+
+  Root cause tracing:
+    TDControl.InitOtherControl(): tạo TDSpeedControl mới, SpeedMultiplier=0 (chưa init)
+    TDGameplayHUDView.Start() → InitControls() → TDSpeedControl.api.Initialize()
+    Initialize() cũ:
+      SpeedMultiplier = SPEED_NORMAL;  // = 1f
+      onSpeedChanged?.Invoke(...)
+      // MISSING: không set Time.timeScale = 1f
+
+    Scenario bug:
+      User ở x2 → popup win/lose → Pause() đặt Time.timeScale=0 (không reset về 1)
+      Reload scene: Time.timeScale vẫn = 2 (persist qua scene load — Unity behavior)
+      Initialize() chạy: SpeedMultiplier=1, nhưng Time.timeScale vẫn=2
+      User click x2: SpeedMultiplier 1→2, Time.timeScale = 2 (đã là 2 → no change)
+      Kết quả: player thấy x1 nhưng game chạy x2 → click x2 không có tác dụng visual
+
+  Fix: Assets/2.Scripts/Control/Gameplay/TDSpeedControl.cs
+    public void Initialize()
+    {
+        SpeedMultiplier = SPEED_NORMAL;
+        Time.timeScale  = SPEED_NORMAL;  // ← ADDED
+        onSpeedChanged?.Invoke(SpeedMultiplier);
+    }
+
+  Confirmed passive gold logic cũng đúng:
+    TDGoldControl.Tick(Time.deltaTime): accumulator += deltaTime
+    Time.deltaTime scale automatically theo Time.timeScale
+    → x2 speed = deltaTime x2 → accumulator tăng x2 → coin passive x2
+    Pause-aware: Time.timeScale=0 → deltaTime=0 → accumulator không tăng ✅
+
+  ── Passive Gold Rate confirm ─────────────────────────────────────────────────
+
+  TDConstant.CONFIG_GOLD_PASSIVE_RATE = 5f  (giây/+1 gold)
+  x1 speed: +1 gold mỗi 5 giây
+  x2 speed: +1 gold mỗi 2.5 giây (do deltaTime x2)
+
+  ── Import: Lana Studio Casual RPG VFX ────────────────────────────────────────
+
+  Path: Assets/1.Assets/UnityStore Resources/Lana Studio/Casual RPG VFX/
+
+  Inventory:
+    141 Prefabs (13 categories)
+    41 Materials (Additive + Alpha blend variants)
+    141 Textures (PNG + 1 PSD)
+    8 FBX models (Cylinder/Sphere variants)
+    4 Animation clips + 4 Animator controllers
+    13 Demo scenes
+    1 Utility script (UVscroll.cs)
+    URP Upgrade package đi kèm
+
+  Categories:
+    Area_generic (8)     — AoE area markers
+    Backlight_resources (8) — coin/diamond/health/heart drop VFX
+    Burst/Flash/Poof (12)— burst, flash, poof effects
+    Fire (13)            — fire, explosion, flamethrower
+    Fog (6)              — elemental fog (electric/frost/poison/speed)
+    Loot (4)             — drop/pickup VFX
+    Orbs (5)             — elemental orbs
+    Range Attack Hit (9) — hit effects per element
+    Range Attack Projectiles (10) — projectile per element
+    Regeneration (8)     — HP/mana regen loops
+    Shields (5)          — elemental shield effects
+    Slash (12)           — melee slash VFX (once/loop per element)
+    States (8)           — aura, level_up, stun, misses, etc.
+    Top Down Attack (18) — top-down AoE attacks (beam/bomb/ice/lightning/rocket/stone)
+
+  VFX map cho game hiện tại:
+    Melee attack (operator) → Slash_magic_once / Slash_stone_once / Slash_fire_once
+    Range hit (enemy)       → Hit_fire / Hit_magic / Hit_frost
+    Enemy die               → Poof_generic / Poof_electric
+    Operator deploy         → Level_up.prefab
+    Win popup               → Burst_rings + Poof_coins
+    Lose popup              → Poof_electric
+    Gold earn passive       → backlight_coin
+    Speed x2 active         → Aura_acceleration
+    Slow/debuff on enemy    → Fog_speedSlow / Aura_slowdown
+    Top-down tower attack   → top_down_lightning_dot / top_down_rocket_dot
+
+  ── Full Project Review ───────────────────────────────────────────────────────
+
+  Thực hiện audit toàn bộ 342 scripts, 46+ prefabs, 10 config assets, 2 scenes.
+
+  KIẾN TRÚC: Tốt — MVC separation rõ, Strategy/Factory/Observer/Flyweight/Pool đều đúng.
+  Dead code: ServiceLocator, Injector, TDWebService, cũ TDaStarPathControl methods.
+
+  GAMEPLAY SYSTEMS đang hoạt động đúng:
+    ✅ Maze path gen (iterative stack)
+    ✅ Wave spawning async + pause-aware
+    ✅ 2-phase mobile input (Arknights-style)
+    ✅ Victory condition + gold passive (cả 2 fixed session này)
+    ✅ Retreat 50% refund
+    ✅ Multi-gate 4 strategies 6 layouts
+
+  GAMEPLAY ISSUES còn lại:
+    - IsPlacingUnit static flag không reset khi scene load
+    - Enemy state 4 booleans → nên là enum state machine
+    - GoldControl.Tick() gọi từ HUDView.Update() (SRP violation)
+    - Retreat không có cooldown / confirm dialog
+    - m_TowerHighlightPrefab chưa được load (BUG từ review cũ)
+
+  UI CANVAS — CẦN UPDATE:
+    1. Win/Lose Popup: không có animation (fade/scale), không có star rating,
+       không có "wave reached" stat, chưa dùng Lana Studio VFX
+    2. Retreat Panel: không hiển thị refund amount, không có confirm dialog,
+       không pause-aware, không có cooldown indicator
+    3. HUD chung: text-only (không có icon tim, coin icon)
+
+  VFX/AUDIO:
+    ✅ Lana Studio imported — 141 prefab sẵn sàng
+    ✅ TDGameEventBus đã wire (OnEnemyDied, OnVictory, OnGameOver, OnWaveStarted, ...)
+    ❌ Chưa có TDVFXManager để subscribe bus + spawn VFX
+    ❌ Không có Audio system
+
+  CONTENT:
+    ✅ 11 operators (3 Synty + 3 MC Tiny + 5 custom)
+    ✅ 4 enemy types
+    ✅ 5 tower types
+    ✅ 2 stages (DEMO-1 City + DEMO-2 Desert)
+
+  MISSING FEATURES (priority order):
+    🔴 Stage Select UI screen
+    🔴 Win/Lose popup redesign (animation + star rating + Lana VFX)
+    🔴 Retreat confirm dialog + refund amount display
+    🟡 TDVFXManager + VFX wiring (Lana Studio assets → EventBus)
+    🟡 Retreat cooldown
+    🟡 Audio system
+    🟢 Enemy state machine (enum)
+    🟢 Dead code cleanup
+
+  ── Result ───────────────────────────────────────────────────────────────────
+    ✅ SelectionIndicator transform corrected to (0,2,0)/(90,0,0)/(3,3,1) — 11 prefabs
+    ✅ weapon_r + weapon_l bones added to all 11 prefabs — weapon animation now works
+    ✅ TDSpeedControl.Initialize() reset Time.timeScale = 1 — speed x2 bug FIXED
+    ✅ Passive gold logic verified correct (x2 speed → x2 coin rate)
+    ✅ Lana Studio Casual RPG VFX imported + catalogued + mapped to game events
+    ✅ Full project review completed — UI canvas update items noted
+
+
+================================================================================
+  DEMO EVALUATION — Unity Developer 4 Years Exp             [2026-06-04]
+================================================================================
+
+  ── ĐIỂM MẠNH ────────────────────────────────────────────────────────────────
+
+  Architecture (8/10):
+    + MVC separation rõ ràng, không spaghetti MonoBehaviour
+    + Strategy Pattern: gate assignment (4 modes) + operator behavior (2 zones) — OCP chuẩn
+    + TDGameEventBus static event hub — cross-cutting concerns tách đúng
+    + Flyweight (SO data) + Object Pool (enemies/bullets) — expect thấy ở dev 4 năm
+    + IOperatorBehavior + CreateOperatorBehavior factory — extensible design
+
+  System depth (7/10):
+    + Async Task-based wave loop với pause-aware delay (không Coroutine naive)
+    + Maze gen iterative stack (không đệ quy → không stack overflow)
+    + 2-phase mobile input (Arknights drag→snap→direction) — non-trivial
+    + Multi-gate: 6 layout × 4 strategies — configurable + extendable
+    + Time.timeScale integration đúng (pause + speed + resume consistent)
+
+  Data config (7/10):
+    + ScriptableObject per stage/visual/operator — đúng Unity pattern
+    + TDStageRepository + progression — clean
+    + TDConstant centralized — không hardcode rải rắc
+
+  ── ĐIỂM YẾU ─────────────────────────────────────────────────────────────────
+
+  Visual polish (4/10):
+    - Win/Lose popup: không có animation, không có entrance/exit transition
+    - Retreat panel: 1 nút, không confirm, không refund preview
+    - HUD: thuần text, không có icon, số liệu không format đẹp
+    - Không có VFX nào (dù EventBus sẵn sàng + Lana Studio đã import)
+    - Không có audio — hoàn toàn im lặng
+    → Đây là điểm trừ lớn nhất khi demo
+
+  Unity-specific gaps (5/10):
+    - Không có Stage Select UI — player không biết chọn màn thế nào
+    - IsPlacingUnit static flag không reset khi scene load → potential stuck state
+    - Gold tick trong HUDView.Update() — SRP violation
+    - Enemy state: 4 booleans thay vì enum state machine — red flag với reviewer
+    - Dead code còn nhiều: ServiceLocator, Injector, old A* methods
+
+  Performance awareness (5/10):
+    - Không có object pool cho VFX
+    - Tile instantiation mỗi lần gen map — không pooled
+    - Camera.main trong Update() (TDOperatorSelectionView) — allocate mỗi frame
+    - Không có profiling data
+
+  ── SO SÁNH VỚI EXPECTATION ──────────────────────────────────────────────────
+
+  Tiêu chí                    | Dev 4 năm expect         | Project hiện tại
+  ──────────────────────────────────────────────────────────────────────────────
+  Code architecture           | Clean MVC/patterns        | ✅ Tốt hơn average
+  Unity patterns (Pool/SO/..) | Đúng cách                 | ✅ Phần lớn đúng
+  Visual completeness         | Playable + polished       | ⚠️ Playable, raw
+  Audio                       | Ít nhất SFX cơ bản       | ❌ Hoàn toàn không
+  UI/UX                       | Smooth transitions        | ❌ Functional-only
+  Performance awareness       | Profiling + optimization  | ⚠️ Chưa làm
+  Game feel (VFX + feedback)  | Có                        | ❌ Thiếu hoàn toàn
+
+  ── KẾT LUẬN ─────────────────────────────────────────────────────────────────
+
+  Technical interview  : 7/10 — architecture gây ấn tượng, nhưng sẽ bị hỏi về
+                                  SRP violation HUDView, static flag, thiếu state machine.
+  Gameplay demo        : 4/10 — chơi được nhưng cảm giác "prototype".
+                                  Không âm thanh, không VFX, không transition.
+
+  Gap lớn nhất cần fill trước khi demo (est. 6–8 giờ):
+    1. 3–4 VFX: melee slash, enemy die, win/lose effect  (~2–3h)
+    2. Popup animation đơn giản: DOTween scale/fade      (~1h)
+    3. 1–2 SFX cơ bản: attack sound, coin sound          (~30min)
+    4. Stage Select screen                               (~2h)
+
+  → Với 6–8 giờ polish, demo có thể lên 7–8/10 với dev cùng level.
+
+
 ================================================================================
   END OF CHANGELOG
 ================================================================================

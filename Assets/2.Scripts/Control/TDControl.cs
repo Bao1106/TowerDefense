@@ -19,11 +19,6 @@ public class TDControl
         Debug.Log("Init mini app main control");
         InitOtherControl();
 
-        if (Application.internetReachability == NetworkReachability.NotReachable)
-        {
-            return;
-        }
-        
         LoadGameplayScene();
         //AppBridge.Instance.CallOnMiniAPIReady(OnApiMiniAppReady);
     }
@@ -40,7 +35,7 @@ public class TDControl
         TDEnemyPathMainControl.api    = new TDEnemyPathMainControl();
         TDTowerMainControl.api        = new TDTowerMainControl();
         TDaStarPathControl.api        = new TDaStarPathControl();
-        TDMazePathGenerator.api       = new TDMazePathGenerator();
+        TDMazePathGenerator.api       = new TDMazePathGenerator(TDaStarPathControl.api);
         
         //Init sub control
         TDOperatorRegistry.api    = new TDOperatorRegistry();
@@ -82,6 +77,21 @@ public class TDControl
     //     }));
     // }
     
+    public static IOperatorBehavior CreateOperatorBehavior(TDEnums.DeployZone zone) => zone switch
+    {
+        TDEnums.DeployZone.TowerZone => new TowerZoneOperatorBehavior(),
+        _                            => new PathCellOperatorBehavior(),
+    };
+
+    public static IGateAssignmentStrategy CreateStrategy(TDEnums.GateAssignmentMode mode) => mode switch
+    {
+        TDEnums.GateAssignmentMode.RoundRobin   => new RoundRobinStrategy(),
+        TDEnums.GateAssignmentMode.Random       => new RandomStrategy(),
+        TDEnums.GateAssignmentMode.PerWave      => new PerWaveStrategy(),
+        TDEnums.GateAssignmentMode.Simultaneous => new SimultaneousStrategy(),
+        _                                       => new RoundRobinStrategy(),
+    };
+
     private void LoadGameplayScene()
     {
         SceneManager.LoadSceneAsync(TDConstant.SCENE_GAMEPLAY, LoadSceneMode.Additive);

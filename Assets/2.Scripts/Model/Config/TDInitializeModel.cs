@@ -13,5 +13,9 @@ public class TDInitializeModel
     
     public readonly TaskCompletionSource<bool> createGridCompletion = new TaskCompletionSource<bool>();
 
-    public static void Reset() => m_api = null;
+    public static void Reset()
+    {
+        m_api = null;
+        TDStageMaterialCache.Clear();
+    }
 }

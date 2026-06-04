@@ -40,7 +40,13 @@ public class TDGameplayMainView : MonoBehaviour
         m_TDEnemyPathMainView = transform.Find(TDConstant.GAMEPLAY_ENEMY_PATH_MAIN_VIEW)
                                          .GetComponent<TDEnemyPathMainView>();
         m_TDEnemyPathMainView.ApplyVisual(stage?.VisualConfig);
+        m_TDEnemyPathMainView.ApplyStageConfig(stage);
         m_TDEnemyPathMainView.SetLevelIndex(stage?.LevelIndex ?? 0);
+
+        // Wire gate assignment strategy theo stage config
+        var strategy = TDControl.CreateStrategy(stage?.GateMode ?? TDEnums.GateAssignmentMode.RoundRobin);
+        TDEnemyPathMainControl.api.SetStrategy(strategy);
+
         TDGameplayMainControl.api.InitEnemyPath(m_TDEnemyPathMainView, gridDTO);
     }
 

@@ -16,3 +16,7 @@ MonoBehaviour:
   DisplayName: DEMO-2
   LevelIndex: 1
   VisualConfig: {fileID: 11400000, guid: e8f462d5f57b6d74ba71033054f5b897, type: 2}
+  StartGateCount: 1
+  EndGateCount: 1
+  Layout: 0
+  GateMode: 0

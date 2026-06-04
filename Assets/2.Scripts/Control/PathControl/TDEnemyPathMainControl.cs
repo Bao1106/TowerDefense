@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using TDEnums;
@@ -12,12 +13,17 @@ public class TDEnemyPathMainControl
 {
     public static TDEnemyPathMainControl api;
 
-    public Action<Vector2Int, Vector2Int>      onGetEnemyPos;
-    public Action<List<List<IGridCellDTO>>>    onGetAllPaths;
-    public Action<int>                         onWaveStart;
-    public Action<List<Vector3>>               onValidTowerCellsReady;
+    public Action<List<TDPathGroup>>  onGroupsReady;
+    public Action<int, int>           onWaveGroupStart;   // (waveIdx, groupIdx)
+    public Action<List<Vector3>>      onValidTowerCellsReady;
 
-    // ── Enemy Object Pools (1 per EnemyType) ─────────────────────────────────
+    private IGateAssignmentStrategy m_Strategy;
+
+    public void SetStrategy(IGateAssignmentStrategy strategy)
+        => m_Strategy = strategy;
+
+    // ── Enemy Object Pools ────────────────────────────────────────────────────
+
     private readonly Dictionary<EnemyType, IObjectPool<TDEnemyView>> m_EnemyPools
         = new Dictionary<EnemyType, IObjectPool<TDEnemyView>>();
     private TDFlyweightEnemyDataSettings m_FlyweightEnemyDataSettings;
@@ -40,7 +46,7 @@ public class TDEnemyPathMainControl
             var capturedParent = parent;
 
             m_EnemyPools[type] = new ObjectPool<TDEnemyView>(
-                createFunc: () =>
+                createFunc:      () =>
                 {
                     var go   = Object.Instantiate(capturedData.prefab, capturedParent);
                     var view = go.GetComponent<TDEnemyView>() ?? go.AddComponent<TDEnemyView>();
@@ -64,45 +70,97 @@ public class TDEnemyPathMainControl
             Debug.LogError($"[TDEnemyPathMainControl] No pool for EnemyType.{enemy.EnemyType}");
     }
 
-    // ── Path / Grid Setup ────────────────────────────────────────────────────
+    // ── Gate Setup ────────────────────────────────────────────────────────────
 
-    public void InitEnemyPath(IGridDTO gridDTO, Vector2Int startPoint, Vector2Int endPoint)
+    // Mark tất cả start/end cells trong gridDTO theo groups
+    public void InitEnemyPath(IGridDTO gridDTO, List<TDPathGroup> groups)
     {
-        startPoint.x = Mathf.Clamp(startPoint.x, 0, gridDTO.width  - 1);
-        startPoint.y = Mathf.Clamp(startPoint.y, 0, gridDTO.height - 1);
-        endPoint.x   = Mathf.Clamp(endPoint.x,   0, gridDTO.width  - 1);
-        endPoint.y   = Mathf.Clamp(endPoint.y,   0, gridDTO.height - 1);
-
-        gridDTO.SetCell(startPoint.x, startPoint.y, new TDGridCellDTO(startPoint.x, startPoint.y, CellType.Start));
-        gridDTO.SetCell(endPoint.x,   endPoint.y,   new TDGridCellDTO(endPoint.x,   endPoint.y,   CellType.End));
-
-        onGetEnemyPos?.Invoke(startPoint, endPoint);
+        foreach (var g in groups)
+        {
+            var sc = g.StartCell;
+            var ec = g.EndCell;
+            sc.x = Mathf.Clamp(sc.x, 0, gridDTO.width  - 1);
+            sc.y = Mathf.Clamp(sc.y, 0, gridDTO.height - 1);
+            ec.x = Mathf.Clamp(ec.x, 0, gridDTO.width  - 1);
+            ec.y = Mathf.Clamp(ec.y, 0, gridDTO.height - 1);
+            gridDTO.SetCell(sc.x, sc.y, new TDGridCellDTO(sc.x, sc.y, CellType.Start));
+            gridDTO.SetCell(ec.x, ec.y, new TDGridCellDTO(ec.x, ec.y, CellType.End));
+        }
     }
 
-    // Maze Extraction: gen N mazes độc lập, mỗi maze cho 1 path, combine thành unified grid
-    public void GenerateAllPaths(IGridDTO gridDTO, Vector2Int startPoint, Vector2Int endPoint)
-    {
-        List<List<IGridCellDTO>> allPaths =
-            TDMazePathGenerator.api.GenerateMultiplePaths(gridDTO, startPoint, endPoint, TDConstant.CONFIG_NUM_PATHS);
+    // ── Path Groups ───────────────────────────────────────────────────────────
 
-        Debug.Log($"<color=cyan>GenerateAllPaths (Maze): {allPaths.Count}/{TDConstant.CONFIG_NUM_PATHS} paths</color>");
-        onGetAllPaths?.Invoke(allPaths);
+    // Universal pairing: groupCount = max(startCount, endCount)
+    // start[i % startCount] → end[i % endCount]
+    // Cross pairing khi 2s2e để tăng Y displacement (windiness)
+    public List<TDPathGroup> BuildPathGroups(TDStageConfig stage, IGridDTO gridDTO)
+    {
+        // Fallback defaults khi stage null (e.g. stageId không tìm thấy)
+        int               startCount = stage?.StartGateCount ?? 1;
+        int               endCount   = stage?.EndGateCount   ?? 1;
+        TDEnums.MapLayout layout     = stage?.Layout         ?? TDEnums.MapLayout.LeftToRight;
+
+        var (startBorder, endBorder) = TDGatePlacer.GetBorders(layout);
+
+        var startCells = TDGatePlacer.Place(startCount, startBorder, gridDTO.width, gridDTO.height);
+        var endCells   = TDGatePlacer.Place(endCount,   endBorder,   gridDTO.width, gridDTO.height);
+
+        // Cross pairing: đảo endCells khi 2s2e — tăng Y displacement
+        if (startCount == 2 && endCount == 2)
+            endCells.Reverse();
+
+        int groupCount    = Mathf.Max(startCells.Count, endCells.Count);
+        int pathsPerGroup = TDConstant.CONFIG_NUM_PATHS; // mỗi group luôn có đủ corridors
+
+        var groups = new List<TDPathGroup>(groupCount);
+        for (int i = 0; i < groupCount; i++)
+        {
+            var sc = startCells[i % startCells.Count];
+            var ec = endCells  [i % endCells.Count];
+            groups.Add(new TDPathGroup
+            {
+                StartCell     = sc,
+                EndCell       = ec,
+                StartBorder   = startBorder,
+                SpawnWorldPos = TDGridMainModel.api.CellToWorld(sc),
+                PathCount     = pathsPerGroup,
+                Corridors     = new List<List<IGridCellDTO>>(),
+            });
+        }
+
+        Debug.Log($"<color=cyan>[BuildPathGroups] {groupCount} groups, {pathsPerGroup} paths/group</color>");
+        return groups;
     }
 
-    // Maze B1: valid tower cells = wall cells (non-walkable) excluding start/end buffer + occupied cells
-    public void ComputeValidTowerCells(IGridDTO gridDTO, Vector2Int start, Vector2Int end)
+    // ── Path Generation ───────────────────────────────────────────────────────
+
+    public void GenerateAllPaths(IGridDTO gridDTO, List<TDPathGroup> groups)
     {
-        // Exclusion zone: start/end + 2-cell radius — prevent obstacles spawning at gate entrances
+        TDMazePathGenerator.api.GenerateForGroups(gridDTO, groups);
+
+        int total = groups.Sum(g => g.Corridors.Count);
+        Debug.Log($"<color=cyan>[GenerateAllPaths] {total} corridors across {groups.Count} groups</color>");
+
+        onGroupsReady?.Invoke(groups);
+    }
+
+    // Valid tower cells = wall cells, excluding gate buffers và occupied cells
+    public void ComputeValidTowerCells(IGridDTO gridDTO, List<TDPathGroup> groups)
+    {
         const int gateBuffer = 2;
         var excluded = new HashSet<Vector2Int>();
-        for (int dx = -gateBuffer; dx <= gateBuffer; dx++)
-            for (int dy = -gateBuffer; dy <= gateBuffer; dy++)
-            {
-                var s = new Vector2Int(start.x + dx, start.y + dy);
-                var e = new Vector2Int(end.x   + dx, end.y   + dy);
-                if (s.x >= 0 && s.x < gridDTO.width && s.y >= 0 && s.y < gridDTO.height) excluded.Add(s);
-                if (e.x >= 0 && e.x < gridDTO.width && e.y >= 0 && e.y < gridDTO.height) excluded.Add(e);
-            }
+
+        foreach (var group in groups)
+        {
+            for (int dx = -gateBuffer; dx <= gateBuffer; dx++)
+                for (int dy = -gateBuffer; dy <= gateBuffer; dy++)
+                {
+                    var s = new Vector2Int(group.StartCell.x + dx, group.StartCell.y + dy);
+                    var e = new Vector2Int(group.EndCell.x   + dx, group.EndCell.y   + dy);
+                    if (s.x >= 0 && s.x < gridDTO.width && s.y >= 0 && s.y < gridDTO.height) excluded.Add(s);
+                    if (e.x >= 0 && e.x < gridDTO.width && e.y >= 0 && e.y < gridDTO.height) excluded.Add(e);
+                }
+        }
 
         Vector3[,] grid          = TDGridMainModel.api.GetGrid();
         var        validPositions = new List<Vector3>();
@@ -110,56 +168,81 @@ public class TDEnemyPathMainControl
         for (int x = 0; x < gridDTO.width; x++)
             for (int y = 0; y < gridDTO.height; y++)
             {
-                if (gridDTO.GetCell(x, y).isWalkable) continue;           // skip path cells
-                if (excluded.Contains(new Vector2Int(x, y))) continue;    // skip gate buffer
-                if (!TDGridMainModel.api.IsValidPlacement(grid[x, y])) continue; // skip occupied (path tiles already SetOccupied)
+                if (gridDTO.GetCell(x, y).isWalkable)                      continue;
+                if (excluded.Contains(new Vector2Int(x, y)))                continue;
+                if (!TDGridMainModel.api.IsValidPlacement(grid[x, y]))      continue;
                 validPositions.Add(grid[x, y]);
             }
 
-        Debug.Log($"<color=cyan>ComputeValidTowerCells (Maze): {validPositions.Count} wall cells = tower spots</color>");
+        Debug.Log($"<color=cyan>[ComputeValidTowerCells] {validPositions.Count} wall cells = tower spots</color>");
         onValidTowerCellsReady?.Invoke(validPositions);
     }
 
-    // ── Wave Loop (LevelConfig-driven) ───────────────────────────────────────
-    // allPaths[0] = corridor 1, allPaths[1] = corridor 2 (fallback to [0] nếu chỉ có 1)
-    public async void StartWaveLoop(Vector3 spawnWorldPos,
-        List<List<IGridCellDTO>> allPaths, LevelConfig config, CancellationToken ct)
+    // ── Wave Loop ────────────────────────────────────────────────────────────
+
+    public async void StartWaveLoop(List<TDPathGroup> groups,
+        List<List<EnemyType>> wavePlans, LevelConfig config, CancellationToken ct)
     {
-        if (allPaths == null || allPaths.Count == 0)
+        if (groups == null || groups.Count == 0 || groups.All(g => g.Corridors.Count == 0))
         {
-            Debug.LogError("<color=red>StartWaveLoop: no paths available</color>");
+            Debug.LogError("<color=red>StartWaveLoop: no groups/corridors available</color>");
             return;
         }
 
-        List<List<EnemyType>>         waveBatches = BuildWavePlans(config.difficulty, config.waveCount, config.totalEnemies);
-        DifficultyRatioTable.RatioRow ratio        = DifficultyRatioTable.Get(config.difficulty);
-
-        Debug.Log($"<color=green>StartWaveLoop: {waveBatches.Count} waves, difficulty={config.difficulty}</color>");
+        DifficultyRatioTable.RatioRow ratio = DifficultyRatioTable.Get(config.difficulty);
+        Debug.Log($"<color=green>StartWaveLoop: {wavePlans.Count} waves, {groups.Count} groups</color>");
 
         try
         {
-            for (int waveIdx = 0; waveIdx < waveBatches.Count; waveIdx++)
+            for (int waveIdx = 0; waveIdx < wavePlans.Count; waveIdx++)
             {
                 ct.ThrowIfCancellationRequested();
+                TDGameEventBus.WaveStarted(waveIdx);
 
-                List<IGridCellDTO> corridor = allPaths[Random.Range(0, allPaths.Count)];
+                var assignments = m_Strategy.SelectForWave(groups, waveIdx);
 
-                Debug.Log($"<color=green>Wave {waveIdx + 1}/{waveBatches.Count} — {waveBatches[waveIdx].Count} enemies</color>");
-                onWaveStart?.Invoke(waveIdx);
+                // Chia đều enemies cho mỗi assignment trong wave
+                var batch     = wavePlans[waveIdx];
+                int perGroup  = Mathf.Max(1, batch.Count / assignments.Count);
 
-                await SpawnBatch(spawnWorldPos, corridor, waveBatches[waveIdx], ratio, waveIdx, config.spawnInterval, ct);
+                var spawnTasks = new List<Task>();
 
+                for (int a = 0; a < assignments.Count; a++)
+                {
+                    var (group, corridor) = assignments[a];
+                    int start = a * perGroup;
+                    int end   = (a == assignments.Count - 1) ? batch.Count : start + perGroup;
+                    var slice = batch.GetRange(start, end - start);
+
+                    onWaveGroupStart?.Invoke(waveIdx, groups.IndexOf(group));
+                    spawnTasks.Add(SpawnBatch(group.SpawnWorldPos, corridor, slice, ratio,
+                        waveIdx, config.spawnInterval, ct));
+                }
+
+                await Task.WhenAll(spawnTasks);
                 await PauseAwareDelay(config.waveInterval, ct);
             }
 
-            Debug.Log($"<color=green>All {waveBatches.Count} waves completed!</color>");
+            Debug.Log($"<color=green>All {wavePlans.Count} waves completed!</color>");
             TDGameStateControl.api?.OnAllWavesSpawned();
         }
         catch (OperationCanceledException)
         {
-            Debug.Log("<color=yellow>StartWaveLoop: cancelled (scene unloaded)</color>");
+            Debug.Log("<color=yellow>StartWaveLoop: cancelled</color>");
         }
     }
+
+    // ── Wave Planning ─────────────────────────────────────────────────────────
+
+    public List<List<EnemyType>> BuildWavePlans(LevelConfig config)
+    {
+        return BuildWavePlansInternal(config.difficulty, config.waveCount, config.totalEnemies);
+    }
+
+    public int GetActualEnemyCount(List<List<EnemyType>> wavePlans)
+        => wavePlans.Sum(w => w.Count);
+
+    // ── Private ───────────────────────────────────────────────────────────────
 
     private async Task SpawnBatch(Vector3 spawnWorldPos, List<IGridCellDTO> path,
         List<EnemyType> batch, DifficultyRatioTable.RatioRow ratio,
@@ -169,12 +252,12 @@ public class TDEnemyPathMainControl
         {
             ct.ThrowIfCancellationRequested();
 
-            EnemyType type  = batch[i];
-            EnemyData data  = m_FlyweightEnemyDataSettings?.GetData(type);
-            float     hp          = (data?.baseHP    ?? 300f) * ratio.hpMult;
-            float     speed       = (data?.baseSpeed ?? 3f)   * ratio.speedMult;
-            float     atkDamage   = data?.baseAttackDamage ?? 10f;
-            float     atkSpeed    = data?.baseAttackSpeed  ?? 1f;
+            EnemyType type      = batch[i];
+            EnemyData data      = m_FlyweightEnemyDataSettings?.GetData(type);
+            float     hp        = (data?.baseHP          ?? 300f) * ratio.hpMult;
+            float     speed     = (data?.baseSpeed       ?? 3f)   * ratio.speedMult;
+            float     atkDamage = data?.baseAttackDamage ?? 10f;
+            float     atkSpeed  = data?.baseAttackSpeed  ?? 1f;
 
             if (!m_EnemyPools.TryGetValue(type, out var pool))
             {
@@ -189,21 +272,17 @@ public class TDEnemyPathMainControl
             string key = $"w{waveIdx}-{type}-e{i}-{enemy.gameObject.GetInstanceID()}";
             enemy.Initialize(key, hp, speed, atkDamage, atkSpeed, data.dieDuration, data?.goldReward ?? 0, type);
             enemy.SetPath(path);
+            TDGameEventBus.EnemySpawned(spawnWorldPos, type);
 
             await PauseAwareDelay(spawnInterval, ct);
         }
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
-    // Builds per-wave enemy lists.
-    // Extreme/Nightmare: clamps waveCount≥15 and totalEnemies≥75.
-    // Boss waves have 2.5× more enemies than regular waves and spawn boss(es) last.
-    private static List<List<EnemyType>> BuildWavePlans(Difficulty difficulty, int waveCount, int totalEnemies)
+    private static List<List<EnemyType>> BuildWavePlansInternal(Difficulty difficulty, int waveCount, int totalEnemies)
     {
         if (difficulty >= Difficulty.Extreme)
         {
-            waveCount    = Mathf.Max(waveCount, 15);
+            waveCount    = Mathf.Max(waveCount,    15);
             totalEnemies = Mathf.Max(totalEnemies, 75);
         }
 
@@ -211,12 +290,10 @@ public class TDEnemyPathMainControl
         bossWaveCount = Mathf.Min(bossWaveCount, waveCount);
 
         int   regularWaveCount = waveCount - bossWaveCount;
-        // Solve: regularWaveCount*r + bossWaveCount*(r*mult) = totalEnemies
         float r                = totalEnemies / (regularWaveCount + bossWaveCount * bossWaveMult);
         int   regularSize      = Mathf.Max(1, Mathf.RoundToInt(r));
         int   bossWaveSize     = Mathf.Max(bossPerWave + 1, Mathf.RoundToInt(r * bossWaveMult));
 
-        // Boss wave positions: boss k → wave ceil(W*k/B)-1 (0-indexed)
         var bossWaveIndices = new HashSet<int>();
         for (int k = 1; k <= bossWaveCount; k++)
         {
@@ -242,14 +319,12 @@ public class TDEnemyPathMainControl
             for (int i = 0; i < fastCount;   i++) wave.Add(EnemyType.Fast);
             for (int i = 0; i < tankCount;   i++) wave.Add(EnemyType.Tank);
 
-            // Shuffle non-boss enemies
             for (int i = wave.Count - 1; i > 0; i--)
             {
                 int rIdx = Random.Range(0, i + 1);
                 (wave[i], wave[rIdx]) = (wave[rIdx], wave[i]);
             }
 
-            // Boss(es) always spawn last in their wave
             if (isBossWave)
                 for (int i = 0; i < bossPerWave; i++)
                     wave.Add(EnemyType.Boss);
@@ -257,8 +332,7 @@ public class TDEnemyPathMainControl
             plans.Add(wave);
         }
 
-        Debug.Log($"<color=cyan>BuildWavePlans: {waveCount} waves | regular={regularSize} enemy | " +
-                  $"bossWaves={bossWaveCount} ({bossWaveSize} enemy, {bossPerWave} boss/wave)</color>");
+        Debug.Log($"<color=cyan>BuildWavePlans: {waveCount} waves | regular={regularSize} | bossWaves={bossWaveCount}</color>");
         return plans;
     }
 
@@ -272,7 +346,6 @@ public class TDEnemyPathMainControl
         _                    => (1, 1, 2.0f),
     };
 
-    // Pause-aware delay: Time.deltaTime = 0 khi timeScale=0 → tự dừng khi pause
     private static async Task PauseAwareDelay(float seconds, CancellationToken ct)
     {
         float elapsed = 0f;

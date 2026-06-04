@@ -4,7 +4,7 @@ using System.Linq;
 using UnityEngine;
 
 // ReSharper disable once InconsistentNaming
-public class TDaStarPathControl : IPathFinderDTO
+public class TDaStarPathControl : IPathFinderDTO, IPathFinder
 {
     public static TDaStarPathControl api;
 
