@@ -2765,5 +2765,261 @@
 
 
 ================================================================================
+  SESSION 46 — UI REDESIGN: VICTORY + GAMEOVER POPUPS           [🔄 IN PROGRESS]
+================================================================================
+
+  Goal: Re-design VictoryPanel và GameOverPanel theo reference design,
+        thay thế UI cũ (không có icon, không format đẹp).
+
+  ── ĐÃ HOÀN THÀNH ────────────────────────────────────────────────────────────
+
+  TDConstant.cs — user tự update lại paths theo design thực tế:
+    Button paths:
+      PATH_GAMEPLAY_GAMEOVER_RETRY_BTN = "GameOverPanel/PopupWindow/Bottom/BtnRetry"
+      PATH_GAMEPLAY_VICTORY_RETRY_BTN  = "VictoryPanel/PopupWindow/Bottom/BtnRetry"
+      PATH_GAMEPLAY_VICTORY_NEXT_BTN   = "VictoryPanel/PopupWindow/Bottom/BtnNext"
+    Stat paths Victory (new design):
+      PATH_VICTORY_STAGE_NAME     = "VictoryPanel/PopupWindow/Header/Stage"
+      PATH_VICTORY_STAT_ENEMIES   = "VictoryPanel/PopupWindow/Middle/Info/EnemiesDefeated/TxtValue"
+      PATH_VICTORY_STAT_LIVES     = "VictoryPanel/PopupWindow/Middle/Info/Lives Remaining/TxtValue"
+      PATH_VICTORY_STAT_GOLD      = "VictoryPanel/PopupWindow/Middle/Info/Gold Remaining/TxtValue"
+    Stat paths GameOver (pending build):
+      PATH_GAMEOVER_STAGE_NAME    = "GameOverPanel/PopupWindow/Header/Stage"
+      PATH_GAMEOVER_STAT_ENEMIES  = "GameOverPanel/PopupWindow/Middle/Info/EnemiesDefeated/TxtValue"
+      PATH_GAMEOVER_STAT_LIVES    = "GameOverPanel/PopupWindow/Middle/Info/LivesLost/TxtValue"
+      PATH_GAMEOVER_STAT_GOLD     = "GameOverPanel/PopupWindow/Middle/Info/Gold Remaining/TxtValue"
+      PATH_GAMEOVER_STAT_WAVE     = "GameOverPanel/PopupWindow/Middle/Info/WaveReached/TxtValue"
+
+  VictoryPanel — user tự redesign trong Editor. Cấu trúc + sizes đã parse từ scene YAML:
+
+  VictoryPanel [stretch anchors, full-screen overlay]
+    Image bg: color (0.039, 0.039, 0.157, 0.6) — dark blue semi-transparent
+    HLG: pad L=60 R=60 T=12 B=12, spacing=0, childAlign=MiddleCenter
+    LayoutElement: ignoreLayout=true
+    └── PopupWindow [VLG pad L=72 R=72 T=48 B=48, spacing=24, UpperCenter]
+         LayoutElement: flexW=1 flexH=1 (fills viewport minus HLG padding)
+         ├── BorderFrame [ignoreLayout, Image white, stretch anchors]
+         │
+         ├── Header [VLG padTop=60 spacing=12]  — height auto from content
+         │   ├── Stage badge
+         │   │     ProceduralImage: color (0.961, 0.761, 0.349, 0.6) gold
+         │   │     UniformModifier: radius=36, borderWidth=3
+         │   │     HLG: L=36 R=36 T=6 B=6, spacing=24, childAlign=UpperLeft
+         │   │     LayoutElement: preferredW=48 preferredH=48
+         │   │     └── [icon small 48×48] + [TMP "Stage X-X"]
+         │   └── Title [HLG, icon + TMP]
+         │         TitleLabel LayoutElement: preferredW=480 preferredH=72
+         │
+         ├── Middle [VLG spacing=12]  — height auto from content
+         │   ├── Star [3 star icons in HLG]
+         │   │     Star icons LayoutElement: min=72 preferred=72×72
+         │   ├── Divider [RawImage divider-fade-001.png]
+         │   └── Info [VLG padL=192 R=192 spacing=0]
+         │         LayoutElement: preferredH=276 (4×72 + spacing đã tính trong HLG)
+         │         Each stat row:
+         │           ProceduralImage: color (0.557, 0.463, 0.255, 1.0) dark gold
+         │           FreeModifier: radius={12,12,12,12}, borderWidth=4
+         │           HLG: L=24 R=24 T=12 B=12, spacing=24, childAlign=MiddleLeft
+         │           Children: [Icon RawImage] + [Label TMP] + [TxtValue TMP]
+         │           Value TMP LayoutElement: preferredW=120 preferredH=48
+         │           Row names (Victory): Time / EnemiesDefeated / Lives Remaining / Gold Remaining
+         │
+         └── Bottom [HLG, childAlign=MiddleCenter]  — height auto from buttons
+               ButtonRow LayoutElement: prefH=60 flexW=1
+               ├── BtnRetry
+               │     ProceduralImage: color (0.557, 0.463, 0.255, 1.0) dark gold
+               │     FreeModifier: radius={12,12,12,12}, borderWidth=4
+               │     HLG: padR=24 spacing=24 childAlign=MiddleCenter
+               │     LayoutElement: minW=450 minH=72
+               │     Children: [Icon 72×72 Image] + [TMP Label]
+               └── BtnNext [same structure as BtnRetry]
+
+  ── CẦN BUILD (GameOverPanel) ─────────────────────────────────────────────────
+
+  ⚠️  MCP session disconnect sau context compaction — cần start session mới để chạy
+      script-execute. Unity vẫn Connected (verified từ plugin screenshot).
+
+  GameOverPanel/PopupWindow đã có: sizeDelta = 1152×708 (tạo bởi script run trước)
+  VLG hiện tại: pad L=72 R=72 T=48 B=48, spacing=24 ✓
+
+  Cần xóa content cũ (Stats flat + ButtonRow flat), rebuild với Header/Middle/Bottom:
+
+  GameOverPanel [stretch anchors, full-screen]
+    Image bg: color (0.059, 0.027, 0.027, 0.6) — dark red semi-transparent
+    HLG: pad L=60 R=60 T=12 B=12, spacing=0, childAlign=MiddleCenter
+    └── PopupWindow [sizeDelta=1152×708, VLG pad L=72 R=72 T=48 B=48 spacing=24]
+         ├── BorderFrame [ignoreLayout, Image white, stretch anchors]  ← GIỮ NGUYÊN
+         │
+         ├── Header [VLG padTop=60 spacing=12]
+         │   ├── Stage badge
+         │   │     ProceduralImage: color (0.8, 0.157, 0.157, 0.6) red
+         │   │     UniformModifier: radius=36, borderWidth=3
+         │   │     HLG: L=36 R=36 T=6 B=6, spacing=24
+         │   │     LayoutElement: preferredW=48 preferredH=48
+         │   │     └── [icon] + [TMP "Stage X-X"]   ← path: Header/Stage
+         │   └── Title [HLG, Skull icon + TMP "GAME OVER"]
+         │         TitleLabel LayoutElement: preferredW=480 preferredH=72
+         │
+         ├── Middle [VLG spacing=12]
+         │   ├── Divider [RawImage divider-fade-001.png]  — KHÔNG có Star row
+         │   └── Info [VLG padL=192 R=192 spacing=0]
+         │         LayoutElement: preferredH=276 flexW=1
+         │         Stat rows (same structure as Victory, dark-red):
+         │           ProceduralImage: color (0.478, 0.094, 0.094, 1.0) dark red
+         │           FreeModifier: radius={12,12,12,12}, borderWidth=4
+         │           HLG: L=24 R=24 T=12 B=12, spacing=24, childAlign=MiddleLeft
+         │           Children: [Icon RawImage 48×48] + [Label TMP] + [TxtValue TMP]
+         │           Value TMP LayoutElement: preferredW=120 preferredH=48
+         │           Row names:
+         │             EnemiesDefeated  → Icon_PictoIcon_Battle.Png
+         │             LivesLost        → Icon_PictoIcon_Player.Png
+         │             Gold Remaining   → Icon_PictoIcon_Dollar.Png
+         │             WaveReached      → Icon_PictoIcon_Flag.Png
+         │
+         └── Bottom [HLG, childAlign=MiddleCenter]
+               ButtonRow LayoutElement: prefH=60 flexW=1
+               └── BtnRetry   ← path: Bottom/BtnRetry (per TDConstant)
+                     ProceduralImage: color (0.478, 0.094, 0.094, 1.0) dark red
+                     FreeModifier: radius={12,12,12,12}, borderWidth=4
+                     HLG: padR=24 spacing=24 childAlign=MiddleCenter
+                     LayoutElement: minW=450 minH=72
+                     Children: [Icon Skull 72×72] + [TMP "RETRY"]
+
+  Assets dùng (đã xác nhận paths):
+    Icons: Assets/1.Assets/UnityStore Resources/Layer Lab/2D Icons-PictoIconPack01/Icons/PictoIcon_256/
+      - Icon_PictoIcon_Skull.Png   (title + retry btn)
+      - Icon_PictoIcon_Player.Png  (LivesLost row)
+      - Icon_PictoIcon_Battle.Png  (EnemiesDefeated row)
+      - Icon_PictoIcon_Dollar.Png  (Gold Remaining row)
+      - Icon_PictoIcon_Flag.Png    (WaveReached row)
+    Divider: Assets/1.Assets/UnityStore Resources/Kenney/kenney_fantasy-ui-borders/
+             PNG/Double/Divider Fade/divider-fade-001.png
+    Font: Assets/1.Assets/Resources/Fonts/OpenSans/OpenSans-Bold SDF.asset
+
+  ── SAU KHI BUILD GAMEOVER ────────────────────────────────────────────────────
+
+  TODO (code changes):
+    1. TDConstant.cs — thêm:
+         PATH_GAMEOVER_STAT_WAVE  = "GameOverPanel/PopupWindow/ButtonRow/../Stats/WaveRow/Value"
+         (hoặc adjust path theo actual hierarchy)
+    2. TDGameplayHUDView.cs — cache WaveRow/Value TMP + fill wave number on OnGameOver()
+    3. TDGameStateControl.cs — expose CurrentWave property nếu chưa có
+
+  TODO (smooth transitions — Phase sau):
+    - VictoryPanel + GameOverPanel entrance animation (scale + fade)
+    - Dùng coroutine + Time.unscaledDeltaTime (không DOTween)
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 47 — POPUP PANEL SCRIPTS + DOTWEEN TRANSITIONS               [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-05
+
+  Goal: Tách logic hiển thị VictoryPanel/GameOverPanel ra scripts riêng;
+        implement DOTween smooth transitions cho cả 2 popup.
+        (Hoàn thành TODO từ Session 46: "smooth transitions — Phase sau")
+
+  ── Thiết kế ─────────────────────────────────────────────────────────────────
+
+  Approach: mỗi panel có 1 View script riêng thay vì gom vào TDGameplayHUDView.
+  Transition layer:
+    VictoryPanel root  → SetActive(true) ngay  (backdrop + overlay hiện liền)
+    GameOverPanel root → SetActive(true) ngay  (delay 0.5s cho cảm giác "thất bại chậm")
+    PopupWindow child  → CanvasGroup (fade) + DOScale — animate vào
+
+  Ease choices:
+    Victory : Ease.OutBack   (bounce nhẹ, cảm giác thắng lợi)
+    GameOver: Ease.OutElastic, delay=0.5s (đổ xuống, cảm giác thất bại nặng nề)
+
+  ── Files mới tạo ────────────────────────────────────────────────────────────
+
+  [NEW] Assets/2.Scripts/View/GamePlay/TDVictoryPanelView.cs
+    + Gắn vào: VictoryPanel GameObject
+    + Awake(): transform.Find() tất cả sub-refs, CanvasGroup tự add vào PopupWindow
+    + BindButtons(onRetry, onNext): wire từ HUDView.SetupButtons()
+    + Show(stageId, killed, total, lives, gold): fill stats + PlayShowAnim()
+    + Hide(onComplete = null): PlayHideAnim()
+    + PlayShowAnim():
+        gameObject.SetActive(true)  ← ngay lập tức (backdrop hiện)
+        PopupWindow: alpha 0→1 (0.25s OutCubic) + scale 0.75→1.0 (0.38s OutBack)
+        OnComplete: interactable + blocksRaycasts = true
+    + PlayHideAnim():
+        scale → 0.9 (0.20s InCubic) → alpha 0 (0.15s InCubic)
+        OnComplete: SetActive(false)
+    + SetUpdate(true): tweens chạy được với Time.timeScale=0
+
+  [NEW] Assets/2.Scripts/View/GamePlay/TDGameOverPanelView.cs
+    + Gắn vào: GameOverPanel GameObject
+    + Tương tự TDVictoryPanelView nhưng có thêm m_StatWave
+    + AppendInterval(0.5s) trước animation (delay cảm giác thất bại)
+    + Scale: 1.15→1.0 với Ease.OutElastic ("đổ xuống")
+    + Path fixes áp dụng qua linter:
+        "Lives Remaining/TxtValue" → "LivesRemaining/TxtValue"
+        "Gold Remaining/TxtValue"  → "GoldRemaining/TxtValue"
+
+  ── Files sửa ────────────────────────────────────────────────────────────────
+
+  [MODIFIED] TDGameplayHUDView.cs
+    Xóa: 15 fields cached riêng lẻ cho 2 panels:
+      m_GameOverPanel (GameObject), m_GameOverRetryBtn, m_GameOverStat* (4),
+      m_GameOverStageName, m_VictoryPanel (GameObject), m_VictoryRetryBtn,
+      m_VictoryNextBtn, m_VictoryStat* (3), m_VictoryStageName
+    Thêm: 2 fields thay thế:
+      TDGameOverPanelView m_GameOverPanel
+      TDVictoryPanelView  m_VictoryPanel
+    CacheReferences(): transform.Find().GetComponent<TDXxxPanelView>()
+    SetupButtons():
+      - m_GameOverRetryBtn?.onClick... → m_GameOverPanel?.BindButtons(OnBackClicked)
+      - m_VictoryRetryBtn/NextBtn     → m_VictoryPanel?.BindButtons(OnBackClicked, OnNextClicked)
+    OnGameOver(): m_GameOverPanel?.Show(...) thay vì 5 dòng text + SetActive(true)
+    OnVictory():  m_VictoryPanel?.Show(...)  thay vì 4 dòng text + SetActive(true)
+
+  ── Scene changes ─────────────────────────────────────────────────────────────
+
+  Components added via MCP:
+    TDVictoryPanelView  → VictoryPanel  GameObject ✅
+    TDGameOverPanelView → GameOverPanel GameObject ✅
+
+  CanvasGroup tự add runtime lên PopupWindow nếu chưa có (Awake).
+  Scene saved.
+
+  ── Animation spec ────────────────────────────────────────────────────────────
+
+  VICTORY Show:
+    SetActive(true) → alpha 0 + scale(0.75)
+    → fade to 1 (0.25s OutCubic) JOIN scale to 1.0 (0.38s OutBack)
+    → interactable=true
+
+  GAMEOVER Show:
+    SetActive(true) → alpha 0 + scale(1.15)
+    → AppendInterval(0.5s)
+    → fade to 1 (0.25s OutCubic) JOIN scale to 1.0 (0.38s OutElastic)
+    → interactable=true
+
+  HIDE (cả 2):
+    → scale to 0.9 (0.20s InCubic)
+    → fade to 0 (0.15s InCubic)
+    → SetActive(false)
+
+  ── Technical notes ───────────────────────────────────────────────────────────
+
+  DOTween: tìm thấy tại Assets/4.ThirdParties/Plugins/Demigiant/DOTween/ ✅
+  SetUpdate(true): tweens work qua Time.timeScale=0 (game đang paused khi popup hiện)
+  DOTween.Kill(gameObject): cancel tween cũ trước khi show lại (tránh stacked tweens)
+  CanvasGroup.blocksRaycasts=false trong animation: button không click được khi đang animate
+
+  ── Result ───────────────────────────────────────────────────────────────────
+    ✅ TDVictoryPanelView.cs — standalone popup manager + DOTween transitions
+    ✅ TDGameOverPanelView.cs — standalone popup manager + DOTween transitions
+    ✅ TDGameplayHUDView.cs refactor: ~15 fields → 2 fields, logic delegates 100%
+    ✅ VictoryPanel: scale OutBack bounce-in (thắng lợi)
+    ✅ GameOverPanel: delay 0.5s + OutElastic drop-in (thất bại)
+    ✅ SetActive: VictoryPanel/GameOverPanel root; CanvasGroup: chỉ trên PopupWindow
+    ✅ Tweens unscaled (Time.timeScale=0 safe)
+    ✅ Components attached in scene + scene saved
+    ✅ 0 compile errors
+
+
+================================================================================
   END OF CHANGELOG
 ================================================================================

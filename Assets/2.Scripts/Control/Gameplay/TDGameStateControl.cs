@@ -12,6 +12,8 @@ public class TDGameStateControl
     public int  KilledEnemies   { get; private set; }
     public bool AllWavesSpawned { get; private set; }
     public bool IsGameEnded     { get; private set; }
+    public int  CurrentWave     { get; private set; }
+    public int  TotalWaves      { get; private set; }
 
     public Action<int, int> onEnemyCountChanged; // (killed, total)
     public Action           onVictory;
@@ -22,7 +24,14 @@ public class TDGameStateControl
         KilledEnemies   = 0;
         AllWavesSpawned = false;
         IsGameEnded     = false;
+        CurrentWave     = 0;
         onEnemyCountChanged?.Invoke(KilledEnemies, TotalEnemies);
+    }
+
+    public void OnWaveStarted(int waveNumber, int totalWaves)
+    {
+        CurrentWave = waveNumber;
+        TotalWaves  = totalWaves;
     }
 
     // Gọi khi enemy bị kill (damage) hoặc thoát vào gate

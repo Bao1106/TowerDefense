@@ -1,4 +1,6 @@
+using System;
 using System.Collections;
+using DG.Tweening;
 using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -23,21 +25,10 @@ public class TDGameplayHUDView : MonoBehaviour
     private Button     m_PauseButton;
     private Button     m_ResumeButton;
     private GameObject m_PausePanel;
+    private CanvasGroup m_PausePanelCG;
 
-    private GameObject m_GameOverPanel;
-    private Button     m_GameOverRetryBtn;
-    private TextMeshProUGUI m_GameOverStatEnemies;
-    private TextMeshProUGUI m_GameOverStatLives;
-    private TextMeshProUGUI m_GameOverStatGold;
-    private TextMeshProUGUI m_GameOverStageName;
-
-    private GameObject m_VictoryPanel;
-    private Button     m_VictoryRetryBtn;
-    private Button     m_VictoryNextBtn;
-    private TextMeshProUGUI m_VictoryStatEnemies;
-    private TextMeshProUGUI m_VictoryStatLives;
-    private TextMeshProUGUI m_VictoryStatGold;
-    private TextMeshProUGUI m_VictoryStageName;
+    private TDGameOverPanelView m_GameOverPanel;
+    private TDVictoryPanelView  m_VictoryPanel;
 
     private GameObject m_SpeedIconNormal;
     private GameObject m_SpeedIconX2;
@@ -45,8 +36,23 @@ public class TDGameplayHUDView : MonoBehaviour
     [SerializeField] private TDStageRepository m_StageRepository;
 
     private Image m_ScreenFlash;
+    private Image m_TransitionOverlay;
 
     private Color m_LifeColorNormal;
+
+    // ── Tween tuning ──────────────────────────────────────────────────────────
+    private const float PUNCH_GOLD       = 0.25f;
+    private const float PUNCH_LIFE       = 0.35f;
+    private const float PUNCH_ENEMY      = 0.18f;
+    private const float PUNCH_SPEED_BTN  = 0.22f;
+    private const float PUNCH_DURATION   = 0.30f;
+    private const int   PUNCH_VIBRATO    = 8;
+    private const float PUNCH_ELASTICITY = 0.5f;
+
+    private const float PAUSE_FADE_IN    = 0.20f;
+    private const float PAUSE_FADE_OUT   = 0.15f;
+    private const float SCENE_FADE_IN    = 0.40f;
+    private const float SCENE_FADE_OUT   = 0.30f;
 
     // ── Unity lifecycle ───────────────────────────────────────────────────────
     private void Awake()
@@ -57,8 +63,9 @@ public class TDGameplayHUDView : MonoBehaviour
     private void Start()
     {
         SubscribeEvents(); // subscribe trước để nhận event từ InitControls
-        InitControls();    // Initialize fire onSpeedChanged/onGoldChanged → UI sync ngay
+        InitControls();    // fire onSpeedChanged/onGoldChanged → UI sync ngay
         SetupButtons();
+        PlaySceneFadeIn();
     }
 
     private void Update()
@@ -84,30 +91,24 @@ public class TDGameplayHUDView : MonoBehaviour
         m_SpeedButton     = transform.Find(TDConstant.PATH_GAMEPLAY_HUD_SPEED_BUTTON)   ?.GetComponent<Button>();
         m_PauseButton     = transform.Find(TDConstant.PATH_GAMEPLAY_HUD_PAUSE_BUTTON)   ?.GetComponent<Button>();
         m_ResumeButton    = transform.Find(TDConstant.PATH_GAMEPLAY_HUD_RESUME_BUTTON)  ?.GetComponent<Button>();
-        m_PausePanel      = transform.Find(TDConstant.PATH_GAMEPLAY_HUD_PAUSE_PANEL)    ?.gameObject;
-        m_PausePanel?.SetActive(false);
+
+        var pauseT = transform.Find(TDConstant.PATH_GAMEPLAY_HUD_PAUSE_PANEL);
+        if (pauseT != null)
+        {
+            m_PausePanel   = pauseT.gameObject;
+            m_PausePanelCG = m_PausePanel.GetComponent<CanvasGroup>()
+                          ?? m_PausePanel.AddComponent<CanvasGroup>();
+            m_PausePanel.SetActive(false);
+        }
 
         m_SpeedIconNormal = transform.Find(TDConstant.PATH_GAMEPLAY_HUD_SPEED_ICON_NORMAL)?.gameObject;
         m_SpeedIconX2     = transform.Find(TDConstant.PATH_GAMEPLAY_HUD_SPEED_ICON_X2)   ?.gameObject;
 
-        m_ScreenFlash = transform.Find(TDConstant.PATH_GAMEPLAY_SCREEN_FLASH)?.GetComponent<Image>();
+        m_ScreenFlash       = transform.Find(TDConstant.PATH_GAMEPLAY_SCREEN_FLASH)      ?.GetComponent<Image>();
+        m_TransitionOverlay = transform.Find(TDConstant.PATH_GAMEPLAY_TRANSITION_OVERLAY) ?.GetComponent<Image>();
 
-        m_GameOverPanel       = transform.Find(TDConstant.PATH_GAMEPLAY_GAMEOVER_PANEL)        ?.gameObject;
-        m_GameOverRetryBtn    = transform.Find(TDConstant.PATH_GAMEPLAY_GAMEOVER_RETRY_BTN)    ?.GetComponent<Button>();
-        m_GameOverStatEnemies = transform.Find(TDConstant.PATH_GAMEOVER_STAT_ENEMIES)          ?.GetComponent<TextMeshProUGUI>();
-        m_GameOverStatLives   = transform.Find(TDConstant.PATH_GAMEOVER_STAT_LIVES)            ?.GetComponent<TextMeshProUGUI>();
-        m_GameOverStatGold    = transform.Find(TDConstant.PATH_GAMEOVER_STAT_GOLD)             ?.GetComponent<TextMeshProUGUI>();
-        m_GameOverStageName   = transform.Find(TDConstant.PATH_GAMEOVER_STAGE_NAME)            ?.GetComponent<TextMeshProUGUI>();
-        m_GameOverPanel?.SetActive(false);
-
-        m_VictoryPanel        = transform.Find(TDConstant.PATH_GAMEPLAY_VICTORY_PANEL)         ?.gameObject;
-        m_VictoryRetryBtn     = transform.Find(TDConstant.PATH_GAMEPLAY_VICTORY_RETRY_BTN)     ?.GetComponent<Button>();
-        m_VictoryNextBtn      = transform.Find(TDConstant.PATH_GAMEPLAY_VICTORY_NEXT_BTN)      ?.GetComponent<Button>();
-        m_VictoryStatEnemies  = transform.Find(TDConstant.PATH_VICTORY_STAT_ENEMIES)           ?.GetComponent<TextMeshProUGUI>();
-        m_VictoryStatLives    = transform.Find(TDConstant.PATH_VICTORY_STAT_LIVES)             ?.GetComponent<TextMeshProUGUI>();
-        m_VictoryStatGold     = transform.Find(TDConstant.PATH_VICTORY_STAT_GOLD)              ?.GetComponent<TextMeshProUGUI>();
-        m_VictoryStageName    = transform.Find(TDConstant.PATH_VICTORY_STAGE_NAME)             ?.GetComponent<TextMeshProUGUI>();
-        m_VictoryPanel?.SetActive(false);
+        m_GameOverPanel = transform.Find(TDConstant.PATH_GAMEPLAY_GAMEOVER_PANEL)?.GetComponent<TDGameOverPanelView>();
+        m_VictoryPanel  = transform.Find(TDConstant.PATH_GAMEPLAY_VICTORY_PANEL) ?.GetComponent<TDVictoryPanelView>();
 
         if (m_LifeText != null)
             m_LifeColorNormal = m_LifeText.color;
@@ -136,30 +137,29 @@ public class TDGameplayHUDView : MonoBehaviour
     {
         if (TDPlayerLifeControl.api != null)
         {
-            TDPlayerLifeControl.api.onLifeChanged     -= OnLifeChanged;
-            TDPlayerLifeControl.api.onGameOver         -= OnGameOver;
+            TDPlayerLifeControl.api.onLifeChanged -= OnLifeChanged;
+            TDPlayerLifeControl.api.onGameOver     -= OnGameOver;
         }
-        if (TDGoldControl.api    != null) TDGoldControl.api.onGoldChanged            -= OnGoldChanged;
+        if (TDGoldControl.api      != null) TDGoldControl.api.onGoldChanged            -= OnGoldChanged;
         if (TDGameStateControl.api != null)
         {
             TDGameStateControl.api.onEnemyCountChanged -= OnEnemyCountChanged;
             TDGameStateControl.api.onVictory           -= OnVictory;
         }
-        if (TDPauseControl.api   != null) TDPauseControl.api.onPauseChanged          -= OnPauseChanged;
-        if (TDSpeedControl.api   != null) TDSpeedControl.api.onSpeedChanged          -= OnSpeedChanged;
+        if (TDPauseControl.api != null) TDPauseControl.api.onPauseChanged -= OnPauseChanged;
+        if (TDSpeedControl.api != null) TDSpeedControl.api.onSpeedChanged  -= OnSpeedChanged;
     }
 
     // ── Button wiring ─────────────────────────────────────────────────────────
     private void SetupButtons()
     {
-        m_BackButton      ?.onClick.AddListener(OnBackClicked);
-        m_SettingButton   ?.onClick.AddListener(OnSettingClicked);
-        m_SpeedButton     ?.onClick.AddListener(OnSpeedClicked);
-        m_PauseButton     ?.onClick.AddListener(OnPauseClicked);
-        m_ResumeButton    ?.onClick.AddListener(OnResumeClicked);
-        m_GameOverRetryBtn?.onClick.AddListener(OnBackClicked);
-        m_VictoryRetryBtn ?.onClick.AddListener(OnBackClicked);
-        m_VictoryNextBtn  ?.onClick.AddListener(OnNextClicked);
+        m_BackButton   ?.onClick.AddListener(OnBackClicked);
+        m_SettingButton?.onClick.AddListener(OnSettingClicked);
+        m_SpeedButton  ?.onClick.AddListener(OnSpeedClicked);
+        m_PauseButton  ?.onClick.AddListener(OnPauseClicked);
+        m_ResumeButton ?.onClick.AddListener(OnResumeClicked);
+        m_GameOverPanel?.BindButtons(onRetry: OnBackClicked);
+        m_VictoryPanel ?.BindButtons(onRetry: OnBackClicked, onNext: OnNextClicked);
     }
 
     // ── Event handlers ────────────────────────────────────────────────────────
@@ -171,6 +171,11 @@ public class TDGameplayHUDView : MonoBehaviour
             m_LifeText.color = lives <= TDConstant.CONFIG_LIFE_LOW_THRESHOLD
                 ? Color.red
                 : m_LifeColorNormal;
+
+            DOTween.Kill(m_LifeText.transform);
+            m_LifeText.transform
+                .DOPunchScale(Vector3.one * PUNCH_LIFE, PUNCH_DURATION, PUNCH_VIBRATO, PUNCH_ELASTICITY)
+                .SetTarget(m_LifeText.transform).SetUpdate(true);
         }
         StartCoroutine(FlashScreen(lives));
     }
@@ -180,30 +185,36 @@ public class TDGameplayHUDView : MonoBehaviour
         TDGameStateControl.api?.OnGameOver();
         TDPauseControl.api?.Pause();
 
-        int killed = TDGameStateControl.api?.KilledEnemies ?? 0;
-        int total  = TDGameStateControl.api?.TotalEnemies  ?? 0;
-        int lives  = TDPlayerLifeControl.api?.CurrentLives ?? 0;
+        int killed    = TDGameStateControl.api?.KilledEnemies ?? 0;
+        int total     = TDGameStateControl.api?.TotalEnemies  ?? 0;
+        int lives     = TDPlayerLifeControl.api?.CurrentLives ?? 0;
         int livesLost = TDConstant.CONFIG_PLAYER_STARTING_LIVES - lives;
-        int gold   = TDGoldControl.api?.Gold ?? 0;
+        int gold      = TDGoldControl.api?.Gold ?? 0;
+        int curWave   = TDGameStateControl.api?.CurrentWave ?? 0;
+        int totWaves  = TDGameStateControl.api?.TotalWaves  ?? 0;
+        string stageId = TDGameStateControl.api?.SelectedStageId ?? "";
 
-        if (m_GameOverStatEnemies != null) m_GameOverStatEnemies.text = $"{killed} / {total}";
-        if (m_GameOverStatLives   != null) m_GameOverStatLives.text   = livesLost.ToString();
-        if (m_GameOverStatGold    != null) m_GameOverStatGold.text    = gold.ToString();
-        if (m_GameOverStageName   != null) m_GameOverStageName.text   = $"Stage {TDGameStateControl.api?.SelectedStageId}";
-
-        m_GameOverPanel?.SetActive(true);
+        m_GameOverPanel?.Show(stageId, killed, total, livesLost, gold, curWave, totWaves);
     }
 
     private void OnGoldChanged(int gold)
     {
-        if (m_CurrencyText != null)
-            m_CurrencyText.text = gold.ToString();
+        if (m_CurrencyText == null) return;
+        m_CurrencyText.text = gold.ToString();
+        DOTween.Kill(m_CurrencyText.transform);
+        m_CurrencyText.transform
+            .DOPunchScale(Vector3.one * PUNCH_GOLD, PUNCH_DURATION, PUNCH_VIBRATO, PUNCH_ELASTICITY)
+            .SetTarget(m_CurrencyText.transform).SetUpdate(true);
     }
 
     private void OnEnemyCountChanged(int killed, int total)
     {
-        if (m_EnemyCountText != null)
-            m_EnemyCountText.text = $"{killed}/{total}";
+        if (m_EnemyCountText == null) return;
+        m_EnemyCountText.text = $"{killed}/{total}";
+        DOTween.Kill(m_EnemyCountText.transform);
+        m_EnemyCountText.transform
+            .DOPunchScale(Vector3.one * PUNCH_ENEMY, PUNCH_DURATION, 5, PUNCH_ELASTICITY)
+            .SetTarget(m_EnemyCountText.transform).SetUpdate(true);
     }
 
     private void OnVictory()
@@ -214,18 +225,15 @@ public class TDGameplayHUDView : MonoBehaviour
         int total  = TDGameStateControl.api?.TotalEnemies  ?? 0;
         int lives  = TDPlayerLifeControl.api?.CurrentLives ?? 0;
         int gold   = TDGoldControl.api?.Gold ?? 0;
+        string stageId = TDGameStateControl.api?.SelectedStageId ?? "";
 
-        if (m_VictoryStatEnemies != null) m_VictoryStatEnemies.text = $"{killed} / {total}";
-        if (m_VictoryStatLives   != null) m_VictoryStatLives.text   = $"{lives} / {TDConstant.CONFIG_PLAYER_STARTING_LIVES}";
-        if (m_VictoryStatGold    != null) m_VictoryStatGold.text    = gold.ToString();
-        if (m_VictoryStageName   != null) m_VictoryStageName.text   = $"Stage {TDGameStateControl.api?.SelectedStageId}";
-
-        m_VictoryPanel?.SetActive(true);
+        m_VictoryPanel?.Show(stageId, killed, total, lives, gold);
     }
 
     private void OnPauseChanged(bool isPaused)
     {
-        m_PausePanel?.SetActive(isPaused);
+        if (isPaused) ShowPausePanel();
+        else          HidePausePanel();
     }
 
     private void OnSpeedChanged(float multiplier)
@@ -235,23 +243,28 @@ public class TDGameplayHUDView : MonoBehaviour
         if (m_SpeedIconNormal != null) m_SpeedIconNormal.SetActive(!isFast);
         if (m_SpeedIconX2     != null) m_SpeedIconX2    .SetActive( isFast);
         if (m_SpeedText       != null) m_SpeedText.text  = isFast ? "x2" : "x1";
+
+        if (m_SpeedButton != null)
+        {
+            DOTween.Kill(m_SpeedButton.transform);
+            m_SpeedButton.transform
+                .DOPunchScale(Vector3.one * PUNCH_SPEED_BTN, PUNCH_DURATION, 6, PUNCH_ELASTICITY)
+                .SetTarget(m_SpeedButton.transform).SetUpdate(true);
+        }
     }
 
     // ── Button callbacks ──────────────────────────────────────────────────────
     private void OnBackClicked()
     {
-        SceneManager.LoadScene(TDConstant.SCENE_LOAD_FIRST);
+        PlaySceneFadeOut(() => SceneManager.LoadScene(TDConstant.SCENE_LOAD_FIRST));
     }
 
     private void OnNextClicked()
     {
         string        currentId = TDGameStateControl.api.SelectedStageId;
         TDStageConfig next      = m_StageRepository?.GetNextStage(currentId);
-
-        if (next != null)
-            TDGameStateControl.api.SelectStage(next.StageId);
-
-        SceneManager.LoadScene(TDConstant.SCENE_LOAD_FIRST);
+        if (next != null) TDGameStateControl.api.SelectStage(next.StageId);
+        PlaySceneFadeOut(() => SceneManager.LoadScene(TDConstant.SCENE_LOAD_FIRST));
     }
 
     private void OnSettingClicked()
@@ -275,16 +288,78 @@ public class TDGameplayHUDView : MonoBehaviour
         TDPauseControl.api.Resume();
     }
 
+    // ── Pause panel ───────────────────────────────────────────────────────────
+    private void ShowPausePanel()
+    {
+        if (m_PausePanel == null) return;
+        DOTween.Kill(m_PausePanel);
+        m_PausePanel.SetActive(true);
+        if (m_PausePanelCG != null)
+        {
+            m_PausePanelCG.alpha          = 0f;
+            m_PausePanelCG.interactable   = false;
+            m_PausePanelCG.blocksRaycasts = false;
+            m_PausePanelCG.DOFade(1f, PAUSE_FADE_IN).SetEase(Ease.OutCubic)
+                .SetTarget(m_PausePanel).SetUpdate(true)
+                .OnComplete(() =>
+                {
+                    m_PausePanelCG.interactable   = true;
+                    m_PausePanelCG.blocksRaycasts = true;
+                });
+        }
+    }
+
+    private void HidePausePanel()
+    {
+        if (m_PausePanel == null) return;
+        DOTween.Kill(m_PausePanel);
+        if (m_PausePanelCG != null)
+        {
+            m_PausePanelCG.interactable   = false;
+            m_PausePanelCG.blocksRaycasts = false;
+            m_PausePanelCG.DOFade(0f, PAUSE_FADE_OUT).SetEase(Ease.InCubic)
+                .SetTarget(m_PausePanel).SetUpdate(true)
+                .OnComplete(() => m_PausePanel.SetActive(false));
+        }
+        else
+        {
+            m_PausePanel.SetActive(false);
+        }
+    }
+
+    // ── Scene transitions ─────────────────────────────────────────────────────
+    private void PlaySceneFadeIn()
+    {
+        if (m_TransitionOverlay == null) return;
+        DOTween.Kill(m_TransitionOverlay);
+        m_TransitionOverlay.gameObject.SetActive(true);
+        m_TransitionOverlay.color = Color.black;
+        m_TransitionOverlay.DOFade(0f, SCENE_FADE_IN).SetEase(Ease.OutCubic).SetUpdate(true)
+            .SetTarget(m_TransitionOverlay)
+            .OnComplete(() => m_TransitionOverlay.gameObject.SetActive(false));
+    }
+
+    private void PlaySceneFadeOut(Action onComplete)
+    {
+        if (m_TransitionOverlay == null) { onComplete?.Invoke(); return; }
+        DOTween.Kill(m_TransitionOverlay);
+        m_TransitionOverlay.gameObject.SetActive(true);
+        m_TransitionOverlay.color = Color.clear;
+        m_TransitionOverlay.DOFade(1f, SCENE_FADE_OUT).SetEase(Ease.InCubic).SetUpdate(true)
+            .SetTarget(m_TransitionOverlay)
+            .OnComplete(() => onComplete?.Invoke());
+    }
+
     // ── Screen flash ──────────────────────────────────────────────────────────
     private IEnumerator FlashScreen(int lives)
     {
-        if (m_ScreenFlash == null || lives == TDConstant.CONFIG_PLAYER_STARTING_LIVES) 
+        if (m_ScreenFlash == null || lives == TDConstant.CONFIG_PLAYER_STARTING_LIVES)
             yield break;
         m_ScreenFlash.color = new Color(1f, 0f, 0f, 0.35f);
         float elapsed = 0f;
         while (elapsed < 0.35f)
         {
-            elapsed            += Time.unscaledDeltaTime; // unscaled: flash hiện cả khi pause
+            elapsed            += Time.unscaledDeltaTime;
             float alpha         = Mathf.Lerp(0.35f, 0f, elapsed / 0.35f);
             m_ScreenFlash.color = new Color(1f, 0f, 0f, alpha);
             yield return null;

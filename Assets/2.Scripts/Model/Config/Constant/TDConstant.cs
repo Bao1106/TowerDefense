@@ -49,23 +49,29 @@ public static class TDConstant
     public const string PATH_GAMEPLAY_HUD_RESUME_BUTTON     = "PausePanel/ResumeButton";
     // FlashScreen nằm ở SafeArea (cha của Container) → dùng transform.parent.Find()
     public const string PATH_GAMEPLAY_SCREEN_FLASH          = "FlashScreen";
+    // Full-screen black overlay — starts active+black so scene opens from darkness
+    public const string PATH_GAMEPLAY_TRANSITION_OVERLAY    = "TransitionOverlay";
 
     // Result popups — children of Container (inactive by default, shown by TDGameplayHUDView)
     public const string PATH_GAMEPLAY_GAMEOVER_PANEL        = "GameOverPanel";
-    public const string PATH_GAMEPLAY_GAMEOVER_RETRY_BTN    = "GameOverPanel/PopupWindow/RetryButton";
+    public const string PATH_GAMEPLAY_GAMEOVER_RETRY_BTN    = "GameOverPanel/PopupWindow/Bottom/BtnRetry";
     public const string PATH_GAMEPLAY_VICTORY_PANEL         = "VictoryPanel";
-    public const string PATH_GAMEPLAY_VICTORY_RETRY_BTN     = "VictoryPanel/PopupWindow/RetryButton";
-    public const string PATH_GAMEPLAY_VICTORY_NEXT_BTN      = "VictoryPanel/PopupWindow/NextButton";
+    public const string PATH_GAMEPLAY_VICTORY_RETRY_BTN     = "VictoryPanel/PopupWindow/Bottom/BtnRetry";
+    public const string PATH_GAMEPLAY_VICTORY_NEXT_BTN      = "VictoryPanel/PopupWindow/Bottom/BtnNext";
 
     // Stat value labels inside popups (TMP that HUDView fills at show-time)
-    public const string PATH_GAMEOVER_STAT_ENEMIES  = "GameOverPanel/PopupWindow/Stats/EnemiesRow/Value";
-    public const string PATH_GAMEOVER_STAT_LIVES    = "GameOverPanel/PopupWindow/Stats/LivesRow/Value";
-    public const string PATH_GAMEOVER_STAT_GOLD     = "GameOverPanel/PopupWindow/Stats/GoldRow/Value";
-    public const string PATH_GAMEOVER_STAGE_NAME    = "GameOverPanel/PopupWindow/StageName";
-    public const string PATH_VICTORY_STAT_ENEMIES   = "VictoryPanel/PopupWindow/Stats/EnemiesRow/Value";
-    public const string PATH_VICTORY_STAT_LIVES     = "VictoryPanel/PopupWindow/Stats/LivesRow/Value";
-    public const string PATH_VICTORY_STAT_GOLD      = "VictoryPanel/PopupWindow/Stats/GoldRow/Value";
-    public const string PATH_VICTORY_STAGE_NAME     = "VictoryPanel/PopupWindow/StageName";
+    // Victory popup (new design: Header/Stage + Middle/Info/<RowName>/TxtValue)
+    public const string PATH_VICTORY_STAGE_NAME     = "VictoryPanel/PopupWindow/Header/Stage";
+    public const string PATH_VICTORY_STAT_ENEMIES   = "VictoryPanel/PopupWindow/Middle/Info/EnemiesDefeated/TxtValue";
+    public const string PATH_VICTORY_STAT_LIVES     = "VictoryPanel/PopupWindow/Middle/Info/Lives Remaining/TxtValue";
+    public const string PATH_VICTORY_STAT_GOLD      = "VictoryPanel/PopupWindow/Middle/Info/Gold Remaining/TxtValue";
+
+    // GameOver popup (same new hierarchy as Victory but red-themed + different stats)
+    public const string PATH_GAMEOVER_STAGE_NAME    = "GameOverPanel/PopupWindow/Header/Stage";
+    public const string PATH_GAMEOVER_STAT_ENEMIES  = "GameOverPanel/PopupWindow/Middle/Info/EnemiesDefeated/TxtValue";
+    public const string PATH_GAMEOVER_STAT_LIVES    = "GameOverPanel/PopupWindow/Middle/Info/LivesLost/TxtValue";
+    public const string PATH_GAMEOVER_STAT_GOLD     = "GameOverPanel/PopupWindow/Middle/Info/Gold Remaining/TxtValue";
+    public const string PATH_GAMEOVER_STAT_WAVE     = "GameOverPanel/PopupWindow/Middle/Info/WaveReached/TxtValue";
 
     // Operator action panel — relative to Canvas/SafeArea/Container (dùng bởi TDOperatorSelectionView)
     public const string PATH_OPERATOR_ACTION_PANEL  = "OperatorActionPanel";

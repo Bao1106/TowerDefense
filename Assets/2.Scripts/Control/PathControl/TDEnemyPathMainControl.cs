@@ -197,6 +197,7 @@ public class TDEnemyPathMainControl
             for (int waveIdx = 0; waveIdx < wavePlans.Count; waveIdx++)
             {
                 ct.ThrowIfCancellationRequested();
+                TDGameStateControl.api?.OnWaveStarted(waveIdx + 1, wavePlans.Count);
                 TDGameEventBus.WaveStarted(waveIdx);
 
                 var assignments = m_Strategy.SelectForWave(groups, waveIdx);
