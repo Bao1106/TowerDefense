@@ -38,6 +38,7 @@ public class TDSlotHolderMainView : MonoBehaviour
     // Reset về false khi ghost di chuyển sang cell mới
     private bool m_IsDirectionSelected;
     private Vector3 m_LastSnappedPos = Vector3.negativeInfinity;
+    private bool m_TowerCreatedThisFrame; // guard: bỏ qua input frame đầu khi ghost vừa được tạo
 
     // Panel chỉ chứa nút Cancel — hiện khi đang hold ghost tower
     private GameObject m_PlacementPanel;
@@ -55,6 +56,9 @@ public class TDSlotHolderMainView : MonoBehaviour
     private void Update()
     {
         if (m_CurrentTower == null) return;
+
+        // Bỏ qua toàn bộ input frame đầu sau khi ghost vừa được tạo (slot button click frame)
+        if (m_TowerCreatedThisFrame) { m_TowerCreatedThisFrame = false; return; }
 
         // Khi ngón đang đè lên UI (Cancel button, v.v.) → không di/rotate ghost
         if (IsPointerOverUI()) return;
@@ -197,14 +201,24 @@ public class TDSlotHolderMainView : MonoBehaviour
             return delta.z > 0f ? 0 : 2;
     }
 
-    // Mobile cần fingerId, desktop dùng pointer id -1 (mouse)
+    // Mobile dùng RaycastAll — đáng tin hơn IsPointerOverGameObject(fingerId) trên Android
+    private static readonly List<RaycastResult> s_RaycastResults = new List<RaycastResult>();
     private bool IsPointerOverUI()
     {
+        if (EventSystem.current == null) return false;
+#if UNITY_ANDROID && !UNITY_EDITOR
         if (Input.touchCount > 0)
-            return EventSystem.current != null &&
-                   EventSystem.current.IsPointerOverGameObject(Input.GetTouch(0).fingerId);
-        return EventSystem.current != null &&
-               EventSystem.current.IsPointerOverGameObject();
+        {
+            var eventData = new PointerEventData(EventSystem.current)
+                { position = Input.GetTouch(0).position };
+            s_RaycastResults.Clear();
+            EventSystem.current.RaycastAll(eventData, s_RaycastResults);
+            return s_RaycastResults.Count > 0;
+        }
+        return false;
+#else
+        return EventSystem.current.IsPointerOverGameObject();
+#endif
     }
 
     // ─── Placement Panel ─────────────────────────────────────────────────────
@@ -338,8 +352,9 @@ public class TDSlotHolderMainView : MonoBehaviour
         if (m_CurrentTower != null)
             Destroy(m_CurrentTower);
 
-        m_CurrentTower  = Instantiate(slot.prefab, Vector3.zero, Quaternion.identity);
-        IsPlacingUnit   = true;
+        m_CurrentTower        = Instantiate(slot.prefab, Vector3.zero, Quaternion.identity);
+        IsPlacingUnit         = true;
+        m_TowerCreatedThisFrame = true; // bỏ qua input frame này để tránh cancel ngay lập tức
         m_CurrentTower.transform.localScale = slot.towerType == TowerType.Operator
             ? new Vector3(1.5f, 1.5f, 1.5f)
             : new Vector3(1.0f, 1.0f, 1.0f);

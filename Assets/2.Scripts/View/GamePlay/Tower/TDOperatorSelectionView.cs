@@ -300,12 +300,14 @@ public class TDOperatorSelectionView : MonoBehaviour
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
+    // RaycastAll tại screenPos — đáng tin hơn IsPointerOverGameObject(fingerId) trên Android
+    private static readonly List<RaycastResult> s_RaycastResults = new List<RaycastResult>();
     private bool IsPointerOverUI(Vector2 screenPos)
     {
-        if (Input.touchCount > 0)
-            return EventSystem.current != null &&
-                   EventSystem.current.IsPointerOverGameObject(Input.GetTouch(0).fingerId);
-        return EventSystem.current != null &&
-               EventSystem.current.IsPointerOverGameObject();
+        if (EventSystem.current == null) return false;
+        var eventData = new PointerEventData(EventSystem.current) { position = screenPos };
+        s_RaycastResults.Clear();
+        EventSystem.current.RaycastAll(eventData, s_RaycastResults);
+        return s_RaycastResults.Count > 0;
     }
 }
