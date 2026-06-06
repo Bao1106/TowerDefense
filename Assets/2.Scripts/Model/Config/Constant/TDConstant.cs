@@ -115,10 +115,13 @@ public static class TDConstant
     // TowerZone tile: scale.y = 0.12, center tại y=0 → top face tại y=0.06
     // Tower ghost và placed tower đều dùng offset này để ngồi trên zone tile
     public const float CONFIG_TOWER_ZONE_TILE_HEIGHT = 0.12f;
+    // Range highlight phải cao hơn tower zone top face (0.12) và path tiles (0.10) để không bị đè
+    public const float CONFIG_RANGE_HIGHLIGHT_Y = 0.3f;
     public const float CONFIG_OPERATOR_PLACE_Y          = 0.02f;  // tower base placed 0.6u above ground (above TowerZone top face 0.06)
     public const float CONFIG_TOWER_PLACE_Y          = 0.6f;  // tower base placed 0.6u above ground (above TowerZone top face 0.06)
     public const string CONFIG_TOWER          = "Tower Bullet Config";
     public const string CONFIG_OPERATOR = "Melee Operator Config"; // SO riêng cho melee
+    public const string CONFIG_EFFECT   = "Configs/Effect Config"; // SO map GameEventKey → EffectDef
 
     #endregion
 

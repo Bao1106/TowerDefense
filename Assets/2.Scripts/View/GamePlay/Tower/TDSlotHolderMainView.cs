@@ -369,10 +369,13 @@ public class TDSlotHolderMainView : MonoBehaviour
 
     private void RefreshRangeHighlights()
     {
-        // Operator không cần range visualization — "range" chính là ô đang đứng
-        if (m_CurrentTowerType == TowerType.Operator) { HideRangeHighlights(); return; }
-
         if (m_CurrentTower == null || m_RangeHighlightPrefab == null) return;
+
+        if (m_CurrentTowerType == TowerType.Operator)
+        {
+            RefreshOperatorRangeHighlights();
+            return;
+        }
 
         Vector2Int cell   = TDGridMainModel.api.WorldToCell(m_CurrentTower.transform.position);
         int        rotIdx = m_CurrentRotationIndex;
@@ -391,7 +394,33 @@ public class TDSlotHolderMainView : MonoBehaviour
         var              rangeDto = new TDOffsetRangeDTO(data.rangeOffsets);
         List<Vector2Int> cells    = rangeDto.GetCellsInRange(cell, m_CurrentTower.transform.rotation);
 
-        // Grow pool on demand
+        ApplyRangeHighlights(cells);
+    }
+
+    private void RefreshOperatorRangeHighlights()
+    {
+        var data = TDFlyweightOperatorDataSettings.api?.GetData(m_CurrentOperatorType);
+        if (data?.rangeOffsets == null || data.rangeOffsets.Length == 0)
+        {
+            HideRangeHighlights();
+            return;
+        }
+
+        Vector2Int cell   = TDGridMainModel.api.WorldToCell(m_CurrentTower.transform.position);
+        int        rotIdx = m_CurrentRotationIndex;
+
+        if (cell == m_LastRangeCell && rotIdx == m_LastRangeRotIndex) return;
+        m_LastRangeCell     = cell;
+        m_LastRangeRotIndex = rotIdx;
+
+        var rangeDto = new TDOffsetRangeDTO(data.rangeOffsets);
+        var cells    = rangeDto.GetCellsInRange(cell, m_CurrentTower.transform.rotation);
+
+        ApplyRangeHighlights(cells);
+    }
+
+    private void ApplyRangeHighlights(List<Vector2Int> cells)
+    {
         while (m_RangeHighlightTiles.Count < cells.Count)
         {
             var tile = Object.Instantiate(m_RangeHighlightPrefab);
@@ -404,7 +433,7 @@ public class TDSlotHolderMainView : MonoBehaviour
             if (i < cells.Count)
             {
                 Vector3 world = TDGridMainModel.api.CellToWorld(cells[i]);
-                m_RangeHighlightTiles[i].transform.position = new Vector3(world.x, 0.12f, world.z);
+                m_RangeHighlightTiles[i].transform.position = new Vector3(world.x, TDConstant.CONFIG_RANGE_HIGHLIGHT_Y, world.z);
                 m_RangeHighlightTiles[i].SetActive(true);
             }
             else

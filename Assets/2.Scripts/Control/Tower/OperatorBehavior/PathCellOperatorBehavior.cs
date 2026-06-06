@@ -48,10 +48,17 @@ public class PathCellOperatorBehavior : IOperatorBehavior
         if (blocked.Count == 0) return false;
 
         float dmg = data?.damage ?? 0f;
-        foreach (var enemy in blocked)
-            enemy?.TakeDamage(dmg);
 
-        TDGameEventBus.TowerAttacked(worldPos, TowerType.Operator);
+        if (data?.attackType == AttackType.Single)
+            blocked[0]?.TakeDamage(dmg);
+        else
+            foreach (var enemy in blocked)
+                enemy?.TakeDamage(dmg);
+
+        TDGameEventBus.OperatorAttacked(worldPos, data?.operatorType ?? OperatorType.Knight);
+        TDGameEventBus.OperatorImpacted(worldPos, data?.operatorType ?? OperatorType.Knight);
         return true;
     }
+
+    public void ExecuteHit(Vector2Int cell, Vector3 worldPos, OperatorData data) { }
 }

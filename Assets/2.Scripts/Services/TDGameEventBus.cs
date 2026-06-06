@@ -13,8 +13,10 @@ public static class TDGameEventBus
     public static event Action<Vector3, EnemyType> OnEnemySpawned;
 
     // ── Tower / Operator ──────────────────────────────────────────────────────
-    public static event Action<Vector3, TowerType> OnTowerAttacked;
-    public static event Action<Vector2Int> OnOperatorDied;
+    public static event Action<Vector3, TowerType>    OnTowerAttacked;
+    public static event Action<Vector3, OperatorType> OnOperatorAttacked;
+    public static event Action<Vector3, OperatorType> OnOperatorImpacted;
+    public static event Action<Vector2Int>            OnOperatorDied;
 
     // ── Player ────────────────────────────────────────────────────────────────
     public static event Action<Vector3> OnLifeLost;
@@ -34,6 +36,12 @@ public static class TDGameEventBus
 
     public static void TowerAttacked(Vector3 pos, TowerType type)
         => OnTowerAttacked?.Invoke(pos, type);
+
+    public static void OperatorAttacked(Vector3 pos, OperatorType type)
+        => OnOperatorAttacked?.Invoke(pos, type);
+
+    public static void OperatorImpacted(Vector3 pos, OperatorType type)
+        => OnOperatorImpacted?.Invoke(pos, type);
 
     public static void OperatorDied(Vector2Int cell)
         => OnOperatorDied?.Invoke(cell);

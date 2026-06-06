@@ -17,10 +17,10 @@ public class TDEnemyPathMainControl
     public Action<int, int>           onWaveGroupStart;   // (waveIdx, groupIdx)
     public Action<List<Vector3>>      onValidTowerCellsReady;
 
-    private IGateAssignmentStrategy m_Strategy;
+    private IGateAssignmentStrategy m_Strategy = new RoundRobinStrategy();
 
     public void SetStrategy(IGateAssignmentStrategy strategy)
-        => m_Strategy = strategy;
+        => m_Strategy = strategy ?? new RoundRobinStrategy();
 
     // ── Enemy Object Pools ────────────────────────────────────────────────────
 
@@ -191,6 +191,8 @@ public class TDEnemyPathMainControl
 
         DifficultyRatioTable.RatioRow ratio = DifficultyRatioTable.Get(config.difficulty);
         Debug.Log($"<color=green>StartWaveLoop: {wavePlans.Count} waves, {groups.Count} groups</color>");
+
+        m_Strategy ??= new RoundRobinStrategy();
 
         try
         {

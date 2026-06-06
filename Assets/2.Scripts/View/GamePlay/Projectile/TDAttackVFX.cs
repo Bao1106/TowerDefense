@@ -66,6 +66,7 @@ public class TDAttackVFX : MonoBehaviour
                 break;
         }
 
+        TDGameEventBus.TowerAttacked(transform.position, OwnerType);
         TDFlyweightBulletFactoryModel.ReturnToPool(this);
     }
 

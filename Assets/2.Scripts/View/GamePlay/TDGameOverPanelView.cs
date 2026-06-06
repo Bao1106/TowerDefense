@@ -42,7 +42,7 @@ public class TDGameOverPanelView : MonoBehaviour
         m_BtnRetry    = transform.Find("PopupWindow/Bottom/BtnRetry")?.GetComponent<Button>();
         m_StageName   = transform.Find("PopupWindow/Header/Stage")   ?.GetComponent<TextMeshProUGUI>();
         m_StatEnemies = transform.Find("PopupWindow/Middle/Info/EnemiesDefeated/TxtValue")?.GetComponent<TextMeshProUGUI>();
-        m_StatLives   = transform.Find("PopupWindow/Middle/Info/LivesLost/TxtValue")      ?.GetComponent<TextMeshProUGUI>();
+        m_StatLives   = transform.Find("PopupWindow/Middle/Info/LivesRemaining/TxtValue")  ?.GetComponent<TextMeshProUGUI>();
         m_StatGold    = transform.Find("PopupWindow/Middle/Info/GoldRemaining/TxtValue")  ?.GetComponent<TextMeshProUGUI>();
         m_StatWave    = transform.Find("PopupWindow/Middle/Info/WaveReached/TxtValue")    ?.GetComponent<TextMeshProUGUI>();
 
@@ -53,12 +53,12 @@ public class TDGameOverPanelView : MonoBehaviour
     public void BindButtons(Action onRetry)
     {
         m_BtnRetry?.onClick.RemoveAllListeners();
-        m_BtnRetry?.onClick.AddListener(() => onRetry?.Invoke());
+        m_BtnRetry?.onClick.AddListener(() => Hide(() => onRetry?.Invoke()));
     }
 
-    public void Show(string stageId, int killed, int total, int livesLost, int gold, int curWave, int totWaves)
+    public void Show(string stageId, int killed, int total, int lives, int gold, int curWave, int totWaves)
     {
-        FillStats(stageId, killed, total, livesLost, gold, curWave, totWaves);
+        FillStats(stageId, killed, total, lives, gold, curWave, totWaves);
         PlayShowAnim();
     }
 
@@ -68,11 +68,11 @@ public class TDGameOverPanelView : MonoBehaviour
     }
 
     // ── Data fill ──────────────────────────────────────────────────────────────
-    private void FillStats(string stageId, int killed, int total, int livesLost, int gold, int curWave, int totWaves)
+    private void FillStats(string stageId, int killed, int total, int lives, int gold, int curWave, int totWaves)
     {
         if (m_StageName   != null) m_StageName.text   = $"STAGE  {stageId}";
         if (m_StatEnemies != null) m_StatEnemies.text  = $"{killed} / {total}";
-        if (m_StatLives   != null) m_StatLives.text    = $"{livesLost} / {TDConstant.CONFIG_PLAYER_STARTING_LIVES}";
+        if (m_StatLives   != null) m_StatLives.text    = $"{lives} / {TDConstant.CONFIG_PLAYER_STARTING_LIVES}";
         if (m_StatGold    != null) m_StatGold.text     = gold.ToString();
         if (m_StatWave    != null) m_StatWave.text     = $"{curWave} / {totWaves}";
     }

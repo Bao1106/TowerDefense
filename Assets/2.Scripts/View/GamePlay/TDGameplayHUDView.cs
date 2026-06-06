@@ -30,6 +30,8 @@ public class TDGameplayHUDView : MonoBehaviour
     private TDGameOverPanelView m_GameOverPanel;
     private TDVictoryPanelView  m_VictoryPanel;
 
+    private bool m_IsGameEnding;
+
     private GameObject m_SpeedIconNormal;
     private GameObject m_SpeedIconX2;
 
@@ -109,7 +111,6 @@ public class TDGameplayHUDView : MonoBehaviour
 
         m_GameOverPanel = transform.Find(TDConstant.PATH_GAMEPLAY_GAMEOVER_PANEL)?.GetComponent<TDGameOverPanelView>();
         m_VictoryPanel  = transform.Find(TDConstant.PATH_GAMEPLAY_VICTORY_PANEL) ?.GetComponent<TDVictoryPanelView>();
-
         if (m_LifeText != null)
             m_LifeColorNormal = m_LifeText.color;
     }
@@ -158,8 +159,8 @@ public class TDGameplayHUDView : MonoBehaviour
         m_SpeedButton  ?.onClick.AddListener(OnSpeedClicked);
         m_PauseButton  ?.onClick.AddListener(OnPauseClicked);
         m_ResumeButton ?.onClick.AddListener(OnResumeClicked);
-        m_GameOverPanel?.BindButtons(onRetry: OnBackClicked);
-        m_VictoryPanel ?.BindButtons(onRetry: OnBackClicked, onNext: OnNextClicked);
+        m_GameOverPanel?.BindButtons(onRetry: OnRetryClicked);
+        m_VictoryPanel ?.BindButtons(onRetry: OnRetryClicked, onNext: OnNextClicked);
     }
 
     // ── Event handlers ────────────────────────────────────────────────────────
@@ -182,19 +183,19 @@ public class TDGameplayHUDView : MonoBehaviour
 
     private void OnGameOver()
     {
+        m_IsGameEnding = true;
         TDGameStateControl.api?.OnGameOver();
         TDPauseControl.api?.Pause();
 
         int killed    = TDGameStateControl.api?.KilledEnemies ?? 0;
         int total     = TDGameStateControl.api?.TotalEnemies  ?? 0;
         int lives     = TDPlayerLifeControl.api?.CurrentLives ?? 0;
-        int livesLost = TDConstant.CONFIG_PLAYER_STARTING_LIVES - lives;
         int gold      = TDGoldControl.api?.Gold ?? 0;
         int curWave   = TDGameStateControl.api?.CurrentWave ?? 0;
         int totWaves  = TDGameStateControl.api?.TotalWaves  ?? 0;
         string stageId = TDGameStateControl.api?.SelectedStageId ?? "";
 
-        m_GameOverPanel?.Show(stageId, killed, total, livesLost, gold, curWave, totWaves);
+        m_GameOverPanel?.Show(stageId, killed, total, lives, gold, curWave, totWaves);
     }
 
     private void OnGoldChanged(int gold)
@@ -219,6 +220,7 @@ public class TDGameplayHUDView : MonoBehaviour
 
     private void OnVictory()
     {
+        m_IsGameEnding = true;
         TDPauseControl.api?.Pause();
 
         int killed = TDGameStateControl.api?.KilledEnemies ?? 0;
@@ -232,6 +234,7 @@ public class TDGameplayHUDView : MonoBehaviour
 
     private void OnPauseChanged(bool isPaused)
     {
+        if (m_IsGameEnding) return;
         if (isPaused) ShowPausePanel();
         else          HidePausePanel();
     }
@@ -256,6 +259,12 @@ public class TDGameplayHUDView : MonoBehaviour
     // ── Button callbacks ──────────────────────────────────────────────────────
     private void OnBackClicked()
     {
+        PlaySceneFadeOut(() => SceneManager.LoadScene(TDConstant.SCENE_LOAD_FIRST));
+    }
+
+    private void OnRetryClicked()
+    {
+        // Stage ID giữ nguyên (TDGameStateControl dùng ??= khi Init lại)
         PlaySceneFadeOut(() => SceneManager.LoadScene(TDConstant.SCENE_LOAD_FIRST));
     }
 

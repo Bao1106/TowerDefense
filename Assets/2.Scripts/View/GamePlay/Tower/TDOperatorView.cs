@@ -10,12 +10,13 @@ using UnityEngine;
 /// </summary>
 public class TDOperatorView : MonoBehaviour, IPlacedUnit
 {
-    [SerializeField] private TDHPBarView m_HPBarView;
-    [SerializeField] private GameObject  m_SelectionIndicator;
+    private const string SELECTION_INDICATOR_NAME = "SelectionIndicator";
 
     private static readonly int HASH_ATTACK = Animator.StringToHash("Attack");
 
     private Animator          m_Animator;
+    private TDHPBarView       m_HPBarView;
+    private Transform         m_SelectionIndicator;
     private OperatorType      m_OperatorType;
     private IOperatorBehavior m_Behavior;
     private Vector2Int        m_MyCell;
@@ -33,25 +34,28 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
 
     void IPlacedUnit.Init(string instanceKey, TDTowerSlotInfo slotInfo)
     {
-        m_Animator     = GetComponentInChildren<Animator>();
-        m_OperatorType = slotInfo.operatorType;
-        Cost           = slotInfo.cost;
-        m_MyCell       = TDGridMainModel.api.WorldToCell(transform.position);
-        m_SelectionIndicator?.SetActive(false);
+        m_Animator           = GetComponentInChildren<Animator>();
+        m_HPBarView          = GetComponentInChildren<TDHPBarView>(includeInactive: true);
+        m_SelectionIndicator = transform.Find(SELECTION_INDICATOR_NAME);
 
-        var data       = TDFlyweightOperatorDataSettings.api.GetData(m_OperatorType);
-        m_CurrentHp    = data?.hp ?? 100f;
-        m_MaxHp        = m_CurrentHp;
+        m_OperatorType   = slotInfo.operatorType;
+        Cost             = slotInfo.cost;
+        m_MyCell         = TDGridMainModel.api.WorldToCell(transform.position);
         m_LastAttackTime = -999f;
 
-        // Resolve behavior từ deployZone — OCP: thêm zone mới = thêm class mới
-        m_Behavior     = TDControl.CreateOperatorBehavior(data?.deployZone ?? DeployZone.PathCell);
+        m_SelectionIndicator?.gameObject.SetActive(false);
+
+        var data    = TDFlyweightOperatorDataSettings.api.GetData(m_OperatorType);
+        m_CurrentHp = data?.hp ?? 100f;
+        m_MaxHp     = m_CurrentHp;
+
+        m_Behavior = TDControl.CreateOperatorBehavior(data?.deployZone ?? DeployZone.PathCell);
         m_Behavior.OnInit(m_MyCell, data, this);
 
         m_HPBarView?.Show();
         m_HPBarView?.UpdateHP(m_CurrentHp, m_MaxHp);
 
-        m_Initialized  = true;
+        m_Initialized = true;
         Debug.Log($"[TDOperatorView] Init cell={m_MyCell}, type={m_OperatorType}, zone={data?.deployZone}, HP={m_CurrentHp}");
     }
 
@@ -71,10 +75,9 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         if (m_CurrentHp <= 0) Die();
     }
 
-    public Transform SelectionIndicatorTransform
-        => m_SelectionIndicator != null ? m_SelectionIndicator.transform : null;
+    public Transform SelectionIndicatorTransform => m_SelectionIndicator;
 
-    public void SetSelected(bool selected) => m_SelectionIndicator?.SetActive(selected);
+    public void SetSelected(bool selected) => m_SelectionIndicator?.gameObject.SetActive(selected);
 
     public void DoRetreat()
     {
@@ -88,6 +91,16 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         ((IPlacedUnit)this).OnRemove();
         TDGameEventBus.OperatorDied(m_MyCell);
         Destroy(gameObject);
+    }
+
+    // ── Animation event callback ──────────────────────────────────────────────
+
+    // Gọi từ AnimationEvent "OnAttackHit" trong attack clip của Ranger/Mage
+    public void OnAttackHit()
+    {
+        if (!m_Initialized || m_Behavior == null) return;
+        var data = TDFlyweightOperatorDataSettings.api.GetData(m_OperatorType);
+        m_Behavior.ExecuteHit(m_MyCell, transform.position, data);
     }
 
     // ── Update — delegate hoàn toàn cho behavior ──────────────────────────────

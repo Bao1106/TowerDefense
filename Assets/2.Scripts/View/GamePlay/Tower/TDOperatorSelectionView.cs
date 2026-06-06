@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using DG.Tweening;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -12,8 +14,15 @@ public class TDOperatorSelectionView : MonoBehaviour
     private TDOperatorView    m_SelectedOperator;
     private TDTowerWeaponView m_SelectedTower;
     private RectTransform     m_ActionPanel;
+    private CanvasGroup       m_PanelCanvasGroup;
+    private Sequence          m_PanelTween;
+    private Vector3           m_PanelBaseScale;
     private Button            m_BtnRetreat;
     private Canvas            m_Canvas;
+
+    // Range highlight pool
+    private GameObject        m_RangeHighlightPrefab;
+    private readonly List<GameObject> m_RangeHighlightTiles = new List<GameObject>();
 
     // Helper: có unit nào đang được chọn không
     private bool HasSelected => m_SelectedOperator != null || m_SelectedTower != null;
@@ -24,8 +33,16 @@ public class TDOperatorSelectionView : MonoBehaviour
         m_ActionPanel = transform.Find(TDConstant.PATH_OPERATOR_ACTION_PANEL)?.GetComponent<RectTransform>();
         m_BtnRetreat  = transform.Find(TDConstant.PATH_OPERATOR_BTN_RETREAT)?.GetComponent<Button>();
 
+        if (m_ActionPanel != null)
+        {
+            m_PanelBaseScale   = m_ActionPanel.localScale;
+            m_PanelCanvasGroup = m_ActionPanel.GetComponent<CanvasGroup>()
+                              ?? m_ActionPanel.gameObject.AddComponent<CanvasGroup>();
+            m_ActionPanel.gameObject.SetActive(false);
+        }
+
         m_BtnRetreat?.onClick.AddListener(OnRetreatClicked);
-        m_ActionPanel?.gameObject.SetActive(false);
+        m_RangeHighlightPrefab = TDResourceObject.GetResource<GameObject>(TDConstant.PREFAB_RANGE_HIGH_LIGHT);
     }
 
     private void Update()
@@ -81,20 +98,21 @@ public class TDOperatorSelectionView : MonoBehaviour
     private void SelectOperator(TDOperatorView op)
     {
         if (m_SelectedOperator == op) return;
-        Deselect();
+        DeselectImmediate();
         m_SelectedOperator = op;
         m_SelectedOperator.SetSelected(true);
-        m_ActionPanel?.gameObject.SetActive(true);
         UpdatePanelPosition();
+        ShowPanel();
+        ShowOperatorRange(op);
     }
 
     private void SelectTower(TDTowerWeaponView tower)
     {
         if (m_SelectedTower == tower) return;
-        Deselect();
+        DeselectImmediate();
         m_SelectedTower = tower;
-        m_ActionPanel?.gameObject.SetActive(true);
         UpdatePanelPosition();
+        ShowPanel();
     }
 
     public void Deselect()
@@ -105,7 +123,111 @@ public class TDOperatorSelectionView : MonoBehaviour
             m_SelectedOperator = null;
         }
         m_SelectedTower = null;
-        m_ActionPanel?.gameObject.SetActive(false);
+        HidePanel();
+        HideRangeHighlights();
+    }
+
+    // Deselect không animation — dùng khi ngay sau đó sẽ show selection mới
+    private void DeselectImmediate()
+    {
+        if (m_SelectedOperator != null)
+        {
+            m_SelectedOperator.SetSelected(false);
+            m_SelectedOperator = null;
+        }
+        m_SelectedTower = null;
+        HideRangeHighlights();
+    }
+
+    // ── Panel transitions ─────────────────────────────────────────────────────
+
+    private void ShowPanel()
+    {
+        if (m_ActionPanel == null) return;
+        m_PanelTween?.Kill();
+        m_ActionPanel.gameObject.SetActive(true);
+        m_ActionPanel.localScale = Vector3.zero;
+
+        if (m_PanelCanvasGroup != null)
+        {
+            m_PanelCanvasGroup.alpha          = 0f;
+            m_PanelCanvasGroup.interactable   = false;
+            m_PanelCanvasGroup.blocksRaycasts = false;
+        }
+
+        m_PanelTween = DOTween.Sequence().SetUpdate(true);
+        m_PanelTween.Join(m_ActionPanel.DOScale(m_PanelBaseScale, 0.25f).SetEase(Ease.OutBack));
+        if (m_PanelCanvasGroup != null)
+            m_PanelTween.Join(m_PanelCanvasGroup.DOFade(1f, 0.16f).SetEase(Ease.OutCubic));
+        m_PanelTween.OnComplete(() =>
+        {
+            if (m_PanelCanvasGroup != null)
+            {
+                m_PanelCanvasGroup.interactable   = true;
+                m_PanelCanvasGroup.blocksRaycasts = true;
+            }
+        });
+    }
+
+    private void HidePanel()
+    {
+        if (m_ActionPanel == null || !m_ActionPanel.gameObject.activeSelf) return;
+        m_PanelTween?.Kill();
+
+        if (m_PanelCanvasGroup != null)
+        {
+            m_PanelCanvasGroup.interactable   = false;
+            m_PanelCanvasGroup.blocksRaycasts = false;
+        }
+
+        m_PanelTween = DOTween.Sequence().SetUpdate(true);
+        m_PanelTween.Join(m_ActionPanel.DOScale(Vector3.zero, 0.16f).SetEase(Ease.InBack));
+        if (m_PanelCanvasGroup != null)
+            m_PanelTween.Join(m_PanelCanvasGroup.DOFade(0f, 0.12f).SetEase(Ease.InCubic));
+        m_PanelTween.OnComplete(() => m_ActionPanel.gameObject.SetActive(false));
+    }
+
+    // ── Range Highlights ──────────────────────────────────────────────────────
+
+    private void ShowOperatorRange(TDOperatorView op)
+    {
+        HideRangeHighlights();
+        if (m_RangeHighlightPrefab == null || TDGridMainModel.api == null) return;
+
+        var data = TDFlyweightOperatorDataSettings.api.GetData(op.OperatorType);
+        if (data?.rangeOffsets == null || data.rangeOffsets.Length == 0) return;
+
+        var        rangeDto = new TDOffsetRangeDTO(data.rangeOffsets);
+        Vector2Int cell     = TDGridMainModel.api.WorldToCell(op.transform.position);
+        var        cells    = rangeDto.GetCellsInRange(cell, op.transform.rotation);
+
+        // Grow pool on demand
+        while (m_RangeHighlightTiles.Count < cells.Count)
+        {
+            var tile = Instantiate(m_RangeHighlightPrefab);
+            tile.SetActive(false);
+            m_RangeHighlightTiles.Add(tile);
+        }
+
+        for (int i = 0; i < m_RangeHighlightTiles.Count; i++)
+        {
+            if (i < cells.Count)
+            {
+                Vector3 world = TDGridMainModel.api.CellToWorld(cells[i]);
+                m_RangeHighlightTiles[i].transform.position = new Vector3(world.x, TDConstant.CONFIG_RANGE_HIGHLIGHT_Y, world.z);
+                m_RangeHighlightTiles[i].SetActive(true);
+            }
+            else
+            {
+                m_RangeHighlightTiles[i].SetActive(false);
+            }
+        }
+    }
+
+    private void HideRangeHighlights()
+    {
+        foreach (var tile in m_RangeHighlightTiles)
+            if (tile != null) tile.SetActive(false);
     }
 
     // ── Panel position ────────────────────────────────────────────────────────

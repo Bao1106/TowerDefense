@@ -20,8 +20,11 @@ public interface IOperatorBehavior
     /// Gọi từ TDOperatorView.Init() — đăng ký vào registry tương ứng.
     void OnInit(Vector2Int cell, OperatorData data, TDOperatorView view);
 
-    /// Tìm mục tiêu và gây damage. Trả về true nếu thực sự attack (để trigger animation + reset timer).
+    /// Tìm mục tiêu, lưu pending target, fire attack VFX. Trả về true để trigger anim + reset timer.
     bool TryAttack(Vector2Int cell, Vector3 worldPos, OperatorData data);
+
+    /// Gọi từ animation event OnAttackHit — apply damage + fire impact VFX tại enemy pos.
+    void ExecuteHit(Vector2Int cell, Vector3 worldPos, OperatorData data);
 
     /// Cleanup khi operator bị remove (die hoặc retreat).
     void OnRemove(Vector2Int cell, Vector3 worldPos);

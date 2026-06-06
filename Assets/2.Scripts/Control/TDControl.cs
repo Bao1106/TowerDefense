@@ -49,6 +49,8 @@ public class TDControl
         TDUserInputControl.api = new TDUserInputControl();
         TDOperatorRetreatControl.api = new TDOperatorRetreatControl();
         TDTowerRetreatControl.api    = new TDTowerRetreatControl();
+
+        TDEffectManager.Init();
     }
     
     // private void OnApiMiniAppReady(APIUnity apiUnity)

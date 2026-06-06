@@ -53,8 +53,8 @@ public class TDVictoryPanelView : MonoBehaviour
     {
         m_BtnRetry?.onClick.RemoveAllListeners();
         m_BtnNext ?.onClick.RemoveAllListeners();
-        m_BtnRetry?.onClick.AddListener(() => onRetry?.Invoke());
-        m_BtnNext ?.onClick.AddListener(() => onNext?.Invoke());
+        m_BtnRetry?.onClick.AddListener(() => Hide(() => onRetry?.Invoke()));
+        m_BtnNext ?.onClick.AddListener(() => Hide(() => onNext?.Invoke()));
     }
 
     public void Show(string stageId, int killed, int total, int lives, int gold)

@@ -13,8 +13,9 @@ MonoBehaviour:
   m_Name: Melee Operator Config
   m_EditorClassIdentifier: 
   m_Operators:
-  - operatorType: 0
-    deployZone: 0
+  - operatorName: Knight
+    operatorType: 0
+    attackType: 0
     cost: 15
     hp: 1000
     damage: 50
@@ -25,95 +26,110 @@ MonoBehaviour:
     rangeOffsets:
     - {x: 1, y: 0}
     - {x: 2, y: 0}
-  - operatorType: 1
-    deployZone: 0
+  - operatorName: Defender
+    operatorType: 1
+    attackType: 1
     cost: 20
     hp: 3000
     damage: 20
     attackSpeed: 1
     blockCount: 3
     operatorPrefab: {fileID: 153204692974087567, guid: 23ae098f6221d604686542bc4fba7f8a, type: 3}
-    icon: {fileID: 0}
+    icon: {fileID: 21300000, guid: ffc47ee71ca7ff34ebd0f72d20b9e3e2, type: 3}
     rangeOffsets:
     - {x: 0, y: 0}
     - {x: 1, y: 0}
-  - operatorType: 2
-    deployZone: 0
+  - operatorName: Striker
+    operatorType: 2
+    attackType: 1
     cost: 18
     hp: 700
     damage: 80
     attackSpeed: 1.5
     blockCount: 1
     operatorPrefab: {fileID: 7089115756794705728, guid: 0eac88e9c3ebe82498062c1fa3c248ce, type: 3}
-    icon: {fileID: 0}
+    icon: {fileID: 21300000, guid: 7045d6c0dfac8c04a94a49bde66859cd, type: 3}
     rangeOffsets:
     - {x: 1, y: 0}
     - {x: 2, y: 0}
     - {x: 3, y: 0}
-  - operatorType: 6
-    deployZone: 0
+  - operatorName: Ace
+    operatorType: 2
+    attackType: 1
     cost: 18
     hp: 800
     damage: 70
     attackSpeed: 1.8
     blockCount: 1
     operatorPrefab: {fileID: 3492125622489615178, guid: 5251563a78b19b34a99f0edf8cf1552e, type: 3}
-    icon: {fileID: 0}
+    icon: {fileID: 21300000, guid: 39f87d384a2a9ba47bd2abf64697edaf, type: 3}
     rangeOffsets:
     - {x: 1, y: 0}
     - {x: 2, y: 0}
     - {x: 3, y: 0}
-  - operatorType: 7
-    deployZone: 1
+  - operatorName: Ginger
+    operatorType: 3
+    attackType: 0
     cost: 16
     hp: 600
     damage: 65
     attackSpeed: 1.2
     blockCount: 0
     operatorPrefab: {fileID: 906363833354006987, guid: 73e50028a06994b43a20644cf83c1b85, type: 3}
-    icon: {fileID: 0}
+    icon: {fileID: 21300000, guid: 8808f09332ca2a64f9a037d33f0f67a8, type: 3}
     rangeOffsets:
     - {x: 1, y: 0}
+    - {x: 2, y: -1}
     - {x: 2, y: 0}
+    - {x: 2, y: 1}
+    - {x: 3, y: -1}
     - {x: 3, y: 0}
+    - {x: 3, y: 1}
     - {x: 4, y: 0}
     - {x: 5, y: 0}
-  - operatorType: 8
-    deployZone: 0
+  - operatorName: Layla
+    operatorType: 2
+    attackType: 1
     cost: 18
     hp: 750
     damage: 75
     attackSpeed: 1.5
     blockCount: 1
     operatorPrefab: {fileID: 1722776060360692474, guid: 5cbcb92b8a8c88444acff156b64e46a4, type: 3}
-    icon: {fileID: 0}
+    icon: {fileID: 21300000, guid: 78619acf8f31f1a4eb7935429699955c, type: 3}
     rangeOffsets:
     - {x: 1, y: 0}
     - {x: 2, y: 0}
     - {x: 3, y: 0}
-  - operatorType: 9
-    deployZone: 1
+  - operatorName: Moon
+    operatorType: 4
+    attackType: 0
     cost: 20
     hp: 700
     damage: 80
     attackSpeed: 1
     blockCount: 0
     operatorPrefab: {fileID: 9162392577938310639, guid: 61f68b18339f71340bec8bc330508a67, type: 3}
-    icon: {fileID: 0}
+    icon: {fileID: 21300000, guid: 2fb67635d271bf74b9b4a34e9458d154, type: 3}
     rangeOffsets:
+    - {x: 1, y: -1}
     - {x: 1, y: 0}
+    - {x: 1, y: 1}
+    - {x: 2, y: -1}
     - {x: 2, y: 0}
+    - {x: 2, y: 1}
     - {x: 3, y: 0}
     - {x: 4, y: 0}
-  - operatorType: 10
-    deployZone: 0
+  - operatorName: Tart
+    operatorType: 1
+    attackType: 0
     cost: 22
     hp: 4000
     damage: 15
     attackSpeed: 0.8
     blockCount: 3
     operatorPrefab: {fileID: 5369137215879447857, guid: 26ff77251fa3fa74a83fb57a1859bff9, type: 3}
-    icon: {fileID: 0}
+    icon: {fileID: 21300000, guid: 0534fcde8c4ef934ab08f3187065c0b4, type: 3}
     rangeOffsets:
     - {x: 0, y: 0}
     - {x: 1, y: 0}

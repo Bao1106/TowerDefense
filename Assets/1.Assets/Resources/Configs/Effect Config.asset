@@ -1,0 +1,114 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1e38abeac19296a4fb4748f188bc5a0a, type: 3}
+  m_Name: Effect Config
+  m_EditorClassIdentifier: 
+  m_Effects:
+  - key: 0
+    vfxPrefab: {fileID: 9169863999176627214, guid: b17328959ab1d3e4d9f166676eb056f7, type: 3}
+    vfxPrefab2: {fileID: 0}
+    impactVfxPrefab: {fileID: 0}
+    sfxClip: {fileID: 0}
+    sfxVolume: 1
+    cameraShake: 0
+    shakeStrength: 0.3
+    shakeDuration: 0.25
+  - key: 1
+    vfxPrefab: {fileID: 8307689965681055727, guid: d9e4aaa9aa1796d46941ec6a1253dd7e, type: 3}
+    vfxPrefab2: {fileID: 0}
+    impactVfxPrefab: {fileID: 0}
+    sfxClip: {fileID: 0}
+    sfxVolume: 1
+    cameraShake: 0
+    shakeStrength: 0.3
+    shakeDuration: 0.25
+  - key: 2
+    vfxPrefab: {fileID: 9169863999176627214, guid: b17328959ab1d3e4d9f166676eb056f7, type: 3}
+    vfxPrefab2: {fileID: 0}
+    impactVfxPrefab: {fileID: 0}
+    sfxClip: {fileID: 0}
+    sfxVolume: 1
+    cameraShake: 0
+    shakeStrength: 0.3
+    shakeDuration: 0.25
+  - key: 3
+    vfxPrefab: {fileID: 5013878782555061258, guid: 53479e37dc2f5564e85dece9c22680d8, type: 3}
+    vfxPrefab2: {fileID: 0}
+    impactVfxPrefab: {fileID: 0}
+    sfxClip: {fileID: 0}
+    sfxVolume: 1
+    cameraShake: 0
+    shakeStrength: 0.3
+    shakeDuration: 0.25
+  - key: 4
+    vfxPrefab: {fileID: 3894563636541966133, guid: afb61413738b4d84486bc935de4a4240, type: 3}
+    vfxPrefab2: {fileID: 0}
+    impactVfxPrefab: {fileID: 0}
+    sfxClip: {fileID: 0}
+    sfxVolume: 1
+    cameraShake: 0
+    shakeStrength: 0.3
+    shakeDuration: 0.25
+  - key: 5
+    vfxPrefab: {fileID: 3894563636541966133, guid: afb61413738b4d84486bc935de4a4240, type: 3}
+    vfxPrefab2: {fileID: 0}
+    impactVfxPrefab: {fileID: 0}
+    sfxClip: {fileID: 0}
+    sfxVolume: 1
+    cameraShake: 0
+    shakeStrength: 0.3
+    shakeDuration: 0.25
+  - key: 6
+    vfxPrefab: {fileID: 3894563636541966133, guid: afb61413738b4d84486bc935de4a4240, type: 3}
+    vfxPrefab2: {fileID: 0}
+    impactVfxPrefab: {fileID: 0}
+    sfxClip: {fileID: 0}
+    sfxVolume: 1
+    cameraShake: 0
+    shakeStrength: 0.3
+    shakeDuration: 0.25
+  - key: 7
+    vfxPrefab: {fileID: 7634420434017284396, guid: 09062c652e37138469a14dfb8555a9d3, type: 3}
+    vfxPrefab2: {fileID: 0}
+    impactVfxPrefab: {fileID: 1574516568193800055, guid: 0c17caf37164f094db6ad281f8b1854b, type: 3}
+    sfxClip: {fileID: 0}
+    sfxVolume: 1
+    cameraShake: 0
+    shakeStrength: 0.3
+    shakeDuration: 0.25
+  - key: 8
+    vfxPrefab: {fileID: 876949634925983196, guid: 2e805db09786fe24082f631048752596, type: 3}
+    vfxPrefab2: {fileID: 0}
+    impactVfxPrefab: {fileID: 6750108211637369354, guid: b33f4bd9e42101c4386e3de2043edf48, type: 3}
+    sfxClip: {fileID: 0}
+    sfxVolume: 1
+    cameraShake: 0
+    shakeStrength: 0.3
+    shakeDuration: 0.25
+  - key: 9
+    vfxPrefab: {fileID: 1497772684437746, guid: 0b4db4c8fa543cc479aa43d8d65004ca, type: 3}
+    vfxPrefab2: {fileID: 0}
+    impactVfxPrefab: {fileID: 0}
+    sfxClip: {fileID: 0}
+    sfxVolume: 1
+    cameraShake: 0
+    shakeStrength: 0.3
+    shakeDuration: 0.25
+  - key: 11
+    vfxPrefab: {fileID: 1989413823170049497, guid: 9009c68c8a60e8a44b863dc5fedac78c, type: 3}
+    vfxPrefab2: {fileID: 0}
+    impactVfxPrefab: {fileID: 0}
+    sfxClip: {fileID: 0}
+    sfxVolume: 1
+    cameraShake: 0
+    shakeStrength: 0.3
+    shakeDuration: 0.25

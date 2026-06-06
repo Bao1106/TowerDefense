@@ -23,8 +23,8 @@ public class OperatorDataDrawer : PropertyDrawer
 
     private static float LH => EditorGUIUtility.singleLineHeight;
 
-    // Fields: operatorPrefab, icon, cost, hp, damage, attackSpeed, blockCount = 7 fields
-    private const int FIELD_COUNT = 7;
+    // Fields: operatorName, operatorType, attackType, operatorPrefab, icon, cost, hp, damage, attackSpeed, blockCount = 10 fields
+    private const int FIELD_COUNT = 10;
 
     public override float GetPropertyHeight(SerializedProperty prop, GUIContent label)
     {
@@ -53,6 +53,9 @@ public class OperatorDataDrawer : PropertyDrawer
         float w = pos.width - 12f;
 
         // ── Standard fields ──────────────────────────────────────────────────
+        DrawField(ref y, x, w, prop, "operatorName");
+        DrawField(ref y, x, w, prop, "operatorType");
+        DrawField(ref y, x, w, prop, "attackType");
         DrawField(ref y, x, w, prop, "operatorPrefab");
         DrawField(ref y, x, w, prop, "icon");
         DrawField(ref y, x, w, prop, "cost");

@@ -7,15 +7,22 @@ using UnityEngine;
 [Serializable]
 public class OperatorData : IDeployableDTO
 {
+    [Tooltip("Tên nhân vật cụ thể (Ace, Ginger, Layla…) — dùng cho UI/display")]
+    public string operatorName;
+
+    [Tooltip("Class archetype — xác định deploy zone và kiểu block/attack")]
     public OperatorType operatorType;
-    public DeployZone   deployZone = DeployZone.PathCell;
+
+    [Tooltip("Single = 1 mục tiêu, Multiple = toàn bộ enemy bị block/trong range")]
+    public AttackType attackType = AttackType.Multiple;
+
     public int cost;
     public float hp;
     public float damage;
     public float attackSpeed;
 
     [Range(0, 3)]
-    [Tooltip("Bao nhiêu enemy bị chặn cùng lúc. TowerZone operator = 0")]
+    [Tooltip("Bao nhiêu enemy bị chặn cùng lúc. Ranger/Mage = 0 (tự động)")]
     public int blockCount;
 
     [Tooltip("Prefab của operator này")]
@@ -28,11 +35,17 @@ public class OperatorData : IDeployableDTO
     [Tooltip("Ô trong range khi facing +X — mặc định {(0,0)} = cùng ô với operator")]
     public Vector2Int[] rangeOffsets;
 
+    // deployZone derive từ class — không cần config thủ công
+    [JsonIgnore]
+    public DeployZone deployZone => operatorType is OperatorType.Ranger or OperatorType.Mage
+        ? DeployZone.TowerZone
+        : DeployZone.PathCell;
+
     // ── IDeployableDTO ────────────────────────────────────────────────────────
     TowerType IDeployableDTO.TowerType => TowerType.Operator;
     float IDeployableDTO.Damage => damage;
     float IDeployableDTO.AttackSpeed => attackSpeed;
-    AttackType IDeployableDTO.AttackType => AttackType.Multiple;
+    AttackType IDeployableDTO.AttackType => attackType;
     int IDeployableDTO.MaxTargets => deployZone == DeployZone.TowerZone ? 0 : Mathf.Clamp(blockCount, 1, 3);
     Vector2Int[] IDeployableDTO.RangeOffsets => rangeOffsets?.Length > 0
         ? rangeOffsets

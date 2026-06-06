@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using TDEnums;
 using UnityEngine;
 
@@ -22,45 +23,60 @@ public class TowerZoneOperatorBehavior : IOperatorBehavior
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
+    private Transform        m_OperatorTransform;
+    private TDOffsetRangeDTO m_RangeDTO;
+
     public void OnInit(Vector2Int cell, OperatorData data, TDOperatorView view)
     {
-        // TowerZone operator không dùng TDOperatorRegistry — không block enemy
+        m_OperatorTransform = view.transform;
+        m_RangeDTO          = new TDOffsetRangeDTO(data?.rangeOffsets);
     }
 
     public void OnRemove(Vector2Int cell, Vector3 worldPos)
     {
         TDGridMainModel.api?.UnoccupyCell(worldPos);
+        m_OperatorTransform = null;
     }
 
     // ── Attack ────────────────────────────────────────────────────────────────
 
+    private TDEnemyView m_PendingTarget;
+
     public bool TryAttack(Vector2Int cell, Vector3 worldPos, OperatorData data)
     {
-        if (data?.rangeOffsets == null || data.rangeOffsets.Length == 0) return false;
+        if (m_RangeDTO == null || TDEnemyRegistry.api == null) return false;
 
-        float cellSize = TDGridMainModel.api?.cellSize ?? 2f;
+        var validCells = new HashSet<Vector2Int>(
+            m_RangeDTO.GetCellsInRange(cell, m_OperatorTransform.rotation));
 
-        // Range = farthest rangeOffset magnitude + 0.5 cell margin
-        float maxOffset = 0f;
-        foreach (var offset in data.rangeOffsets)
-            maxOffset = Mathf.Max(maxOffset, Mathf.Sqrt(offset.x * offset.x + offset.y * offset.y));
-        float range = (maxOffset + 0.5f) * cellSize;
-
-        // Find nearest enemy within sphere
         TDEnemyView nearest     = null;
         float       nearestDist = float.MaxValue;
 
-        foreach (var col in Physics.OverlapSphere(worldPos, range))
+        foreach (var enemy in TDEnemyRegistry.api.GetAll())
         {
-            if (!col.TryGetComponent<TDEnemyView>(out var enemy)) continue;
-            float dist = Vector3.Distance(worldPos, col.transform.position);
+            if (enemy == null) continue;
+            var enemyCell = TDGridMainModel.api.WorldToCell(enemy.transform.position);
+            if (!validCells.Contains(enemyCell)) continue;
+
+            float dist = Vector3.Distance(worldPos, enemy.transform.position);
             if (dist < nearestDist) { nearestDist = dist; nearest = enemy; }
         }
 
         if (nearest == null) return false;
 
-        nearest.TakeDamage(data.damage);
-        TDGameEventBus.TowerAttacked(worldPos, TowerType.Operator);
+        m_PendingTarget = nearest;
+        TDGameEventBus.OperatorAttacked(worldPos, data.operatorType);
         return true;
+    }
+
+    // Gọi từ animation event OnAttackHit trên TDOperatorView
+    public void ExecuteHit(Vector2Int cell, Vector3 worldPos, OperatorData data)
+    {
+        if (m_PendingTarget == null) return;
+
+        Vector3 impactPos = m_PendingTarget.transform.position;
+        m_PendingTarget.TakeDamage(data?.damage ?? 0f);
+        TDGameEventBus.OperatorImpacted(impactPos, data?.operatorType ?? OperatorType.Ranger);
+        m_PendingTarget = null;
     }
 }
