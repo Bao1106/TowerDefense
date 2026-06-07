@@ -11,7 +11,11 @@ public class TowerZoneOperatorBehavior : IOperatorBehavior
     // ── Placement ─────────────────────────────────────────────────────────────
 
     public bool CanPlace(Vector3 worldPos)
-        => TDGridMainModel.api.IsValidPlacement(worldPos);
+    {
+        Vector2Int cell = TDGridMainModel.api.WorldToCell(worldPos);
+        return TDGridMainModel.api.IsInTowerZone(cell)
+            && TDGridMainModel.api.IsValidPlacement(worldPos);
+    }
 
     public void Place(Vector3 worldPos, Quaternion rotation, TDTowerSlotInfo slotInfo)
     {

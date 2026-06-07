@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 public class TDGridMainModel : IGridMainModel
@@ -19,6 +20,7 @@ public class TDGridMainModel : IGridMainModel
     private Vector3[,] m_Grid;
     private bool[,] m_OccupiedCell;
     private float m_OffsetX, m_OffsetZ;
+    private readonly HashSet<Vector2Int> m_TowerZoneCells = new HashSet<Vector2Int>();
 
     public int width { get; private set; }
     public int height { get; private set; }
@@ -113,4 +115,7 @@ public class TDGridMainModel : IGridMainModel
 
     public bool IsInBounds(Vector2Int cell)
         => cell.x >= 0 && cell.x < width && cell.y >= 0 && cell.y < height;
+
+    public void RegisterTowerZoneCell(Vector2Int cell) => m_TowerZoneCells.Add(cell);
+    public bool IsInTowerZone(Vector2Int cell)          => m_TowerZoneCells.Contains(cell);
 }

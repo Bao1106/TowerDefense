@@ -14,4 +14,7 @@ public interface IGridMainModel
     Vector3 CellToWorld(Vector2Int cell);
     Vector2Int WorldToCell(Vector3 worldPosition);
     bool IsInBounds(Vector2Int cell);
+
+    void RegisterTowerZoneCell(Vector2Int cell);
+    bool IsInTowerZone(Vector2Int cell);
 }

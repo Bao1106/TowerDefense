@@ -21,6 +21,7 @@ public class TDPlaceTowerControl
     private void CheckPlaceRegularTower(Vector3 position, GameObject currentTower, TDTowerSlotInfo slotInfo)
     {
         if (!TDGridMainModel.api.IsValidPlacement(position)) return;
+        if (!TDGridMainModel.api.IsInTowerZone(TDGridMainModel.api.WorldToCell(position))) return;
 
         Vector3 nearestPosition = TDGridMainModel.api.GetNearestGridPosition(position);
         Vector3 placedPosition  = new(nearestPosition.x, TDConstant.CONFIG_TOWER_PLACE_Y, nearestPosition.z);

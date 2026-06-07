@@ -175,6 +175,10 @@ public class TDEnemyPathMainControl
             }
 
         Debug.Log($"<color=cyan>[ComputeValidTowerCells] {validPositions.Count} wall cells = tower spots</color>");
+
+        foreach (var pos in validPositions)
+            TDGridMainModel.api.RegisterTowerZoneCell(TDGridMainModel.api.WorldToCell(pos));
+
         onValidTowerCellsReady?.Invoke(validPositions);
     }
 
