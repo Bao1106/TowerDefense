@@ -28,20 +28,20 @@ public class TDEnemyPathView : MonoBehaviour
 
     private void OnGetPaths(List<GameObject> paths)
     {
-        // AddRange thay vì = để accumulate tiles từ nhiều lần CreatePath
+        // Use AddRange instead of = to accumulate tiles across multiple CreatePath calls
         m_InstantiatedTiles.AddRange(paths);
     }
 
-    // Visualize 1 path duy nhất (clear trước)
+    // Visualize a single path (clears any previously rendered tiles first)
     public void VisualizePath(List<IGridCellDTO> path)
     {
         ClearPreviousPath();
         TDEnemyPathControl.api.CreatePath(path, m_PathPrefab);
     }
 
-    // Spawn PathTile.prefab trên tất cả path cells (trừ gate).
-    // Scale tile = cellSize / 10f (Unity Plane native 10u → cellSize lấy từ TDGridMainModel, derive từ GameMapVisualize bounds).
-    // Dùng HashSet để deduplicate: 3 paths có thể share cells.
+    // Spawns PathTile.prefab on all path cells (excluding gate cells).
+    // Tile scale = cellSize / 10f (Unity Plane native size = 10u → cellSize is read from TDGridMainModel, derived from GameMapVisualize bounds).
+    // Uses a HashSet to deduplicate: multiple paths can share cells.
     public void VisualizeAllPaths(List<List<IGridCellDTO>> allPaths)
     {
         if (m_PathPrefab == null)
@@ -60,7 +60,7 @@ public class TDEnemyPathView : MonoBehaviour
                 Vector3 worldPos = TDGridMainModel.api.GetGrid()[cell.position.x, cell.position.y];
                 TDGridMainModel.api.SetOccupiedCell(worldPos);
 
-                // Bỏ qua gate cells (index 0 = GateStart, index cuối = GateEnd)
+                // Skip gate cells (index 0 = GateStart, last index = GateEnd)
                 if (i == 0 || i == path.Count - 1)
                     continue;
 
@@ -68,7 +68,7 @@ public class TDEnemyPathView : MonoBehaviour
                 if (!visitedCells.Add(gridCell))
                     continue;
 
-                // Đăng ký operator cell
+                // Register this as a valid operator cell
                 TDOperatorRegistry.api?.RegisterPathCell(gridCell);
 
                 // Spawn path tile

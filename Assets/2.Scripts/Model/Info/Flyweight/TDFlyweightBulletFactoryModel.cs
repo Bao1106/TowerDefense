@@ -15,7 +15,7 @@ public class TDFlyweightBulletFactoryModel
     private readonly int  m_DefaultCapacity = 10;
     private readonly int  m_MaxCapacity     = 100;
 
-    // 1 pool per TowerType — lazy-created khi bắn lần đầu
+    // 1 pool per TowerType — lazily created the first time a shot is fired
     private readonly Dictionary<TowerType, IObjectPool<TDAttackVFX>> m_Pools
         = new Dictionary<TowerType, IObjectPool<TDAttackVFX>>();
 
@@ -59,7 +59,7 @@ public class TDFlyweightBulletFactoryModel
             createFunc:      () =>
             {
                 var go = Object.Instantiate(prefab);
-                // Đảm bảo prefab có TDAttackVFX — nếu chưa có thì tự add
+                // Ensure the prefab has a TDAttackVFX component — adds one automatically if missing
                 var vfx = go.GetComponent<TDAttackVFX>() ?? go.AddComponent<TDAttackVFX>();
                 return vfx;
             },

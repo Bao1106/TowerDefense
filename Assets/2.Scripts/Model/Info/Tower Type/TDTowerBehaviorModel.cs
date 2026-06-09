@@ -28,7 +28,7 @@ public class TDTowerBehaviorModel : IWeaponBehaviorDTO
         // TowerType.Operator NOT included — TDOperatorView reads its SO directly
     }
 
-    // Gọi khi scene reload để force rebuild map từ SO mới
+    // Called on scene reload to force a full rebuild of the data map from the updated ScriptableObject
     public void InvalidateCache() => m_DataMap = null;
 
     // ── IWeaponBehaviorDTO ────────────────────────────────────────────────────

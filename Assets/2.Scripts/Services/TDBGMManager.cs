@@ -2,9 +2,9 @@ using DG.Tweening;
 using UnityEngine;
 
 /// <summary>
-/// Static BGM system — consistent với TDEffectManager pattern.
-/// Tạo AudioSource GameObject động, dùng DOTween fade in/out.
-/// Init() gọi từ TDControl.InitOtherControl().
+/// Static BGM system — follows the same pattern as TDEffectManager.
+/// Creates an AudioSource GameObject dynamically and uses DOTween for fade in/out.
+/// Init() is called from TDControl.InitOtherControl().
 /// </summary>
 public static class TDBGMManager
 {

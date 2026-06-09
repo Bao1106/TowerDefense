@@ -4,12 +4,12 @@ using UnityEngine;
 // Recursive Backtracker maze generator — multi-group variant.
 //
 // GenerateForGroups():
-//   Với mỗi TDPathGroup, gen PathCount mazes độc lập.
-//   Mỗi maze run: reset grid → CarveFrom(group.StartCell) → A* extract 1 path.
-//   Gom tất cả path cells vào combinedPathCells HashSet → restore 1 lần cuối.
-//   → Tránh SetAllWalls() wipe kết quả của group trước.
+//   For each TDPathGroup, generates PathCount independent mazes.
+//   Each maze run: reset the grid → CarveFrom(group.StartCell) → extract 1 path via A*.
+//   Collects all path cells into a combinedPathCells HashSet → restores all at the end in one pass.
+//   → Prevents SetAllWalls() from wiping the results of previously processed groups.
 //
-// CarveFrom: iterative Stack thay vì recursion → tránh StackOverflow trên grid lớn.
+// CarveFrom: uses an iterative Stack instead of recursion → avoids StackOverflow on large grids.
 public class TDMazePathGenerator
 {
     public static TDMazePathGenerator api;
@@ -21,7 +21,7 @@ public class TDMazePathGenerator
         m_PathFinder = pathFinder;
     }
 
-    // Entry point: gen paths cho tất cả groups, populate group.Corridors
+    // Entry point: generates paths for all groups and populates group.Corridors
     public void GenerateForGroups(IGridDTO gridDTO, List<TDPathGroup> groups)
     {
         var combinedPathCells = new HashSet<Vector2Int>();
@@ -48,12 +48,12 @@ public class TDMazePathGenerator
             }
         }
 
-        // Final: restore tất cả path cells vào grid
+        // Final pass: restore all path cells into the grid as walkable
         SetAllWalls(gridDTO);
         foreach (var pos in combinedPathCells)
             gridDTO.GetCell(pos.x, pos.y).isWalkable = true;
 
-        // Safety: start/end luôn walkable
+        // Safety: start/end cells are always kept walkable
         foreach (var group in groups)
         {
             gridDTO.GetCell(group.StartCell.x, group.StartCell.y).isWalkable = true;
@@ -67,10 +67,10 @@ public class TDMazePathGenerator
 
     // ── Private ───────────────────────────────────────────────────────────────
 
-    // Reset → carve → A* extract. Retry tối đa MAX_ATTEMPTS lần cho đến khi
-    // path đủ dài (>= gridDTO.width). Fallback về path dài nhất tìm được.
-    // allGroups: block gate cells của các groups khác trước khi A* chạy
-    // → tránh path của group này đi xuyên qua gate của group khác.
+    // Reset → carve → A* extract. Retries up to MAX_ATTEMPTS times until a
+    // path of sufficient length (>= gridDTO.width) is found. Falls back to the longest path found.
+    // allGroups: blocks the gate cells of other groups before A* runs
+    // → prevents this group's path from routing through another group's gate.
     private List<IGridCellDTO> Carve(IGridDTO gridDTO, TDPathGroup group, List<TDPathGroup> allGroups)
     {
         const int MAX_ATTEMPTS = 10;
@@ -85,7 +85,7 @@ public class TDMazePathGenerator
             CarveFrom(gridDTO, visited, group.StartCell.x, group.StartCell.y);
             gridDTO.GetCell(group.EndCell.x, group.EndCell.y).isWalkable = true;
 
-            // Block gate cells của groups khác — A* không được route qua đó
+            // Block gate cells of other groups — A* must not route through them
             foreach (var other in allGroups)
             {
                 if (other == group) continue;
@@ -118,8 +118,8 @@ public class TDMazePathGenerator
                 grid.GetCell(x, y).isWalkable = false;
     }
 
-    // Iterative Recursive Backtracker — tránh StackOverflow trên grid lớn.
-    // Room cells tại even (x,y); corridor cells (walls giữa 2 rooms) tại odd coords.
+    // Iterative Recursive Backtracker — avoids StackOverflow on large grids.
+    // Room cells are at even (x,y) coordinates; corridor cells (walls between two rooms) are at odd coordinates.
     private void CarveFrom(IGridDTO grid, bool[,] visited, int startX, int startY)
     {
         int[] dx   = {  0,  2,  0, -2 };

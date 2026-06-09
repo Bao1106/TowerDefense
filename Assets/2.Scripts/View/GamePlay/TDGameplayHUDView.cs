@@ -7,9 +7,9 @@ using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 /// <summary>
-/// Quản lý toàn bộ HUD gameplay (trừ TowerMainView).
-/// Gắn vào: Canvas/SafeArea/Container
-/// Cache tất cả item qua transform.Find() — không dùng [SerializeField].
+/// Manages the entire gameplay HUD (excluding TowerMainView).
+/// Attached to: Canvas/SafeArea/Container
+/// Caches all references via transform.Find() — no [SerializeField] needed.
 /// </summary>
 public class TDGameplayHUDView : MonoBehaviour
 {
@@ -64,8 +64,8 @@ public class TDGameplayHUDView : MonoBehaviour
 
     private void Start()
     {
-        SubscribeEvents(); // subscribe trước để nhận event từ InitControls
-        InitControls();    // fire onSpeedChanged/onGoldChanged → UI sync ngay
+        SubscribeEvents(); // subscribe first so events from InitControls are received
+        InitControls();    // fires onSpeedChanged/onGoldChanged → immediately syncs the UI
         SetupButtons();
         PlaySceneFadeIn();
     }
@@ -275,7 +275,7 @@ public class TDGameplayHUDView : MonoBehaviour
 
     private void OnRetryClicked()
     {
-        // Stage ID giữ nguyên (TDGameStateControl dùng ??= khi Init lại)
+        // Stage ID is preserved (TDGameStateControl uses ??= when re-initialized)
         PlaySceneFadeOut(() => SceneManager.LoadScene(TDConstant.SCENE_LOAD_FIRST));
     }
 
@@ -289,7 +289,7 @@ public class TDGameplayHUDView : MonoBehaviour
 
     private void OnSettingClicked()
     {
-        // TODO Phase 9: mở Settings panel
+        // TODO Phase 9: open Settings panel
         Debug.Log("[HUD] Setting clicked");
     }
 

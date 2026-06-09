@@ -72,7 +72,7 @@ public class TDEnemyPathMainControl
 
     // ── Gate Setup ────────────────────────────────────────────────────────────
 
-    // Mark tất cả start/end cells trong gridDTO theo groups
+    // Marks all start/end cells in the gridDTO based on the provided groups
     public void InitEnemyPath(IGridDTO gridDTO, List<TDPathGroup> groups)
     {
         foreach (var g in groups)
@@ -92,10 +92,10 @@ public class TDEnemyPathMainControl
 
     // Universal pairing: groupCount = max(startCount, endCount)
     // start[i % startCount] → end[i % endCount]
-    // Cross pairing khi 2s2e để tăng Y displacement (windiness)
+    // Cross pairing when 2 starts and 2 ends to increase Y displacement (windiness)
     public List<TDPathGroup> BuildPathGroups(TDStageConfig stage, IGridDTO gridDTO)
     {
-        // Fallback defaults khi stage null (e.g. stageId không tìm thấy)
+        // Fallback defaults when stage is null (e.g. stageId not found)
         int               startCount = stage?.StartGateCount ?? 1;
         int               endCount   = stage?.EndGateCount   ?? 1;
         TDEnums.MapLayout layout     = stage?.Layout         ?? TDEnums.MapLayout.LeftToRight;
@@ -105,12 +105,12 @@ public class TDEnemyPathMainControl
         var startCells = TDGatePlacer.Place(startCount, startBorder, gridDTO.width, gridDTO.height);
         var endCells   = TDGatePlacer.Place(endCount,   endBorder,   gridDTO.width, gridDTO.height);
 
-        // Cross pairing: đảo endCells khi 2s2e — tăng Y displacement
+        // Cross pairing: reverse endCells when 2 starts and 2 ends — increases Y displacement
         if (startCount == 2 && endCount == 2)
             endCells.Reverse();
 
         int groupCount    = Mathf.Max(startCells.Count, endCells.Count);
-        int pathsPerGroup = TDConstant.CONFIG_NUM_PATHS; // mỗi group luôn có đủ corridors
+        int pathsPerGroup = TDConstant.CONFIG_NUM_PATHS; // each group always has a full set of corridors
 
         var groups = new List<TDPathGroup>(groupCount);
         for (int i = 0; i < groupCount; i++)
@@ -144,7 +144,7 @@ public class TDEnemyPathMainControl
         onGroupsReady?.Invoke(groups);
     }
 
-    // Valid tower cells = wall cells, excluding gate buffers và occupied cells
+    // Valid tower cells = wall cells, excluding gate buffers and occupied cells
     public void ComputeValidTowerCells(IGridDTO gridDTO, List<TDPathGroup> groups)
     {
         const int gateBuffer = 2;
@@ -208,7 +208,7 @@ public class TDEnemyPathMainControl
 
                 var assignments = m_Strategy.SelectForWave(groups, waveIdx);
 
-                // Chia đều enemies cho mỗi assignment trong wave
+                // Distribute enemies evenly across each assignment in the wave
                 var batch     = wavePlans[waveIdx];
                 int perGroup  = Mathf.Max(1, batch.Count / assignments.Count);
 

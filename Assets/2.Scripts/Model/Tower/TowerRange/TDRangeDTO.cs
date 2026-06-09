@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-// Abstract base — GetCellsInRange được derive từ IsInRange để đảm bảo nhất quán.
-// Subclass chỉ cần implement DetectionRadius + IsInRange, không cần override GetCellsInRange.
+// Abstract base — GetCellsInRange is derived from IsInRange to ensure consistency.
+// Subclasses only need to implement DetectionRadius + IsInRange; overriding GetCellsInRange is optional.
 public abstract class TDRangeDTO : ITowerRangeDTO
 {
     public abstract float DetectionRadius { get; }

@@ -35,7 +35,7 @@ public class TDGameStateControl
         TotalWaves  = totalWaves;
     }
 
-    // Gọi khi enemy bị kill (damage) hoặc thoát vào gate
+    // Called when an enemy is killed (by damage) or escapes through the gate
     public void OnEnemyRemoved()
     {
         if (IsGameEnded) return;
@@ -51,7 +51,7 @@ public class TDGameStateControl
         CheckVictory();
     }
 
-    // Gọi khi player thua (life = 0) để ngăn victory fire sau đó
+    // Called when the player loses (life = 0) to prevent victory from firing afterwards
     public void OnGameOver()
     {
         IsGameEnded = true;

@@ -25,14 +25,14 @@ public class TDaStarPathModel
     
     public float GetMovementCost(IGridCellDTO from, IGridCellDTO to)
     {
-        // Chỉ cho phép di chuyển ngang hoặc dọc
+        // Only horizontal and vertical movement is allowed
         return 1.0f;
     }
     
     public List<IGridCellDTO> GetNeighbors(IGridDTO gridDTO, IGridCellDTO cellDto)
     {
         List<IGridCellDTO> neighbors = new List<IGridCellDTO>();
-        int[] dx = { 0, 1, 0, -1 }; // Chỉ cho phép di chuyển lên, phải, xuống, trái
+        int[] dx = { 0, 1, 0, -1 }; // Only up, right, down, left movement allowed
         int[] dy = { 1, 0, -1, 0 };
 
         for (int i = 0; i < 4; i++)

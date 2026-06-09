@@ -3,10 +3,10 @@ using TDEnums;
 using UnityEngine;
 
 // Section-based random gate placement.
-// Đảm bảo gates phân bố đều trên border + luôn nằm tại even coordinate (maze room cell).
+// Ensures gates are evenly distributed along the border and always placed at even coordinates (maze room cells).
 public static class TDGatePlacer
 {
-    // Tính BorderSide của start và end từ MapLayout
+    // Derives the BorderSide for start and end from the given MapLayout
     public static (BorderSide start, BorderSide end) GetBorders(MapLayout layout) => layout switch
     {
         MapLayout.LeftToRight    => (BorderSide.Left,   BorderSide.Right),
@@ -18,10 +18,10 @@ public static class TDGatePlacer
         _                        => (BorderSide.Left,   BorderSide.Right),
     };
 
-    // Đặt `count` gates trên border chỉ định.
-    // Left/Right: sections theo chiều Y, fixed X.
-    // Top/Bottom: sections theo chiều X, fixed Y.
-    // Mỗi section chọn 1 random even coordinate → đảm bảo maze room cell.
+    // Places `count` gates on the specified border.
+    // Left/Right: sections run along the Y axis, with a fixed X coordinate.
+    // Top/Bottom: sections run along the X axis, with a fixed Y coordinate.
+    // Each section picks one random even coordinate → guarantees a maze room cell.
     public static List<Vector2Int> Place(int count, BorderSide border, int gridWidth, int gridHeight)
     {
         var result = new List<Vector2Int>(count);
@@ -45,7 +45,7 @@ public static class TDGatePlacer
         return result;
     }
 
-    // Rotation để gate visual nhìn vào trong map
+    // Rotation so the gate visual faces inward toward the map
     public static Quaternion FacingRotation(BorderSide border) => border switch
     {
         BorderSide.Left   => Quaternion.Euler(0,  90, 0),
@@ -72,7 +72,7 @@ public static class TDGatePlacer
         };
     }
 
-    // Chọn random 1 số even trong [min, max]. Fallback về số even gần nhất nếu section rỗng.
+    // Picks a random even number in [min, max]. Falls back to the nearest even number if the section is empty.
     private static int PickEvenInRange(int min, int max)
     {
         int startEven = min % 2 == 0 ? min : min + 1;
@@ -84,7 +84,7 @@ public static class TDGatePlacer
         if (evens.Count > 0)
             return evens[Random.Range(0, evens.Count)];
 
-        // Fallback: clamp về even gần nhất
+        // Fallback: clamp to the nearest even number
         return min % 2 == 0 ? min : Mathf.Max(0, min - 1);
     }
 }

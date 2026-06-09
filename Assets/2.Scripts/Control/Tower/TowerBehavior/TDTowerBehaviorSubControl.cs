@@ -6,10 +6,10 @@ public class TDTowerBehaviorSubControl
 {
     public static TDTowerBehaviorSubControl api;
 
-    // Spawn 1 projectile per target — targets đã được ScanForTargets lọc & sort
+    // Spawns 1 projectile per target — targets have already been filtered and sorted by ScanForTargets
     // Single: targets.Count == 1
     // Multiple: targets.Count == maxTargets (2–5)
-    // AOE: targets.Count == 1, damage splash tại OnImpact
+    // AOE: targets.Count == 1, damage splashes at OnImpact
     public void Attack(List<TDEnemyView> targets, Transform spawnProjectile,
                        TowerType type, ITowerRangeDTO rangeDTO, Quaternion towerRotation)
     {

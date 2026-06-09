@@ -19,14 +19,14 @@ public class TDEnemyPathControl
             GameObject tile = Object.Instantiate(pathPrefab, worldPosition, Quaternion.identity);
             tile.transform.position =
                 new Vector3(tile.transform.position.x, TDConstant.CONFIG_PATH_OFFSET_Y, tile.transform.position.z);
-            // Unity Plane native size = 10×10 → scale = cellSize/10 để tile vừa khít 1 cell
+            // Unity Plane native size = 10×10 → scale = cellSize/10 so the tile fits exactly one cell
             float tileScale = TDConstant.CONFIG_GRID_CELL_SIZE / 10f;
             tile.transform.localScale = new Vector3(tileScale, tile.transform.localScale.y, tileScale);
             tiles.Add(tile);
                 
             TDGridMainModel.api.SetOccupiedCell(worldPosition);
 
-            /*// Điều chỉnh rotation nếu cần
+            /*// Adjust rotation if needed
             if (i < path.Count - 1)
             {
                 Vector3 nextPosition = new Vector3(path[i + 1].Position.x, tileOffsetY, path[i + 1].Position.y);

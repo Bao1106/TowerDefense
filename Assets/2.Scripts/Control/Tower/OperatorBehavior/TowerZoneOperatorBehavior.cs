@@ -3,8 +3,8 @@ using TDEnums;
 using UnityEngine;
 
 /// <summary>
-/// Operator đặt trên tower zone: ranged attack, không block enemy.
-/// Dùng cho Sniper (Ginger), Caster (Moon) và các TowerZone variants sau này.
+/// Operator placed on a tower zone: performs ranged attacks and does not block enemies.
+/// Used for Sniper (Ginger), Caster (Moon), and any future TowerZone variants.
 /// </summary>
 public class TowerZoneOperatorBehavior : IOperatorBehavior
 {
@@ -73,7 +73,7 @@ public class TowerZoneOperatorBehavior : IOperatorBehavior
         return true;
     }
 
-    // Gọi từ animation event OnAttackHit trên TDOperatorView
+    // Called from the OnAttackHit animation event on TDOperatorView
     public void ExecuteHit(Vector2Int cell, Vector3 worldPos, OperatorData data)
     {
         if (m_PendingTarget == null) return;

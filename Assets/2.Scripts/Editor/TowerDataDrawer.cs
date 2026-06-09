@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
-// Custom Inspector cho TowerData — hiển thị range dạng lưới click-to-toggle.
-// Trục: x = forward (→), y = right-of-facing (↑ = phải khi nhìn từ tower)
-// Tower luôn ở ô (0,0) — màu xanh dương, không toggle được.
+// Custom Inspector for TowerData — displays the attack range as a click-to-toggle grid.
+// Axes: x = forward (→), y = right-of-facing (↑ = right when viewed from behind the tower)
+// The tower is always at cell (0,0) — shown in blue and cannot be toggled.
 [CustomPropertyDrawer(typeof(TowerData))]
 public class TowerDataDrawer : PropertyDrawer
 {

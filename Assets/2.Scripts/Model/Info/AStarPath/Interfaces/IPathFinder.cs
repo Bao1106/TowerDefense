@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 
-// Slim interface cho A* — chỉ ComputePath, không có events hay legacy methods.
-// TDMazePathGenerator inject qua constructor để tránh direct static call (DIP).
+// Slim interface for A* — only ComputePath, no events or legacy methods.
+// TDMazePathGenerator receives this via constructor injection to avoid direct static calls (Dependency Inversion Principle).
 public interface IPathFinder
 {
     List<IGridCellDTO> ComputePath(IGridDTO grid, IGridCellDTO start, IGridCellDTO end);

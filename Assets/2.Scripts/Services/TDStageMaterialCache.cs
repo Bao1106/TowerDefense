@@ -1,25 +1,25 @@
 using UnityEngine;
 
 /// <summary>
-/// Cache tập trung cho các Material dùng trong stage.
-/// - TowerHighlight  : load từ Resources (asset có sẵn, không destroy)
-/// - OperatorHighlight: tạo runtime 1 lần, destroy khi Clear()
-/// Gọi Clear() khi stage/scene reset để giải phóng memory.
+/// Centralized cache for materials used within a stage.
+/// - TowerHighlight  : loaded from Resources (pre-existing asset, never destroyed)
+/// - OperatorHighlight: created at runtime once, destroyed when Clear() is called
+/// Call Clear() when the stage or scene is reset to free memory.
 /// </summary>
 public static class TDStageMaterialCache
 {
     private const string SHADER_URP_UNLIT        = "Universal Render Pipeline/Unlit";
     private const string RES_TOWER_HIGHLIGHT_MAT = "Materials/TowerHighlight";
 
-    private static Material m_OperatorHighlight; // runtime-created, xanh dương — PathCell
-    private static Material m_TowerHighlight;    // Resources asset, xanh lá   — TowerZone
+    private static Material m_OperatorHighlight; // runtime-created, blue — PathCell
+    private static Material m_TowerHighlight;    // Resources asset, green — TowerZone
 
     // ── Accessors ─────────────────────────────────────────────────────────────
 
     public static Material OperatorHighlight
         => m_OperatorHighlight ??= CreateRuntime(new Color(0.1f, 0.45f, 1f, 0.75f));
 
-    /// <summary>Load từ Resources/Materials/TowerHighlight.mat (asset có sẵn).</summary>
+    /// <summary>Loads from Resources/Materials/TowerHighlight.mat (pre-existing asset).</summary>
     public static Material TowerHighlight
     {
         get
@@ -36,9 +36,9 @@ public static class TDStageMaterialCache
 
     public static void Clear()
     {
-        // Chỉ destroy material được tạo runtime — Resources asset KHÔNG destroy
+        // Only destroy the runtime-created material — the Resources asset must NOT be destroyed
         DestroyRef(ref m_OperatorHighlight);
-        m_TowerHighlight = null; // chỉ null ref, asset vẫn còn trong Resources
+        m_TowerHighlight = null; // only nulls the reference; the asset remains in Resources
     }
 
     // ── Private ───────────────────────────────────────────────────────────────

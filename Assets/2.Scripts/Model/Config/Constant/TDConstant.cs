@@ -23,9 +23,9 @@ public static class TDConstant
     public const string GAMEPLAY_TEXT_COST_TOWER_HOLDER = "CostBg/Cost";
     public const string GAMEPLAY_BUTTON_TOWER_HOLDER = "ButtonSelector";
 
-    // Placement panel — hiện khi đang chọn tower, ẩn khi đặt xong / cancel
-    // Mobile: drag direction = hướng tower (Arknights-style), nhấc ngón = đặt tower
-    // Desktop: E/Q rotate, LMB place, RMB cancel (keyboard shortcuts vẫn hoạt động)
+    // Placement panel — shown while a tower is selected, hidden after placement or cancellation
+    // Mobile: drag direction determines tower facing (Arknights-style), lifting finger confirms placement
+    // Desktop: E/Q to rotate, LMB to place, RMB to cancel (keyboard shortcuts remain active)
     public const string GAMEPLAY_PLACEMENT_PANEL   = "PlacementPanel";
     public const string GAMEPLAY_BTN_CANCEL_PLACE  = "PlacementPanel/BtnCancel";
     public const string GAMEPLAY_TOWER_BULLET_SPAWN = "SpawnBullet";
@@ -34,7 +34,7 @@ public static class TDConstant
     public const string GAMEPLAY_ENEMY_PATH_VIEW = "PathView";
     public const string GAMEPLAY_MAP_VISUALIZE = "GameMapVisualize";
 
-    // HUD paths — relative to Canvas/SafeArea/Container (dùng bởi TDGameplayHUDView)
+    // HUD paths — relative to Canvas/SafeArea/Container (used by TDGameplayHUDView)
     public const string PATH_GAMEPLAY_HUD_BACK_BUTTON       = "Header/HUDButtonRight/BackButton";
     public const string PATH_GAMEPLAY_HUD_SETTING_BUTTON    = "Header/HUDButtonRight/SettingButton";
     public const string PATH_GAMEPLAY_HUD_ENEMY_COUNT       = "Header/MapInfo/EnemyCount/TxtValue";
@@ -47,7 +47,7 @@ public static class TDConstant
     public const string PATH_GAMEPLAY_HUD_CURRENCY          = "Bottom/Currency/TxtValue";
     public const string PATH_GAMEPLAY_HUD_PAUSE_PANEL       = "PausePanel";
     public const string PATH_GAMEPLAY_HUD_RESUME_BUTTON     = "PausePanel/ResumeButton";
-    // FlashScreen nằm ở SafeArea (cha của Container) → dùng transform.parent.Find()
+    // FlashScreen lives under SafeArea (the parent of Container) → use transform.parent.Find()
     public const string PATH_GAMEPLAY_SCREEN_FLASH          = "FlashScreen";
     // Full-screen black overlay — starts active+black so scene opens from darkness
     public const string PATH_GAMEPLAY_TRANSITION_OVERLAY    = "TransitionOverlay";
@@ -73,7 +73,7 @@ public static class TDConstant
     public const string PATH_GAMEOVER_STAT_GOLD     = "GameOverPanel/PopupWindow/Middle/Info/Gold Remaining/TxtValue";
     public const string PATH_GAMEOVER_STAT_WAVE     = "GameOverPanel/PopupWindow/Middle/Info/WaveReached/TxtValue";
 
-    // Operator action panel — relative to Canvas/SafeArea/Container (dùng bởi TDOperatorSelectionView)
+    // Operator action panel — relative to Canvas/SafeArea/Container (used by TDOperatorSelectionView)
     public const string PATH_OPERATOR_ACTION_PANEL  = "OperatorActionPanel";
     public const string PATH_OPERATOR_BTN_RETREAT   = "OperatorActionPanel/BtnRetreat";
     public const string PATH_OPERATOR_BTN_RETREAT_ICON  = "OperatorActionPanel/BtnRetreat/Icon";
@@ -89,19 +89,19 @@ public static class TDConstant
 
     //Config Values
     public static readonly float[] CONFIG_TOWER_ROTATIONS = { 0f, 90f, 180f, 270f };
-    // Grid size derives từ GameMapVisualize plane bounds / cellSize — không hardcode
-    // Start/End tính động: start=(0, height/2), end=(width-1, height/2)
+    // Grid size is derived from GameMapVisualize plane bounds / cellSize — not hardcoded
+    // Start/End are computed dynamically: start=(0, height/2), end=(width-1, height/2)
 
     // --- MAZE CONFIG ---
-    // Extra passage rate: % wall cells được mở thêm để tạo loops
+    // Extra passage rate: percentage of wall cells that are opened to create extra loops in the maze
     public const float CONFIG_MAZE_EXTRA_PASSAGE_RATE = 0.45f;
-    // Obstacle ratio: % wall cells dùng làm obstacle decoration (không đặt tower được)
-    // Remaining (1 - ratio) = tower zone tiles (đặt tower được)
+    // Obstacle ratio: percentage of wall cells used as obstacle decorations (towers cannot be placed here)
+    // Remaining (1 - ratio) = tower zone tiles (towers can be placed here)
     public const float CONFIG_MAZE_OBSTACLE_WALL_RATIO = 0.15f;
     public const int   CONFIG_PLAYER_STARTING_LIVES  = 20;
     public const int   CONFIG_PLAYER_STARTING_GOLD   = 10;
-    public const float CONFIG_GOLD_PASSIVE_RATE       = 3f;   // giây/+1 gold passive
-    public const int   CONFIG_LIFE_LOW_THRESHOLD      = 5;    // <= 5 life → text đỏ
+    public const float CONFIG_GOLD_PASSIVE_RATE       = 3f;   // seconds per +1 passive gold tick
+    public const int   CONFIG_LIFE_LOW_THRESHOLD      = 5;    // <= 5 lives → life text turns red
     public const int CONFIG_ENEMIES_NUMBER        = 5;
     public const int CONFIG_ENEMY_SPAWN_DELAY_MS  = 2000;
     public const int CONFIG_WAVE_INTERVAL_MS      = 10000;
@@ -112,16 +112,16 @@ public static class TDConstant
     public const float CONFIG_ENEMY_HEALTH = 300f;
     public const float CONFIG_GRID_CELL_SIZE = 2f;
     public const float CONFIG_ENEMY_VISUAL_SCALE = 1.5f;
-    // TowerZone tile: scale.y = 0.12, center tại y=0 → top face tại y=0.06
-    // Tower ghost và placed tower đều dùng offset này để ngồi trên zone tile
+    // TowerZone tile: scale.y = 0.12, center at y=0 → top face at y=0.06
+    // Both the tower ghost and the placed tower use this offset to sit on top of the zone tile
     public const float CONFIG_TOWER_ZONE_TILE_HEIGHT = 0.12f;
-    // Range highlight phải cao hơn tower zone top face (0.12) và path tiles (0.10) để không bị đè
+    // Range highlight must sit above the tower zone top face (0.12) and path tiles (0.10) to avoid z-fighting
     public const float CONFIG_RANGE_HIGHLIGHT_Y = 0.3f;
     public const float CONFIG_OPERATOR_PLACE_Y          = 0.02f;  // tower base placed 0.6u above ground (above TowerZone top face 0.06)
     public const float CONFIG_TOWER_PLACE_Y          = 0.6f;  // tower base placed 0.6u above ground (above TowerZone top face 0.06)
     public const string CONFIG_TOWER          = "Tower Bullet Config";
-    public const string CONFIG_OPERATOR = "Melee Operator Config"; // SO riêng cho melee
-    public const string CONFIG_EFFECT   = "Configs/Effect Config"; // SO map GameEventKey → EffectDef
+    public const string CONFIG_OPERATOR = "Melee Operator Config"; // dedicated ScriptableObject for melee operators
+    public const string CONFIG_EFFECT   = "Configs/Effect Config"; // ScriptableObject mapping GameEventKey → EffectDef
 
     #endregion
 

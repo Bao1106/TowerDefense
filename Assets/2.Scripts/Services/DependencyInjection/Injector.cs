@@ -147,7 +147,7 @@ namespace Services.DependencyInjection
         
         private bool IsInjectableField(FieldInfo field, Type fieldType, string key)
         {
-            // Kiểm tra xem field có kiểu dữ liệu phù hợp và có khóa (key) trùng khớp không
+            // Checks whether the field has the matching type and a matching injection key
             return field.FieldType == fieldType && field.GetCustomAttribute<InjectAttribute>() != null && field.GetCustomAttribute<InjectAttribute>().Key == key;
         }
         

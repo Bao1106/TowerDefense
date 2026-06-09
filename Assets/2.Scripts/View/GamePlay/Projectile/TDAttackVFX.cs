@@ -2,9 +2,9 @@ using System.Collections.Generic;
 using TDEnums;
 using UnityEngine;
 
-// Thay thế TDBulletsView — xử lý tất cả attack types (Single/Multiple/AOE).
-// Homing: track target mỗi frame; nếu target chết → bay đến vị trí cuối cùng biết được.
-// AOE: khi đến nơi → GetCellsInRange → damage tất cả enemy trong cells.
+// Replaces TDBulletsView — handles all attack types (Single/Multiple/AOE).
+// Homing: tracks the target every frame; if the target dies → flies to the last known position.
+// AOE: on arrival → calls GetCellsInRange → deals damage to all enemies in those cells.
 public class TDAttackVFX : MonoBehaviour
 {
     public TowerType OwnerType { get; set; }
@@ -35,7 +35,7 @@ public class TDAttackVFX : MonoBehaviour
     {
         if (m_HasImpacted) return;
 
-        // Track target nếu còn sống → homing; nếu chết → giữ vị trí cuối
+        // Track target if still alive → homing behavior; if dead → keep last known position
         if (m_Target != null)
             m_TargetPos = m_Target.transform.position;
 
@@ -76,7 +76,7 @@ public class TDAttackVFX : MonoBehaviour
         var cells    = m_RangeDTO.GetCellsInRange(hitCell, m_TowerRotation);
         var cellSet  = new HashSet<Vector2Int>(cells);
 
-        // Copy list để tránh invalidation khi TakeDamage → Unregister modify gốc
+        // Copy the list to prevent invalidation when TakeDamage → Unregister modifies the original
         var enemies = new List<TDEnemyView>(TDEnemyRegistry.api.GetAll());
         foreach (var enemy in enemies)
         {

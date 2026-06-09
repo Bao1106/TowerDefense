@@ -21,7 +21,7 @@ public class TDPauseControl
     {
         if (!IsPaused) return;
         IsPaused = false;
-        // Restore đúng speed multiplier thay vì hardcode 1f
+        // Restore the correct speed multiplier instead of hardcoding 1f
         Time.timeScale = TDSpeedControl.api?.SpeedMultiplier ?? 1f;
         onPauseChanged?.Invoke(false);
     }

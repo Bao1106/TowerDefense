@@ -1,9 +1,9 @@
 using UnityEngine;
 
 /// <summary>
-/// Subscriber của TDTowerFactoryControl.onCreateTowerSuccess — backward-compat.
-/// Init(key) giờ được gọi bên trong TDTowerFactoryControl.CreateUnit qua IPlacedUnit.
-/// File này giữ lại để không break scene reference; không còn logic thực.
+/// Subscriber of TDTowerFactoryControl.onCreateTowerSuccess — kept for backward compatibility.
+/// Init(key) is now called internally by TDTowerFactoryControl.CreateUnit via IPlacedUnit.
+/// This file is retained to avoid breaking scene references; it no longer contains active logic.
 /// </summary>
 public class TDTowerFactoryView : MonoBehaviour
 {

@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-// Random group và random corridor mỗi wave
+// Selects a random group and a random corridor within that group each wave
 public class RandomStrategy : IGateAssignmentStrategy
 {
     public List<(TDPathGroup, List<IGridCellDTO>)> SelectForWave(List<TDPathGroup> groups, int waveIndex)

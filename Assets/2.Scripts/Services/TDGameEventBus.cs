@@ -3,8 +3,8 @@ using TDEnums;
 using UnityEngine;
 
 /// <summary>
-/// Event bus tập trung cho các cross-cutting concerns: VFX, Audio, Camera shake.
-/// Gameplay code raise event — audio/VFX system subscribe độc lập, không coupling ngược lại.
+/// Centralized event bus for cross-cutting concerns: VFX, Audio, and camera shake.
+/// Gameplay code raises events — audio/VFX systems subscribe independently with no reverse coupling.
 /// </summary>
 public static class TDGameEventBus
 {

@@ -2,8 +2,8 @@ using TDEnums;
 using UnityEngine;
 
 /// <summary>
-/// Operator đặt trên path cell: block enemy, melee attack.
-/// Dùng cho Knight / Defender / Striker và các custom melee variants.
+/// Operator placed on a path cell: blocks enemies and performs melee attacks.
+/// Used for Knight / Defender / Striker and any custom melee variants.
 /// </summary>
 public class PathCellOperatorBehavior : IOperatorBehavior
 {

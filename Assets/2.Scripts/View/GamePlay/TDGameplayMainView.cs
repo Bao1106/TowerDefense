@@ -2,8 +2,8 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 
 /// <summary>
-/// Chịu trách nhiệm khởi tạo gameplay core: grid, enemy path.
-/// Toàn bộ HUD được xử lý bởi TDGameplayHUDView (Canvas/SafeArea/Container).
+/// Responsible for initializing the core gameplay systems: grid and enemy path.
+/// All HUD elements are managed by TDGameplayHUDView (Canvas/SafeArea/Container).
 /// </summary>
 public class TDGameplayMainView : MonoBehaviour
 {
@@ -43,7 +43,7 @@ public class TDGameplayMainView : MonoBehaviour
         m_TDEnemyPathMainView.ApplyStageConfig(stage);
         m_TDEnemyPathMainView.SetLevelIndex(stage?.LevelIndex ?? 0);
 
-        // Wire gate assignment strategy theo stage config
+        // Wire the gate assignment strategy from the stage config
         var strategy = TDControl.CreateStrategy(stage?.GateMode ?? TDEnums.GateAssignmentMode.RoundRobin);
         TDEnemyPathMainControl.api.SetStrategy(strategy);
 

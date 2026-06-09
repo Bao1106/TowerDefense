@@ -9,9 +9,9 @@ using Touch = UnityEngine.InputSystem.EnhancedTouch.Touch;
 using TouchPhase = UnityEngine.InputSystem.TouchPhase;
 
 /// <summary>
-/// Gắn trên Canvas/SafeArea/Container — cùng cấp với TDGameplayHUDView.
-/// Detect tap vào operator đã đặt → hiện OperatorActionPanel tại vị trí operator.
-/// Tap ra ngoài → ẩn panel và bỏ chọn.
+/// Attached to Canvas/SafeArea/Container — at the same level as TDGameplayHUDView.
+/// Detects taps on a placed operator → shows the OperatorActionPanel at the operator's position.
+/// Tapping outside → hides the panel and clears the selection.
 /// </summary>
 public class TDOperatorSelectionView : MonoBehaviour
 {
@@ -28,7 +28,7 @@ public class TDOperatorSelectionView : MonoBehaviour
     private GameObject        m_RangeHighlightPrefab;
     private readonly List<GameObject> m_RangeHighlightTiles = new List<GameObject>();
 
-    // Helper: có unit nào đang được chọn không
+    // Helper: returns true if any unit is currently selected
     private bool HasSelected => m_SelectedOperator != null || m_SelectedTower != null;
 
     private void Start()
@@ -132,7 +132,7 @@ public class TDOperatorSelectionView : MonoBehaviour
         HideRangeHighlights();
     }
 
-    // Deselect không animation — dùng khi ngay sau đó sẽ show selection mới
+    // Deselect without animation — used when a new selection will immediately follow
     private void DeselectImmediate()
     {
         if (m_SelectedOperator != null)
@@ -206,7 +206,7 @@ public class TDOperatorSelectionView : MonoBehaviour
         Vector2Int cell     = TDGridMainModel.api.WorldToCell(op.transform.position);
         var        cells    = rangeDto.GetCellsInRange(cell, op.transform.rotation);
 
-        // Grow pool on demand
+        // Grow the pool on demand
         while (m_RangeHighlightTiles.Count < cells.Count)
         {
             var tile = Instantiate(m_RangeHighlightPrefab);
@@ -260,9 +260,9 @@ public class TDOperatorSelectionView : MonoBehaviour
         }
     }
 
-    // Tìm midpoint của cạnh upper-left của diamond indicator trong world space.
-    // Diamond có 4 tips = 4 midpoint của cạnh Quad → dùng transform.right và transform.up.
-    // Project 4 tips lên screen → tip cao nhất (topIdx) và trái nhất (leftIdx) → midpoint = upper-left edge center.
+    // Finds the midpoint of the upper-left edge of the diamond selection indicator in world space.
+    // The diamond has 4 tips (the midpoints of a Quad's edges) → uses transform.right and transform.up.
+    // Projects all 4 tips to screen space → finds the topmost (topIdx) and leftmost (leftIdx) → midpoint = upper-left edge center.
     private static Vector3 GetIndicatorUpperLeftEdge(TDOperatorView op)
     {
         Transform t = op.SelectionIndicatorTransform;
@@ -305,7 +305,7 @@ public class TDOperatorSelectionView : MonoBehaviour
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    // RaycastAll tại screenPos — đáng tin hơn IsPointerOverGameObject(fingerId) trên Android
+    // RaycastAll at screenPos — more reliable than IsPointerOverGameObject(fingerId) on Android
     private static readonly List<RaycastResult> s_RaycastResults = new List<RaycastResult>();
     private bool IsPointerOverUI(Vector2 screenPos)
     {

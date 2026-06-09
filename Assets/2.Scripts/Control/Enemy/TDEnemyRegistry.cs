@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 
-// Centralized registry của tất cả enemy đang sống trên scene.
-// Tower query registry thay vì dùng trigger collider — không cần DetectionArea child GO.
-// Thread-safe với wave nhiều enemy: list thay đổi chỉ qua Register/Unregister.
+// Centralized registry of all enemies currently alive in the scene.
+// Towers query the registry instead of using trigger colliders — no DetectionArea child GO needed.
+// Thread-safe across waves with many enemies: the list is only modified through Register/Unregister.
 public class TDEnemyRegistry
 {
     public static TDEnemyRegistry api;
@@ -20,6 +20,6 @@ public class TDEnemyRegistry
         m_ActiveEnemies.Remove(enemy);
     }
 
-    // Trả về read-only view — caller không thể modify list gốc
+    // Returns a read-only view — callers cannot modify the underlying list
     public IReadOnlyList<TDEnemyView> GetAll() => m_ActiveEnemies;
 }

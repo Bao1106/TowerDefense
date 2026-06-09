@@ -1,9 +1,9 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-// Range dựa trên danh sách ô tương đối (offset) so với tower.
-// Offsets được định nghĩa khi tower facing +X (Y=90°).
-// Tự động rotate theo 4 hướng cardinal khi tower quay.
+// Range defined as a list of relative cell offsets from the tower's position.
+// Offsets are defined when the tower is facing +X (Y=90°).
+// Automatically rotated to all 4 cardinal directions as the tower rotates.
 public class TDOffsetRangeDTO : TDRangeDTO
 {
     private readonly Vector2Int[] m_Offsets;
@@ -20,7 +20,7 @@ public class TDOffsetRangeDTO : TDRangeDTO
 
     public override float DetectionRadius => m_DetectionRadius;
 
-    // O(numOffsets) — không alloc, dùng cho tick-scan mỗi frame
+    // O(numOffsets) — no allocations, suitable for per-frame tick scanning
     public override bool IsInRange(Vector3 towerPosition, Vector3 enemyPosition, Quaternion towerRotation)
     {
         var grid       = TDGridMainModel.api;
@@ -34,7 +34,7 @@ public class TDOffsetRangeDTO : TDRangeDTO
         return false;
     }
 
-    // Override base — trực tiếp từ offsets, không cần bounding-box scan
+    // Overrides base — derives cells directly from offsets, no bounding-box scan needed
     public override List<Vector2Int> GetCellsInRange(Vector2Int towerCell, Quaternion towerRotation)
     {
         var grid  = TDGridMainModel.api;
@@ -48,7 +48,7 @@ public class TDOffsetRangeDTO : TDRangeDTO
         return cells;
     }
 
-    // Rotate offset từ local space (facing +X) sang grid space theo hướng tower.
+    // Rotates an offset from local space (facing +X) into grid space based on the tower's rotation.
     // Offset convention: x = forward, y = right-of-facing
     // Y=  0° (facing +Z): (dx,dy) → ( dy,  dx)
     // Y= 90° (facing +X): (dx,dy) → ( dx,  dy)  ← definition space

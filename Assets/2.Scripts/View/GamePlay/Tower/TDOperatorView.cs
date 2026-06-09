@@ -2,11 +2,11 @@ using TDEnums;
 using UnityEngine;
 
 /// <summary>
-/// MonoBehaviour gắn trên operator prefab.
-/// Implements IPlacedUnit — TDTowerFactoryControl gọi Init(key, slotInfo) sau khi Instantiate.
+/// MonoBehaviour attached to the operator prefab.
+/// Implements IPlacedUnit — TDTowerFactoryControl calls Init(key, slotInfo) after Instantiation.
 ///
-/// Behavior (PathCell / TowerZone) được resolve từ TDControl.CreateOperatorBehavior()
-/// dựa trên OperatorData.deployZone — không có if/else trực tiếp ở đây.
+/// Behavior (PathCell / TowerZone) is resolved by TDControl.CreateOperatorBehavior()
+/// based on OperatorData.deployZone — no direct if/else branching here.
 /// </summary>
 public class TDOperatorView : MonoBehaviour, IPlacedUnit
 {
@@ -95,7 +95,7 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
 
     // ── Animation event callback ──────────────────────────────────────────────
 
-    // Gọi từ AnimationEvent "OnAttackHit" trong attack clip của Ranger/Mage
+    // Called from the "OnAttackHit" AnimationEvent in the attack clip for Ranger/Mage operators
     public void OnAttackHit()
     {
         if (!m_Initialized || m_Behavior == null) return;
@@ -103,7 +103,7 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         m_Behavior.ExecuteHit(m_MyCell, transform.position, data);
     }
 
-    // ── Update — delegate hoàn toàn cho behavior ──────────────────────────────
+    // ── Update — fully delegated to the behavior strategy ─────────────────────
 
     private void Update()
     {

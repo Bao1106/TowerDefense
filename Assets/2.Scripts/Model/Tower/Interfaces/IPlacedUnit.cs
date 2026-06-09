@@ -1,8 +1,8 @@
 using TDEnums;
 
 /// <summary>
-/// Interface chung cho mọi unit đang được đặt trên map — TDTowerWeaponView và TDOperatorView.
-/// TDTowerFactoryControl dùng GetComponent<IPlacedUnit> thay vì branch riêng.
+/// Common interface for any unit currently placed on the map — TDTowerWeaponView and TDOperatorView.
+/// TDTowerFactoryControl uses GetComponent&lt;IPlacedUnit&gt; instead of separate type branches.
 /// </summary>
 public interface IPlacedUnit
 {

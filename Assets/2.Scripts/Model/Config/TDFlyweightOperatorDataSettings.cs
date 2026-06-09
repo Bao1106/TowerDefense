@@ -7,13 +7,13 @@ using UnityEngine;
 [Serializable]
 public class OperatorData : IDeployableDTO
 {
-    [Tooltip("Tên nhân vật cụ thể (Ace, Ginger, Layla…) — dùng cho UI/display")]
+    [Tooltip("Specific character name (Ace, Ginger, Layla…) — used for UI display")]
     public string operatorName;
 
-    [Tooltip("Class archetype — xác định deploy zone và kiểu block/attack")]
+    [Tooltip("Class archetype — determines the deploy zone and block/attack style")]
     public OperatorType operatorType;
 
-    [Tooltip("Single = 1 mục tiêu, Multiple = toàn bộ enemy bị block/trong range")]
+    [Tooltip("Single = 1 target, Multiple = all blocked enemies / all enemies in range")]
     public AttackType attackType = AttackType.Multiple;
 
     public int cost;
@@ -22,20 +22,20 @@ public class OperatorData : IDeployableDTO
     public float attackSpeed;
 
     [Range(0, 3)]
-    [Tooltip("Bao nhiêu enemy bị chặn cùng lúc. Ranger/Mage = 0 (tự động)")]
+    [Tooltip("Number of enemies that can be blocked simultaneously. Ranger/Mage = 0 (set automatically)")]
     public int blockCount;
 
-    [Tooltip("Prefab của operator này")]
+    [Tooltip("Prefab for this operator")]
     public GameObject operatorPrefab;
 
-    [Tooltip("Icon hiển thị trong slot UI")]
+    [Tooltip("Icon shown in the slot UI")]
     [JsonIgnore]
     public Sprite icon;
 
-    [Tooltip("Ô trong range khi facing +X — mặc định {(0,0)} = cùng ô với operator")]
+    [Tooltip("Cells within attack range when facing +X — default {(0,0)} = same cell as the operator")]
     public Vector2Int[] rangeOffsets;
 
-    // deployZone derive từ class — không cần config thủ công
+    // deployZone is derived from the class archetype — no manual configuration needed
     [JsonIgnore]
     public DeployZone deployZone => operatorType is OperatorType.Ranger or OperatorType.Mage
         ? DeployZone.TowerZone

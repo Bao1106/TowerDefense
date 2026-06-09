@@ -1,9 +1,9 @@
 using TMPro;
 using UnityEngine;
 
-// Gắn lên GateEnd prefab — BoxCollider isTrigger=true cùng cấp.
-// Logic LoseLife được handle trong TDEnemyView khi hết path.
-// Trigger này chỉ play visual effect khi enemy vật lý chạm vào gate.
+// Attached to the GateEnd prefab — requires a BoxCollider with isTrigger=true on the same object.
+// The LoseLife logic is handled in TDEnemyView when the enemy exhausts its path.
+// This trigger only plays a visual effect when the enemy physically enters the gate collider.
 public class TDGateEndView : MonoBehaviour
 {
     [SerializeField] private ParticleSystem m_HitEffect;

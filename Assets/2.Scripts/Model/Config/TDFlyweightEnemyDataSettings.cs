@@ -9,10 +9,10 @@ public class EnemyData
     public EnemyType  type;
     public float      baseHP;
     public float      baseSpeed;
-    public float      dieDuration;        // giây chờ animation Die trước khi return pool
-    public int        goldReward;         // gold thưởng khi kill enemy loại này
-    public float      baseAttackDamage;   // damage mỗi đòn khi tấn công operator
-    public float      baseAttackSpeed;    // số đòn/giây khi bị chặn (0 = không attack)
+    public float      dieDuration;        // seconds to wait for the Die animation before returning to pool
+    public int        goldReward;         // gold awarded to the player when this enemy type is killed
+    public float      baseAttackDamage;   // damage dealt per hit when attacking an operator
+    public float      baseAttackSpeed;    // hits per second while blocked (0 = does not attack)
     public GameObject prefab;
 }
 

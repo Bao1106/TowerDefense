@@ -17,8 +17,8 @@ public class TDGoldControl
         onGoldChanged?.Invoke(Gold);
     }
 
-    // Gọi mỗi frame từ TDGameplayHUDView.Update()
-    // Pause-aware: Time.deltaTime = 0 khi pause → tự dừng
+    // Called every frame from TDGameplayHUDView.Update()
+    // Pause-aware: Time.deltaTime = 0 when paused, so accumulation stops automatically
     public void Tick(float deltaTime)
     {
         m_PassiveAccumulator += deltaTime;

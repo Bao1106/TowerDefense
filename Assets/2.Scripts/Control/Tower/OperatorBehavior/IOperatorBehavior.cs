@@ -2,7 +2,7 @@ using TDEnums;
 using UnityEngine;
 
 /// <summary>
-/// Strategy interface phân biệt hành vi operator theo DeployZone.
+/// Strategy interface that differentiates operator behavior by DeployZone.
 ///
 /// PathCell  → PathCellOperatorBehavior  (block enemy, melee attack)
 /// TowerZone → TowerZoneOperatorBehavior (ranged attack, no blocking)
@@ -11,21 +11,21 @@ using UnityEngine;
 /// </summary>
 public interface IOperatorBehavior
 {
-    /// Kiểm tra vị trí có hợp lệ để đặt operator không.
+    /// Checks whether the given world position is a valid placement location for the operator.
     bool CanPlace(Vector3 worldPos);
 
-    /// Thực hiện đặt operator (snap, spawn, occupy).
+    /// Executes operator placement (snap to cell, spawn prefab, mark cell as occupied).
     void Place(Vector3 worldPos, Quaternion rotation, TDTowerSlotInfo slotInfo);
 
-    /// Gọi từ TDOperatorView.Init() — đăng ký vào registry tương ứng.
+    /// Called from TDOperatorView.Init() — registers the operator into the appropriate registry.
     void OnInit(Vector2Int cell, OperatorData data, TDOperatorView view);
 
-    /// Tìm mục tiêu, lưu pending target, fire attack VFX. Trả về true để trigger anim + reset timer.
+    /// Finds a target, caches the pending target, and fires the attack VFX. Returns true to trigger the attack animation and reset the timer.
     bool TryAttack(Vector2Int cell, Vector3 worldPos, OperatorData data);
 
-    /// Gọi từ animation event OnAttackHit — apply damage + fire impact VFX tại enemy pos.
+    /// Called from the OnAttackHit animation event — applies damage and fires the impact VFX at the enemy's position.
     void ExecuteHit(Vector2Int cell, Vector3 worldPos, OperatorData data);
 
-    /// Cleanup khi operator bị remove (die hoặc retreat).
+    /// Cleanup when the operator is removed (killed or retreated).
     void OnRemove(Vector2Int cell, Vector3 worldPos);
 }

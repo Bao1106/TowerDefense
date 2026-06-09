@@ -29,7 +29,7 @@ public class TDLevelConfigSettings : ScriptableObject
 }
 
 // ── Difficulty Ratio Table ─────────────────────────────────────────────────────
-// Định nghĩa % phân phối enemy type + HP/Speed multiplier theo độ khó
+// Defines the percentage distribution of each enemy type and HP/Speed multipliers per difficulty level.
 // Distribute(diff, total) → [normalCount, fastCount, tankCount, bossCount]
 
 public static class DifficultyRatioTable
@@ -59,7 +59,7 @@ public static class DifficultyRatioTable
         int      normal = Mathf.RoundToInt(row.normalPct * total);
         int      fast   = Mathf.RoundToInt(row.fastPct   * total);
         int      tank   = Mathf.RoundToInt(row.tankPct   * total);
-        int      boss   = total - normal - fast - tank;  // remainder → sum luôn = total
+        int      boss   = total - normal - fast - tank;  // remainder → sum always equals total
         return new[] { Mathf.Max(0, normal), Mathf.Max(0, fast), Mathf.Max(0, tank), Mathf.Max(0, boss) };
     }
 }

@@ -30,8 +30,8 @@ public class TDEnemyView : MonoBehaviour
 
     public EnemyType EnemyType { get; private set; }
 
-    // Progress 0→1 (0 = vừa spawn, 1 = đến GateEnd)
-    // Tower dùng để ưu tiên enemy gần GateEnd nhất
+    // Progress 0→1 (0 = just spawned, 1 = reached GateEnd)
+    // Towers use this to prioritize the enemy closest to the gate
     public float PathProgress => m_PathsPosition.Count == 0 ? 0f
         : (float)m_CurrentPathIndex / m_PathsPosition.Count;
 
@@ -62,7 +62,7 @@ public class TDEnemyView : MonoBehaviour
         EnemyType      = enemyType;
         m_EnemyKey     = key;
 
-        // Reset animator về Idle (quan trọng khi tái dùng từ pool)
+        // Reset the animator to Idle (important when reusing from the pool)
         if (m_Animator != null)
         {
             m_Animator.Rebind();
@@ -103,7 +103,7 @@ public class TDEnemyView : MonoBehaviour
             TriggerSafe(TRIGGER_GET_HIT);
     }
 
-    // Giải phóng blocking slot nếu enemy đang bị chặn bởi melee operator
+    // Releases the blocking slot if this enemy is currently being blocked by a melee operator
     private void UnblockFromMelee()
     {
         if (!m_IsBlocked) return;
@@ -112,13 +112,13 @@ public class TDEnemyView : MonoBehaviour
         m_BlockerCell = Vector2Int.zero;
     }
 
-    /// Gọi bởi TDOperatorRegistry khi operator tại ô bị chết → enemy tiếp tục di chuyển.
+    /// Called by TDOperatorRegistry when the operator at the blocking cell is killed → allows the enemy to resume movement.
     public void ForceUnblock()
     {
         if (!m_IsBlocked) return;
         m_IsBlocked   = false;
         m_BlockerCell = Vector2Int.zero;
-        m_CurrentPathIndex++; // bỏ qua ô operator vừa chết, đi tiếp
+        m_CurrentPathIndex++; // skip the cell where the operator just died and continue moving
     }
 
     private void Die()
@@ -126,7 +126,7 @@ public class TDEnemyView : MonoBehaviour
         if (m_HasBeenReturned) return;
         m_IsDying = true;
 
-        UnblockFromMelee(); // giải phóng operator slot trước để enemy kế tiếp vào được
+        UnblockFromMelee(); // release the operator slot first so the next enemy can enter
         TDEnemyControl.api.onGetEnemyPathPos -= OnGetEnemyPathPos;
         TDEnemyRegistry.api.Unregister(this);
 
@@ -181,7 +181,7 @@ public class TDEnemyView : MonoBehaviour
     {
         if (m_PathsPosition == null || m_PathsPosition.Count == 0 || m_HasReachedEnd || m_IsDying) return;
 
-        // Nếu đang bị chặn bởi melee operator → tấn công lại operator
+        // If currently blocked by a melee operator → counter-attack the operator
         if (m_IsBlocked)
         {
             if (m_AttackSpeed > 0f && Time.time - m_LastAttackTime >= 1f / m_AttackSpeed)
@@ -204,11 +204,11 @@ public class TDEnemyView : MonoBehaviour
 
             if (Vector3.Distance(transform.position, targetPosition) < 0.1f)
             {
-                // Khi vừa đến waypoint — kiểm tra xem có melee operator đang chặn không
+                // Just reached a waypoint — check whether a melee operator is blocking this cell
                 Vector2Int arrivedCell = TDGridMainModel.api.WorldToCell(targetPosition);
                 if (TDOperatorRegistry.api != null && TDOperatorRegistry.api.CanBlock(arrivedCell))
                 {
-                    // Snap đúng vào trung tâm ô để IsInRange của operator hoạt động chính xác
+                    // Snap exactly to the cell center so the operator's IsInRange check works correctly
                     transform.position = new Vector3(targetPosition.x, transform.position.y, targetPosition.z);
                     m_IsBlocked   = true;
                     m_BlockerCell = arrivedCell;
@@ -225,7 +225,7 @@ public class TDEnemyView : MonoBehaviour
             m_HasReachedEnd = true;
             TDGameEventBus.LifeLost(transform.position);
             TDPlayerLifeControl.api.LoseLife();
-            TDGameStateControl.api?.OnEnemyRemoved(); // enemy thoát cũng tính là removed
+            TDGameStateControl.api?.OnEnemyRemoved(); // an enemy escaping also counts as removed
             ReturnToPool();
         }
     }

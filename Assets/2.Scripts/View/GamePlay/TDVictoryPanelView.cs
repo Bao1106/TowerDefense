@@ -6,9 +6,9 @@ using UnityEngine.UI;
 using System.Collections.Generic;
 
 /// <summary>
-/// Gắn vào: Canvas/SafeArea/Container/VictoryPanel
-/// Tự cache references qua transform.Find() — không dùng SerializeField.
-/// Quản lý hiển thị và DOTween transition cho Victory popup.
+/// Attached to: Canvas/SafeArea/Container/VictoryPanel
+/// Self-caches references via transform.Find() — no SerializeField needed.
+/// Manages the display and DOTween transitions for the Victory popup.
 /// </summary>
 public class TDVictoryPanelView : MonoBehaviour
 {
@@ -21,7 +21,7 @@ public class TDVictoryPanelView : MonoBehaviour
     private TextMeshProUGUI  m_StatLives;
     private TextMeshProUGUI  m_StatGold;
 
-    // Stars — 3 Image components trong StarRow
+    // Stars — 3 Image components inside StarRow
     private readonly List<Image> m_Stars = new();
     private static readonly string[] STAR_PATHS =
     {
@@ -33,10 +33,10 @@ public class TDVictoryPanelView : MonoBehaviour
     private static readonly Color COLOR_STAR_UNEARNED = new(0.25f, 0.25f, 0.25f, 0.5f); // grey dim
 
     // Star animation timing
-    private const float STAR_DELAY_AFTER_POPUP = 0.18f; // chờ popup settle
-    private const float STAR_STAGGER           = 0.20f; // delay giữa các sao
+    private const float STAR_DELAY_AFTER_POPUP = 0.18f; // wait for the popup to settle
+    private const float STAR_STAGGER           = 0.20f; // delay between each star
     private const float STAR_POP_DURATION      = 0.32f; // scale 0→1 OutBack
-    private const float STAR_PUNCH_STRENGTH    = 0.30f; // punch sau khi land
+    private const float STAR_PUNCH_STRENGTH    = 0.30f; // punch strength after landing
     private const float STAR_PUNCH_DURATION    = 0.25f;
 
     private const float SHOW_BG_DURATION     = 0.25f;
@@ -49,7 +49,7 @@ public class TDVictoryPanelView : MonoBehaviour
     {
         m_PopupWindow = transform.Find("PopupWindow");
 
-        // CanvasGroup gắn trên PopupWindow để animate — không phải root panel
+        // CanvasGroup is attached to PopupWindow for animation — not the root panel
         if (m_PopupWindow != null)
         {
             m_CanvasGroup = m_PopupWindow.GetComponent<CanvasGroup>();
@@ -76,7 +76,7 @@ public class TDVictoryPanelView : MonoBehaviour
         gameObject.SetActive(false);
     }
 
-    /// <summary>Gọi một lần từ TDGameplayHUDView.SetupButtons để wire button callbacks.</summary>
+    /// <summary>Called once from TDGameplayHUDView.SetupButtons to wire button callbacks.</summary>
     public void BindButtons(Action onRetry, Action onNext)
     {
         m_BtnRetry?.onClick.RemoveAllListeners();
@@ -106,8 +106,8 @@ public class TDVictoryPanelView : MonoBehaviour
         if (m_StatGold    != null) m_StatGold.text    = gold.ToString();
     }
 
-    // Set trạng thái ban đầu của stars trước khi animate:
-    // Earned → ẩn (scale=0) để pop in sau; Unearned → dim, scale=1 (không animate)
+    // Sets the initial state of stars before animation:
+    // Earned → hidden (scale=0) to pop in later; Unearned → dimmed, scale=1 (no animation)
     private void PrepareStars(int earnedCount)
     {
         for (int i = 0; i < m_Stars.Count; i++)
@@ -145,7 +145,7 @@ public class TDVictoryPanelView : MonoBehaviour
         if (m_PopupWindow != null)
             seq.Join(m_PopupWindow.DOScale(Vector3.one, SHOW_POPUP_DURATION).SetEase(Ease.OutBack));
 
-        // Interactable sau khi popup xong
+        // Enable interaction after the popup animation completes
         seq.AppendCallback(() =>
         {
             if (m_CanvasGroup != null)
@@ -155,11 +155,11 @@ public class TDVictoryPanelView : MonoBehaviour
             }
         });
 
-        // Delay rồi pop stars lần lượt
+        // Delay then pop stars one by one
         seq.AppendInterval(STAR_DELAY_AFTER_POPUP);
         for (int i = 0; i < m_Stars.Count; i++)
         {
-            if (i >= earnedStars) break; // chỉ animate earned stars
+            if (i >= earnedStars) break; // only animate earned stars
 
             var star = m_Stars[i];
             seq.AppendCallback(() =>
@@ -167,12 +167,12 @@ public class TDVictoryPanelView : MonoBehaviour
                 // Scale 0 → 1 OutBack
                 star.transform.DOScale(Vector3.one, STAR_POP_DURATION)
                     .SetEase(Ease.OutBack).SetUpdate(true);
-                // Fade in màu gold
+                // Fade in to gold color
                 star.DOColor(COLOR_STAR_EARNED, STAR_POP_DURATION * 0.6f)
                     .SetEase(Ease.OutCubic).SetUpdate(true)
                     .OnComplete(() =>
                     {
-                        // Punch nhỏ sau khi land
+                        // Small punch after landing
                         star.transform
                             .DOPunchScale(Vector3.one * STAR_PUNCH_STRENGTH, STAR_PUNCH_DURATION, 5, 0.5f)
                             .SetUpdate(true);

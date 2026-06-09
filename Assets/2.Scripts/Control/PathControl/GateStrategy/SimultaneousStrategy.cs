@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-// Mỗi wave spawn song song từ tất cả groups — mỗi group dùng 1 random corridor của mình
+// Each wave spawns simultaneously from all groups — each group uses one of its own random corridors
 public class SimultaneousStrategy : IGateAssignmentStrategy
 {
     public List<(TDPathGroup, List<IGridCellDTO>)> SelectForWave(List<TDPathGroup> groups, int waveIndex)

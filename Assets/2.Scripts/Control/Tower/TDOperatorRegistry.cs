@@ -2,30 +2,30 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// Singleton registry cho operators đặt trên path cells.
+/// Singleton registry for operators placed on path cells.
 ///
-/// Chức năng:
-///   1. Track valid operator cells (path cells, trừ gate cells)
-///   2. Track operator vị trí + block capacity / blocked enemy references
-///   3. CanBlock(cell) → dùng bởi TDEnemyView khi bước vào ô
-///   4. GetBlockedEnemies(cell) → dùng bởi TDOperatorView để attack
+/// Responsibilities:
+///   1. Track valid operator cells (path cells, excluding gate cells)
+///   2. Track operator positions + block capacity / blocked enemy references
+///   3. CanBlock(cell) → used by TDEnemyView when stepping onto a cell
+///   4. GetBlockedEnemies(cell) → used by TDOperatorView when attacking
 /// </summary>
 public class TDOperatorRegistry
 {
     public static TDOperatorRegistry api;
 
-    // Path cells hợp lệ để đặt operator (không tính gate cells)
+    // Valid path cells where operators can be placed (gate cells excluded)
     private readonly HashSet<Vector2Int> m_ValidOperatorCells = new HashSet<Vector2Int>();
 
     // cell → (blockCapacity, currentBlockedCount)
     private readonly Dictionary<Vector2Int, (int capacity, int count)> m_Operators
         = new Dictionary<Vector2Int, (int, int)>();
 
-    // cell → danh sách enemy đang bị chặn tại ô đó
+    // cell → list of enemies currently blocked at that cell
     private readonly Dictionary<Vector2Int, List<TDEnemyView>> m_BlockedEnemies
         = new Dictionary<Vector2Int, List<TDEnemyView>>();
 
-    // cell → TDOperatorView đang đứng tại ô đó (để enemy gọi TakeDamage)
+    // cell → TDOperatorView standing at that cell (so enemies can call TakeDamage on it)
     private readonly Dictionary<Vector2Int, TDOperatorView> m_OperatorViews
         = new Dictionary<Vector2Int, TDOperatorView>();
 
@@ -49,20 +49,20 @@ public class TDOperatorRegistry
         Debug.Log($"[OperatorRegistry] Operator registered at {cell}, blockCapacity={blockCapacity}");
     }
 
-    /// Gọi từ TDOperatorView.Init() để lưu reference view (dùng cho enemy tấn công lại).
+    /// Called from TDOperatorView.Init() to store the view reference (used so enemies can counter-attack).
     public void RegisterOperatorView(Vector2Int cell, TDOperatorView view)
         => m_OperatorViews[cell] = view;
 
-    /// Trả về TDOperatorView tại cell (null nếu không có).
+    /// Returns the TDOperatorView at the given cell (null if none is registered).
     public TDOperatorView GetOperatorView(Vector2Int cell)
         => m_OperatorViews.TryGetValue(cell, out var v) ? v : null;
 
-    /// Unregister operator — tự động ForceUnblock tất cả enemy đang bị chặn.
+    /// Unregisters the operator — automatically force-unblocks all enemies currently held at that cell.
     public void UnregisterOperator(Vector2Int cell)
     {
         if (m_BlockedEnemies.TryGetValue(cell, out var list))
         {
-            // Snapshot để tránh modify-while-iterate
+            // Snapshot to avoid modifying the list while iterating
             var snapshot = new List<TDEnemyView>(list);
             list.Clear();
             foreach (var enemy in snapshot)
@@ -78,14 +78,14 @@ public class TDOperatorRegistry
 
     // ─── Blocking state ───────────────────────────────────────────────────────
 
-    /// True nếu ô có operator VÀ còn slot chặn.
+    /// True if the cell has a registered operator AND still has available block slots.
     public bool CanBlock(Vector2Int cell)
     {
         if (!m_Operators.TryGetValue(cell, out var info)) return false;
         return info.count < info.capacity;
     }
 
-    /// Enemy bắt đầu bị chặn — tăng counter, lưu reference.
+    /// An enemy starts being blocked — increments the counter and stores the reference.
     public void OnEnemyBlocked(Vector2Int cell, TDEnemyView enemy)
     {
         if (m_Operators.TryGetValue(cell, out var info))
@@ -97,7 +97,7 @@ public class TDOperatorRegistry
             list.Add(enemy);
     }
 
-    /// Enemy rời khỏi cell (chết / pool) — giảm counter, xóa reference.
+    /// An enemy leaves the cell (killed or returned to pool) — decrements the counter and removes the reference.
     public void OnEnemyUnblocked(Vector2Int cell, TDEnemyView enemy)
     {
         if (m_Operators.TryGetValue(cell, out var info))
@@ -107,11 +107,11 @@ public class TDOperatorRegistry
             list.Remove(enemy);
     }
 
-    /// Trả về snapshot danh sách enemy đang bị chặn tại cell (không null, có thể empty).
+    /// Returns a snapshot of all enemies currently blocked at the given cell (never null, may be empty).
     public List<TDEnemyView> GetBlockedEnemies(Vector2Int cell)
     {
         if (m_BlockedEnemies.TryGetValue(cell, out var list))
-            return new List<TDEnemyView>(list); // snapshot tránh modify-while-iterate
+            return new List<TDEnemyView>(list); // snapshot to avoid modifying while iterating
         return new List<TDEnemyView>();
     }
 }

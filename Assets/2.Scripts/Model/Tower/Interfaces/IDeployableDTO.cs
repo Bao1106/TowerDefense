@@ -2,9 +2,9 @@ using TDEnums;
 using UnityEngine;
 
 /// <summary>
-/// Stats chung cho mọi unit có thể đặt lên map và chiến đấu — tower lẫn operator.
-/// TowerData và OperatorData đều implement interface này.
-/// Dùng bởi TDTowerBehaviorModel để tra cứu qua Dictionary thay vì if/else.
+/// Common stats for any unit that can be placed on the map and engage in combat — towers and operators alike.
+/// Both TowerData and OperatorData implement this interface.
+/// Used by TDTowerBehaviorModel for Dictionary lookups instead of if/else chains.
 /// </summary>
 public interface IDeployableDTO
 {

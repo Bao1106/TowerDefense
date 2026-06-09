@@ -24,7 +24,7 @@ public class TDSpeedControl
     {
         SpeedMultiplier = IsFast ? SPEED_NORMAL : SPEED_FAST;
 
-        // Chỉ apply nếu không đang pause
+        // Only apply if not currently paused
         if (!TDPauseControl.api.IsPaused)
             Time.timeScale = SpeedMultiplier;
 

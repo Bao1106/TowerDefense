@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
-// Custom Inspector cho OperatorData — hiển thị range dạng lưới click-to-toggle.
-// Trục: x = forward (→), y = right-of-facing (↑ = phải khi nhìn từ operator).
-// Operator luôn ở ô (0,0) — màu cam, không toggle được.
+// Custom Inspector for OperatorData — displays the attack range as a click-to-toggle grid.
+// Axes: x = forward (→), y = right-of-facing (↑ = right when viewed from behind the operator).
+// The operator is always at cell (0,0) — shown in orange and cannot be toggled.
 [CustomPropertyDrawer(typeof(OperatorData))]
 public class OperatorDataDrawer : PropertyDrawer
 {
@@ -16,9 +16,9 @@ public class OperatorDataDrawer : PropertyDrawer
     private int Cols => MAX_X - MIN_X + 1;  // 5
     private int Rows => MAX_Y - MIN_Y + 1;  // 5
 
-    private static readonly Color C_OPERATOR = new(0.95f, 0.55f, 0.10f);  // cam — operator cell
-    private static readonly Color C_ON       = new(0.20f, 0.78f, 0.35f);  // xanh — active
-    private static readonly Color C_OFF      = new(0.15f, 0.15f, 0.15f);  // tối — inactive
+    private static readonly Color C_OPERATOR = new(0.95f, 0.55f, 0.10f);  // orange — operator cell
+    private static readonly Color C_ON       = new(0.20f, 0.78f, 0.35f);  // green — active
+    private static readonly Color C_OFF      = new(0.15f, 0.15f, 0.15f);  // dark — inactive
     private static readonly Color C_OUTLINE  = new(0.32f, 0.32f, 0.32f);
 
     private static float LH => EditorGUIUtility.singleLineHeight;

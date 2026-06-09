@@ -5,9 +5,9 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// Gắn vào: Canvas/SafeArea/Container/GameOverPanel
-/// Tự cache references qua transform.Find() — không dùng SerializeField.
-/// Quản lý hiển thị và DOTween transition cho GameOver popup.
+/// Attached to: Canvas/SafeArea/Container/GameOverPanel
+/// Self-caches references via transform.Find() — no SerializeField needed.
+/// Manages the display and DOTween transitions for the GameOver popup.
 /// </summary>
 public class TDGameOverPanelView : MonoBehaviour
 {
@@ -20,18 +20,18 @@ public class TDGameOverPanelView : MonoBehaviour
     private TextMeshProUGUI  m_StatGold;
     private TextMeshProUGUI  m_StatWave;
 
-    private const float SHOW_DELAY           = 0.5f;  // nhỏ delay trước khi popup xuất hiện
+    private const float SHOW_DELAY           = 0.5f;  // brief delay before the popup appears
     private const float SHOW_BG_DURATION     = 0.25f;
     private const float SHOW_POPUP_DURATION  = 0.38f;
     private const float HIDE_POPUP_DURATION  = 0.20f;
     private const float HIDE_BG_DURATION     = 0.15f;
-    private const float SHOW_POPUP_SCALE_FROM = 1.15f; // GameOver: scale down thay vì scale up
+    private const float SHOW_POPUP_SCALE_FROM = 1.15f; // GameOver: scales down instead of up for a "falling" feel
 
     private void Awake()
     {
         m_PopupWindow = transform.Find("PopupWindow");
 
-        // CanvasGroup gắn trên PopupWindow để animate — không phải root panel
+        // CanvasGroup is attached to PopupWindow for animation — not the root panel
         if (m_PopupWindow != null)
         {
             m_CanvasGroup = m_PopupWindow.GetComponent<CanvasGroup>();
@@ -49,7 +49,7 @@ public class TDGameOverPanelView : MonoBehaviour
         gameObject.SetActive(false);
     }
 
-    /// <summary>Gọi một lần từ TDGameplayHUDView.SetupButtons để wire button callbacks.</summary>
+    /// <summary>Called once from TDGameplayHUDView.SetupButtons to wire button callbacks.</summary>
     public void BindButtons(Action onRetry)
     {
         m_BtnRetry?.onClick.RemoveAllListeners();
@@ -82,7 +82,7 @@ public class TDGameOverPanelView : MonoBehaviour
     {
         DOTween.Kill(gameObject);
 
-        // GameOverPanel root: SetActive ngay để backdrop hiện
+        // GameOverPanel root: activate immediately so the backdrop appears
         gameObject.SetActive(true);
 
         if (m_CanvasGroup != null)
@@ -101,7 +101,7 @@ public class TDGameOverPanelView : MonoBehaviour
         if (m_CanvasGroup != null)
             seq.Append(m_CanvasGroup.DOFade(1f, SHOW_BG_DURATION).SetEase(Ease.OutCubic));
 
-        // Scale down + settle — cảm giác "đổ xuống" phù hợp với thất bại
+        // Scale down and settle — gives a "falling into place" feeling appropriate for defeat
         if (m_PopupWindow != null)
             seq.Join(m_PopupWindow.DOScale(Vector3.one, SHOW_POPUP_DURATION).SetEase(Ease.OutElastic));
 

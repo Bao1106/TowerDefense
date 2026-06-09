@@ -17,7 +17,7 @@ public class TDaStarPathControl : IPathFinderDTO, IPathFinder
         onGetWaypointIndex?.Invoke(index);
     }
 
-    // Legacy event wrapper — dùng cho waypoint chain hiện tại (Phase 1)
+    // Legacy event wrapper — used for the current waypoint chain system (Phase 1)
     public void FindPath(IGridDTO gridDTO, IGridCellDTO start, IGridCellDTO end, bool isFinal)
     {
         var path = ComputePath(gridDTO, start, end);
@@ -27,7 +27,7 @@ public class TDaStarPathControl : IPathFinderDTO, IPathFinder
             onGetPath?.Invoke(path, end);
     }
 
-    // Sync internal — trả về List<IGridCellDTO> hoặc null nếu không tìm được path
+    // Synchronous internal pathfinding — returns a List<IGridCellDTO> or null if no path is found
     public List<IGridCellDTO> ComputePath(IGridDTO gridDTO, IGridCellDTO start, IGridCellDTO end)
     {
         if (start == null || end == null) return null;
@@ -74,7 +74,7 @@ public class TDaStarPathControl : IPathFinderDTO, IPathFinder
         return null; // No path found
     }
 
-    // Tìm N path khác nhau bằng path-blocking (interior cells)
+    // Finds N distinct paths using path-blocking on interior cells
     public List<List<IGridCellDTO>> FindMultiplePaths(IGridDTO gridDTO, IGridCellDTO start, IGridCellDTO end, int numberOfPaths)
     {
         List<List<IGridCellDTO>> paths = new List<List<IGridCellDTO>>();
@@ -95,7 +95,7 @@ public class TDaStarPathControl : IPathFinderDTO, IPathFinder
             }
         }
 
-        // Reset tất cả cells về walkable sau khi tìm xong
+        // Reset all cells back to walkable after all paths have been found
         foreach (var path in blockedPaths)
             ResetPathInteriorAsWalkable(path);
 
@@ -114,7 +114,7 @@ public class TDaStarPathControl : IPathFinderDTO, IPathFinder
         return path;
     }
 
-    // Chỉ block interior cells (index 1..n-2), giữ nguyên start/end để path sau vẫn connect
+    // Only blocks interior cells (indices 1..n-2), preserving start/end so subsequent paths can still connect
     private void MarkPathInteriorAsNonWalkable(List<IGridCellDTO> path)
     {
         for (int i = 1; i < path.Count - 1; i++)

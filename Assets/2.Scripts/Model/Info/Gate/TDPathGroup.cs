@@ -2,8 +2,8 @@ using System.Collections.Generic;
 using TDEnums;
 using UnityEngine;
 
-// Pure DTO — dữ liệu của 1 cặp start/end gate và các corridors thuộc về nó.
-// Không giữ bất kỳ View reference nào. View layer tự quản lý mapping theo index.
+// Pure DTO — holds data for one start/end gate pair and all corridors belonging to it.
+// Holds no View references. The View layer manages its own index-based mapping.
 public class TDPathGroup
 {
     public Vector2Int              StartCell;

@@ -29,7 +29,7 @@ public class TDEnemyPathMainView : MonoBehaviour
 
     public void ApplyStageConfig(TDStageConfig stage) => m_ActiveStage = stage;
 
-    // Groups + gate views — index tương ứng nhau
+    // Groups and gate views — indices correspond to each other
     private List<TDPathGroup> m_PathGroups  = new List<TDPathGroup>();
     private List<TDGateView>  m_GateStartViews = new List<TDGateView>();
 
@@ -56,7 +56,7 @@ public class TDEnemyPathMainView : MonoBehaviour
         m_EnemyPathView.OverridePathTilePrefab(m_VisualConfig?.PathTilePrefab);
         RegistryEvents();
 
-        // Build path groups theo stage config
+        // Build path groups from the stage config
         var stage  = m_ActiveStage;
         var groups = TDEnemyPathMainControl.api.BuildPathGroups(stage, m_GridDTO);
         m_PathGroups = groups;
@@ -91,7 +91,7 @@ public class TDEnemyPathMainView : MonoBehaviour
             if (m_GateEndPrefab != null)
             {
                 Vector3    pos      = grid[group.EndCell.x, group.EndCell.y];
-                // End gate nhìn ngược lại → FacingRotation của border đối diện
+                // End gate faces inward from the opposite border
                 Quaternion rotation = TDGatePlacer.FacingRotation(OppositeOf(group.StartBorder));
                 Object.Instantiate(m_GateEndPrefab, pos, rotation, transform);
                 TDGridMainModel.api.SetOccupiedCell(pos);
@@ -130,7 +130,7 @@ public class TDEnemyPathMainView : MonoBehaviour
     {
         if (groups == null || groups.Count == 0) return;
 
-        // Visualize tất cả corridors từ mọi group
+        // Visualize all corridors from every group
         var allCorridors = new List<List<IGridCellDTO>>();
         foreach (var g in groups)
             allCorridors.AddRange(g.Corridors);
@@ -148,7 +148,7 @@ public class TDEnemyPathMainView : MonoBehaviour
         LevelConfig config = m_LevelConfigSettings.GetLevel(m_LevelIndex);
         if (config == null) return;
 
-        // BUG-02 fix: dùng actual enemy count từ wave plans thực tế
+        // BUG-02 fix: use the actual enemy count from the generated wave plans
         var wavePlans   = TDEnemyPathMainControl.api.BuildWavePlans(config);
         int actualCount = TDEnemyPathMainControl.api.GetActualEnemyCount(wavePlans);
         TDGameStateControl.api?.Initialize(actualCount);
@@ -162,7 +162,7 @@ public class TDEnemyPathMainView : MonoBehaviour
         BuildGridZones(validPositions);
     }
 
-    // ── Grid Zone Spawning (SRP: tách từ God Method) ──────────────────────────
+    // ── Grid Zone Spawning (SRP: extracted from God Method) ──────────────────
 
     private void BuildGridZones(List<Vector3> validPositions)
     {
@@ -175,7 +175,7 @@ public class TDEnemyPathMainView : MonoBehaviour
         bool hasObstacles    = m_ObstaclePrefabs != null && m_ObstaclePrefabs.Length > 0;
         int[] footprintRadii = hasObstacles ? ComputeFootprintRadii() : null;
 
-        // Double-check: bỏ path cells lọt vào
+        // Double-check: remove any path cells that slipped through
         var filtered     = new List<Vector3>(validPositions.Count);
         int pathLeakCount = 0;
         foreach (var pos in validPositions)
@@ -187,7 +187,7 @@ public class TDEnemyPathMainView : MonoBehaviour
         if (pathLeakCount > 0)
             Debug.LogWarning($"<color=orange>[PathView] {pathLeakCount} path cells leaked — filtered</color>");
 
-        // Shuffle để random hoá obstacle placement
+        // Shuffle to randomize obstacle placement
         for (int i = filtered.Count - 1; i > 0; i--)
         {
             int j = Random.Range(0, i + 1);

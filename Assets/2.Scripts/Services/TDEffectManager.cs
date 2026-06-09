@@ -4,9 +4,9 @@ using TDEnums;
 using UnityEngine;
 
 /// <summary>
-/// Static effect system — không MonoBehaviour trên scene.
-/// Load TDEffectConfig SO từ Resources, map GameEventKey → EffectDef.
-/// Init() gọi từ TDControl.InitOtherControl() sau khi TDEnemyPathMainControl tạo xong.
+/// Static effect system — no MonoBehaviour on the scene.
+/// Loads the TDEffectConfig ScriptableObject from Resources and maps GameEventKey → EffectDef.
+/// Init() is called from TDControl.InitOtherControl() after TDEnemyPathMainControl has finished setup.
 /// </summary>
 public static class TDEffectManager
 {
@@ -39,7 +39,7 @@ public static class TDEffectManager
             if (!s_Effects.ContainsKey(def.key))
                 s_Effects[def.key] = def;
             else
-                Debug.LogWarning($"[TDEffectManager] Duplicate key: {def.key} — chỉ entry đầu được dùng.");
+                Debug.LogWarning($"[TDEffectManager] Duplicate key: {def.key} — only the first entry will be used.");
         }
 
         TDGameEventBus.OnEnemyDied        += OnEnemyDied;
@@ -148,14 +148,14 @@ public static class TDEffectManager
                 .SetUpdate(true);
     }
 
-    // UI events (pickup, place) — chỉ SFX, không VFX, không camera shake
+    // UI events (pickup, place) — SFX only, no VFX, no camera shake
     private static void PlaySfxOnly(GameEventKey key)
     {
         if (!s_Effects.TryGetValue(key, out var def)) return;
         PlaySFX(key, def);
     }
 
-    // Spawn chỉ impactVfxPrefab tại vị trí enemy (không play attack VFX hay SFX lần 2)
+    // Spawns only the impactVfxPrefab at the enemy's position (does not replay the attack VFX or SFX)
     private static void PlayImpact(GameEventKey key, Vector3 impactPos)
     {
         if (!s_Effects.TryGetValue(key, out var def)) return;
@@ -206,14 +206,14 @@ public static class TDEffectManager
             go.transform.SetParent(root);
             var src = go.AddComponent<AudioSource>();
             src.playOnAwake  = false;
-            src.spatialBlend = 0f; // 2D — camera fixed, spatial không cần thiết
+            src.spatialBlend = 0f; // 2D audio — camera is fixed, spatial blending is not needed
             s_SfxPool[i]     = src;
         }
     }
 
     /// <summary>
-    /// P1: reuse pooled AudioSource thay vì tạo GO mới mỗi lần.
-    /// P2: per-key cooldown SFX_MIN_INTERVAL để tránh chồng âm.
+    /// P1: reuses a pooled AudioSource instead of creating a new GameObject each time.
+    /// P2: applies a per-key cooldown of SFX_MIN_INTERVAL to prevent sound stacking.
     /// </summary>
     private static void PlaySFX(GameEventKey key, EffectDef def)
     {

@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-// Wave i → group i (nếu i >= groupCount thì wrap). Toàn bộ enemies trong wave đi cùng 1 group.
+// Wave i maps to group i (wraps around if i >= groupCount). All enemies in a wave share the same group.
 public class PerWaveStrategy : IGateAssignmentStrategy
 {
     public List<(TDPathGroup, List<IGridCellDTO>)> SelectForWave(List<TDPathGroup> groups, int waveIndex)

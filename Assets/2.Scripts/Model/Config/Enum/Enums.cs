@@ -21,14 +21,14 @@
         MissileG02,
         MissileG03,
         Mortar,
-        Operator   // Arknights-style: đặt trên path, chặn enemy, đánh cận chiến
+        Operator   // Arknights-style: placed on a path cell, blocks enemies, deals melee damage
     }
 
     public enum AttackType
     {
         Single,    // 1 projectile → 1 target (homing)
-        Multiple,  // N projectiles → top N targets by PathProgress (homing each)
-        AOE        // 1 projectile flies to target pos → splash all enemies in rangeOffsets
+        Multiple,  // N projectiles → top N targets sorted by PathProgress (each homing)
+        AOE        // 1 projectile flies to target position → splashes all enemies within rangeOffsets
     }
 
     public enum EnemyType
@@ -48,8 +48,8 @@
         Nightmare
     }
 
-    // Class archetype — xác định behavior (deploy zone, block, attack style).
-    // Identity cụ thể của từng operator được lưu trong OperatorData.operatorName.
+    // Class archetype — defines behavior (deploy zone, block count, attack style).
+    // The specific identity of each operator is stored in OperatorData.operatorName.
     public enum OperatorType
     {
         Knight,    // PathCell, block 2 — melee balanced
@@ -61,11 +61,11 @@
 
     public enum DeployZone
     {
-        PathCell,   // đặt trên path cell, block enemy
-        TowerZone,  // đặt trên tower zone, ranged attack
+        PathCell,   // placed on a path cell, blocks enemies
+        TowerZone,  // placed on a tower zone, performs ranged attacks
     }
 
-    // Key định danh từng game event → tra cứu EffectDef trong TDEffectConfig SO.
+    // Key that identifies each game event → used to look up the corresponding EffectDef in TDEffectConfig SO.
     public enum GameEventKey
     {
         EnemyDied_Normal,
@@ -82,8 +82,8 @@
         WaveStarted,
         Victory,
         GameOver,
-        UnitPickup,   // nhấc unit khỏi slot bar (PointerDown)
-        TowerPlaced,  // đặt tower / operator thành công
+        UnitPickup,   // unit lifted from the slot bar (PointerDown)
+        TowerPlaced,  // tower / operator successfully placed
     }
 
     public enum BorderSide
@@ -107,9 +107,9 @@
     public enum GateAssignmentMode
     {
         RoundRobin,    // wave i → group i % groupCount
-        Random,        // random group mỗi wave
-        PerWave,       // group cố định suốt 1 wave, đổi theo wave index
-        Simultaneous,  // tất cả groups spawn song song mỗi wave
+        Random,        // random group each wave
+        PerWave,       // one fixed group per wave, rotates by wave index
+        Simultaneous,  // all groups spawn in parallel each wave
     }
 
 }

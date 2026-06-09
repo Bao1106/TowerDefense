@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-// Wave i → group i % groupCount → random corridor trong group đó
+// Wave i maps to group i % groupCount → selects a random corridor within that group
 public class RoundRobinStrategy : IGateAssignmentStrategy
 {
     public List<(TDPathGroup, List<IGridCellDTO>)> SelectForWave(List<TDPathGroup> groups, int waveIndex)

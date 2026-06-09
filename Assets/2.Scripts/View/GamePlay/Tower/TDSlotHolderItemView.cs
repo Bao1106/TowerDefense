@@ -28,7 +28,7 @@ public class TDSlotHolderItemView : MonoBehaviour
         m_TxtTowerCost.text = $"{cost}$";
     }
 
-    /// Assign icon sprite — null-safe (nếu chưa gán icon thì giữ nguyên image mặc định).
+    /// Assigns the icon sprite — null-safe (if no icon is provided, the default image is preserved).
     public void SetupIcon(Sprite icon)
     {
         if (m_IconImage == null || icon == null) return;
