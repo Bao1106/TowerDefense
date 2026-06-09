@@ -100,7 +100,7 @@ public static class TDConstant
     public const float CONFIG_MAZE_OBSTACLE_WALL_RATIO = 0.15f;
     public const int   CONFIG_PLAYER_STARTING_LIVES  = 20;
     public const int   CONFIG_PLAYER_STARTING_GOLD   = 10;
-    public const float CONFIG_GOLD_PASSIVE_RATE       = 5f;   // giây/+1 gold passive
+    public const float CONFIG_GOLD_PASSIVE_RATE       = 3f;   // giây/+1 gold passive
     public const int   CONFIG_LIFE_LOW_THRESHOLD      = 5;    // <= 5 life → text đỏ
     public const int CONFIG_ENEMIES_NUMBER        = 5;
     public const int CONFIG_ENEMY_SPAWN_DELAY_MS  = 2000;

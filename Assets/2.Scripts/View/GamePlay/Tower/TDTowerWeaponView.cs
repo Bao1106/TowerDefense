@@ -55,6 +55,8 @@ public class TDTowerWeaponView : MonoBehaviour, IPlacedUnit
         m_TowerRangeDTO = TDTowerBehaviorModel.api.GetTowerRange(towerType);
         m_OriQuaternion = transform.rotation;
         m_PosSpawnBullet = transform.Find(TDConstant.GAMEPLAY_TOWER_BULLET_SPAWN);
+        if (m_PosSpawnBullet == null)
+            Debug.LogError($"[TDTowerWeaponView] '{TDConstant.GAMEPLAY_TOWER_BULLET_SPAWN}' not found on {gameObject.name}. Tower will not fire.");
 
         var attackType = TDTowerBehaviorModel.api.GetAttackType(towerType);
         m_MaxTargets = attackType == AttackType.Multiple
@@ -95,7 +97,7 @@ public class TDTowerWeaponView : MonoBehaviour, IPlacedUnit
                 m_Targets.RemoveAt(i);
         }
 
-        if (m_Targets.Count > 0)
+        if (m_Targets.Count > 0 && m_PosSpawnBullet != null)
         {
             RotateTowardsPrimary();
             TDTowerBehaviorMainControl.api.AttackTargets(

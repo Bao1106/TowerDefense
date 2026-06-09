@@ -51,6 +51,7 @@ public class TDControl
         TDTowerRetreatControl.api    = new TDTowerRetreatControl();
 
         TDEffectManager.Init();
+        TDBGMManager.Init();
     }
     
     // private void OnApiMiniAppReady(APIUnity apiUnity)

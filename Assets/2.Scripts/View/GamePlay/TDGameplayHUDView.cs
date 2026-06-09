@@ -223,13 +223,24 @@ public class TDGameplayHUDView : MonoBehaviour
         m_IsGameEnding = true;
         TDPauseControl.api?.Pause();
 
-        int killed = TDGameStateControl.api?.KilledEnemies ?? 0;
-        int total  = TDGameStateControl.api?.TotalEnemies  ?? 0;
-        int lives  = TDPlayerLifeControl.api?.CurrentLives ?? 0;
-        int gold   = TDGoldControl.api?.Gold ?? 0;
+        int killed  = TDGameStateControl.api?.KilledEnemies ?? 0;
+        int total   = TDGameStateControl.api?.TotalEnemies  ?? 0;
+        int lives   = TDPlayerLifeControl.api?.CurrentLives ?? 0;
+        int gold    = TDGoldControl.api?.Gold ?? 0;
+        int stars   = CalculateStars(lives);
         string stageId = TDGameStateControl.api?.SelectedStageId ?? "";
 
-        m_VictoryPanel?.Show(stageId, killed, total, lives, gold);
+        m_VictoryPanel?.Show(stageId, killed, total, lives, gold, stars);
+    }
+
+    // 3 ⭐ lives ≥ 30  (lost ≤ 10)
+    // 2 ⭐ lives ≥ 15  (lost ≤ 25)
+    // 1 ⭐ lives > 0   (won but barely)
+    private static int CalculateStars(int lives)
+    {
+        if (lives >= 30) return 3;
+        if (lives >= 15) return 2;
+        return 1;
     }
 
     private void OnPauseChanged(bool isPaused)

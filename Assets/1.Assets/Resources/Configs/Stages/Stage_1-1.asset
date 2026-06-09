@@ -20,3 +20,5 @@ MonoBehaviour:
   EndGateCount: 2
   Layout: 2
   GateMode: 1
+  bgmClip: {fileID: 8300000, guid: 4912b8edcc580984f87712da5b34fbe8, type: 3}
+  bgmVolume: 0.45

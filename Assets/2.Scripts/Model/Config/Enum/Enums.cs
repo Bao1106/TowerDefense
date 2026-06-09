@@ -82,6 +82,8 @@
         WaveStarted,
         Victory,
         GameOver,
+        UnitPickup,   // nhấc unit khỏi slot bar (PointerDown)
+        TowerPlaced,  // đặt tower / operator thành công
     }
 
     public enum BorderSide

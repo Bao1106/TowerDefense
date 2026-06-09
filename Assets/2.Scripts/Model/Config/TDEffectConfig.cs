@@ -7,17 +7,18 @@ using UnityEngine;
 public class EffectDef
 {
     public GameEventKey key;
+    public bool onlySfx; // true → Inspector ẩn VFX + Camera Shake fields
 
-    [Header("VFX")]
+    // VFX — ẩn khi onlySfx = true (xử lý bởi EffectDefDrawer)
     public GameObject vfxPrefab;       // attack VFX — spawn tại attacker pos khi fire
     public GameObject vfxPrefab2;      // optional second attack VFX (e.g., Victory coins)
     public GameObject impactVfxPrefab; // impact VFX — spawn tại enemy pos khi hit
 
-    [Header("SFX")]
+    // SFX — luôn hiện
     public AudioClip sfxClip;
     [Range(0f, 1f)] public float sfxVolume = 1f;
 
-    [Header("Camera Shake")]
+    // Camera Shake — ẩn khi onlySfx = true
     public bool  cameraShake;
     public float shakeStrength = 0.3f;
     public float shakeDuration = 0.25f;

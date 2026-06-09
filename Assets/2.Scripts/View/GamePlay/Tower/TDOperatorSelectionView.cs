@@ -3,6 +3,10 @@ using DG.Tweening;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.EnhancedTouch;
+using Touch = UnityEngine.InputSystem.EnhancedTouch.Touch;
+using TouchPhase = UnityEngine.InputSystem.TouchPhase;
 
 /// <summary>
 /// Gắn trên Canvas/SafeArea/Container — cùng cấp với TDGameplayHUDView.
@@ -29,6 +33,7 @@ public class TDOperatorSelectionView : MonoBehaviour
 
     private void Start()
     {
+        EnhancedTouchSupport.Enable();
         m_Canvas      = GetComponentInParent<Canvas>();
         m_ActionPanel = transform.Find(TDConstant.PATH_OPERATOR_ACTION_PANEL)?.GetComponent<RectTransform>();
         m_BtnRetreat  = transform.Find(TDConstant.PATH_OPERATOR_BTN_RETREAT)?.GetComponent<Button>();
@@ -63,16 +68,16 @@ public class TDOperatorSelectionView : MonoBehaviour
         Vector2 screenPos = Vector2.zero;
 
 #if UNITY_ANDROID && !UNITY_EDITOR
-        if (Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Began)
+        if (Touch.activeTouches.Count > 0 && Touch.activeTouches[0].phase == TouchPhase.Began)
         {
             tapped    = true;
-            screenPos = Input.GetTouch(0).position;
+            screenPos = Touch.activeTouches[0].screenPosition;
         }
 #else
-        if (Input.GetMouseButtonDown(0))
+        if (Mouse.current.leftButton.wasPressedThisFrame)
         {
             tapped    = true;
-            screenPos = Input.mousePosition;
+            screenPos = Mouse.current.position.ReadValue();
         }
 #endif
 
@@ -309,5 +314,10 @@ public class TDOperatorSelectionView : MonoBehaviour
         s_RaycastResults.Clear();
         EventSystem.current.RaycastAll(eventData, s_RaycastResults);
         return s_RaycastResults.Count > 0;
+    }
+
+    private void OnDestroy()
+    {
+        EnhancedTouchSupport.Disable();
     }
 }

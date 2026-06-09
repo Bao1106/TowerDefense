@@ -303,6 +303,67 @@ Fix: GetTrackedTouch() (INPUT-07) guard touchCount, Input.mousePosition không c
      được dùng trên Android → tự resolve.
 
 ────────────────────────────────────────────────────────────────────────────────
+INPUT SYSTEM — LEGACY vs NEW
+────────────────────────────────────────────────────────────────────────────────
+
+Project setting: activeInputHandler = 2 (Both) — cả 2 pipeline đang active.
+Package: com.unity.inputsystem 1.11.2 đã cài, chưa dùng ở đâu.
+Code hiện tại: 100% Legacy Input Manager (chỉ tập trung tại 2 file).
+
+── Legacy Input Manager ─────────────────────────────────────────────────────
+
+  Built-in, không cần package. API tĩnh toàn cục: Input.GetTouch(), Input.mousePosition.
+  Cơ chế: POLLING — Unity snapshot input 1 lần đầu frame, code đọc snapshot đó.
+
+  Vấn đề cốt lõi:
+    - TouchPhase.Ended tồn tại đúng 1 frame → mất nếu frame đó bị early return (INPUT-08)
+    - GetTouch(0) index không stable khi multi-touch (INPUT-07)
+    - Input.mousePosition trên Android = stale position của touch trước (INPUT-03, INPUT-09)
+    - Không có fingerId tracking built-in
+
+── New Input System ─────────────────────────────────────────────────────────
+
+  Package riêng. Hỗ trợ cả event-driven lẫn polling (EnhancedTouch).
+  Cơ chế: Buffer tất cả input event trong queue → không bao giờ mất event dù early return.
+
+  API khác biệt:
+    Legacy                          New Input System
+    Input.touchCount > 0            Touch.activeTouches.Count > 0
+    Input.GetTouch(0).phase         touch.phase (UnityEngine.InputSystem.TouchPhase)
+    Input.GetTouch(0).position      touch.screenPosition
+    Input.mousePosition             Mouse.current.position.ReadValue()
+    Input.GetMouseButtonDown(0)     Mouse.current.leftButton.wasPressedThisFrame
+    Input.GetMouseButtonDown(1)     Mouse.current.rightButton.wasPressedThisFrame
+    Input.GetKeyDown(KeyCode.E)     Keyboard.current.eKey.wasPressedThisFrame
+    Input.GetKeyDown(KeyCode.Q)     Keyboard.current.qKey.wasPressedThisFrame
+
+  Cần enable ở Start()/OnEnable():
+    UnityEngine.InputSystem.EnhancedTouch.EnhancedTouchSupport.Enable();
+
+── Scope migration nếu chọn New Input System ────────────────────────────────
+
+  Files phải sửa: CHỈ 2 file
+    TDSlotHolderMainView.cs     — 9 chỗ dùng Legacy
+    TDOperatorSelectionView.cs  — 4 chỗ dùng Legacy
+
+  Không đụng:
+    TDUserInputControl (event bus), TDTowerMainControl, TDPlaceTowerControl,
+    IsPointerOverUI() RaycastAll, tất cả gameplay logic downstream,
+    toàn bộ #if UNITY_ANDROID guard.
+
+  Lợi ích migration:
+    - INPUT-07 (fingerId) resolved tự động — EnhancedTouch track theo fingerId
+    - INPUT-08 (Ended bị mất) resolved — buffer đảm bảo không mất event
+    - Không cần workaround thủ công cho 2 issue trên
+
+  Rủi ro: thấp — scope nhỏ, downstream không đổi.
+
+── Quyết định ───────────────────────────────────────────────────────────────
+
+  Giữ Legacy → fix thủ công INPUT-04,05,08,07,02,03,06 theo thứ tự bên dưới.
+  Migration New Input System → fix được INPUT-07+08 tự động, còn lại vẫn phải fix.
+
+────────────────────────────────────────────────────────────────────────────────
 THỨ TỰ FIX
 ────────────────────────────────────────────────────────────────────────────────
 

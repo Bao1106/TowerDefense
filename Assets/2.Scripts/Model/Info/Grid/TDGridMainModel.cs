@@ -102,7 +102,10 @@ public class TDGridMainModel : IGridMainModel
     }
 
     public Vector3 CellToWorld(Vector2Int cell)
-        => m_Grid[cell.x, cell.y];
+    {
+        if (!IsInBounds(cell)) return Vector3.zero;
+        return m_Grid[cell.x, cell.y];
+    }
 
     public Vector2Int WorldToCell(Vector3 worldPosition)
     {

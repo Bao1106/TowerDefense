@@ -1,6 +1,6 @@
 ================================================================================
   TOWER DEFENSE — GAME DESIGN, TECHNICAL REFERENCE & DEVELOPMENT ROADMAP
-  Last updated: 2026-06-03  (session 39 — Dynamic Multi Start/End Gate System)
+  Last updated: 2026-06-09  (session 58 — SFX UnitPickup/TowerPlaced, Victory Stars, A* analysis)
 ================================================================================
 
 
@@ -201,11 +201,30 @@ File: Assets/3.Scenes/DTGamePlay.unity
   TDGateEndView.cs           ← GateEnd MonoBehaviour: trigger visual + life text [Phase 4.5]
   [DELETED] TDEnemyDetector.cs ← removed Phase 6.1 (replaced by Registry+tick scan)
 
-  ── Event Bus ────────────────────────────────────────────────────────────────
+  ── Event Bus & Effect System ────────────────────────────────────────────────
   TDGameEventBus.cs          ← [NEW s23] Static event hub cho cross-cutting concerns (VFX, Audio)
                                 Events: OnEnemyDied(pos,type), OnEnemySpawned, OnTowerAttacked,
                                 OnOperatorDied(cell), OnLifeLost, OnVictory, OnGameOver, OnWaveStarted
+                                [s58 NEW] OnUnitPickup, OnTowerPlaced (UI interaction SFX)
                                 Gameplay raise event; audio/VFX subscribe độc lập — zero coupling
+
+  TDEffectManager.cs         ← [s58 NEW] Static class, sub/unsub TDGameEventBus events
+                                PlaySFX(key, def): pooled AudioSource; PlayVFX; CameraShake
+                                PlaySfxOnly(key): UI events (UnitPickup, TowerPlaced) — no VFX, no shake
+                                Subscribe OnUnitPickup → PlaySfxOnly(UnitPickup)
+                                Subscribe OnTowerPlaced → PlaySfxOnly(TowerPlaced)
+
+  TDEffectConfig.cs          ← EffectDef [Serializable] per GameEventKey
+                                Fields: key, onlySfx (bool), vfxPrefab×3, sfxClip, sfxVolume,
+                                        cameraShake, shakeStrength, shakeDuration
+                                onlySfx=true → Inspector ẩn VFX + Camera Shake sections
+                                Custom PropertyDrawer: EffectDefDrawer.cs (Editor-only)
+
+  EffectDefDrawer.cs         ← [s58 NEW] Assets/2.Scripts/Editor/EffectDefDrawer.cs
+                                [CustomPropertyDrawer(typeof(EffectDef))]
+                                Foldout; luôn hiện: key, onlySfx, SFX section (sfxClip, sfxVolume)
+                                onlySfx=false → hiện thêm VFX section + Camera Shake section
+                                GetPropertyHeight: dynamic tính theo bool values
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -1352,8 +1371,43 @@ File: Assets/3.Scenes/DTGamePlay.unity
       - IPathFinderDTO interface
       - CONFIG_MAZE_EXTRA_PASSAGE_RATE = 0.45f chưa dùng
 
-  ⚠️  Stage Select UI screen chưa có
+  ✅  Victory star rating implemented                               DONE s58
+      CalculateStars(lives): lives>=30 → 3, lives>=15 → 2, else → 1
+      TDVictoryPanelView: PrepareStars() + PlayShowAnim() staggered DOTween pop-in
+      Timing: popup settle 0.18s; stagger 0.20s/star; OutBack scale + gold fade + punch
+      TDGameplayHUDView.CalculateStars() → pass stars to m_VictoryPanel.Show()
+
+  ✅  SFX UnitPickup + TowerPlaced                                  DONE s58
+      GameEventKey.UnitPickup, TowerPlaced added to Enums.cs
+      TDGameEventBus: OnUnitPickup / OnTowerPlaced events + static fire methods
+      TDSlotHolderMainView: fire UnitPickup (OnCreateTower); TowerPlaced (OnPlaceTowerSuccess)
+      TDEffectManager.PlaySfxOnly(key): play SFX only — no VFX, no camera shake
+      sfx_unit_pickup.wav: Assets/1.Assets/Resources/Audio/SFX/sfx_unit_pickup.wav
+        (copy từ CelerisLab/CompleteUISFX/basic_interactions_and_navigation/button_click_09.wav)
+      ⚠️ Inspector TODO: Effect Config.asset — assign 2 entries (UnitPickup + TowerPlaced)
+         onlySfx=true; sfxClip assign; sfxVolume ~0.65-0.70
+
+  ✅  EffectDef.onlySfx + EffectDefDrawer                           DONE s58
+      TDEffectConfig.EffectDef: + bool onlySfx field
+      EffectDefDrawer.cs [NEW]: CustomPropertyDrawer — khi onlySfx=true ẩn VFX + Shake sections
+      Always visible: key, onlySfx, SFX (sfxClip, sfxVolume)
+      Conditional: VFX section (vfxPrefab×3) + Camera Shake section (hidden khi onlySfx=true)
+
+  ✅  BGM Streaming import optimization                             DONE s58
+      bgmClip assigned trong Stage assets; Import Settings: Load Type=Streaming → 91MB→256KB RAM
+
+  ⚠️  Main Menu scene MISSING — P1 (portfolio entry point)
+      Hiện game start thẳng vào DTGamePlay; không có entry point.
+      Asset sẵn: Modern UI Pack (buttons, sliders, modal window, horizontal selector).
+      Cần: Logo screen → Main Menu → Stage Select → Play.
+
+  ⚠️  Stage Select UI screen chưa có — P2
       Hiện auto-start DEMO-1; cần màn hình chọn stage trước khi play.
+      2 stages (DEMO-1/DEMO-2) không visible với player.
+
+  ⚠️  Effect Config.asset Inspector — TODO s58
+      Assign 2 entries: UnitPickup (onlySfx=true, sfx_unit_pickup.wav, vol~0.65)
+                        TowerPlaced (onlySfx=true, sfxClip=TBD, vol~0.70)
 
   ⚠️  HUD dùng text symbol thay sprite icon (session 17 review)
       ☠ ♥ ♦ là text character trong TextMeshPro, không phải Image sprites
@@ -1527,18 +1581,39 @@ File: Assets/3.Scenes/DTGamePlay.unity
      │
   ✅ Phase 22  (Multi-Gate System)       ── DONE (session 39)
      │
+  ✅ Phase 23  (Audio/SFX System)        ── DONE (session 40-58)
+     │   TDGameEventBus: OnUnitPickup, OnTowerPlaced (UI SFX events)
+     │   TDEffectManager: PlaySfxOnly() — no VFX, no shake for UI sounds
+     │   EffectDef.onlySfx field + EffectDefDrawer custom PropertyDrawer
+     │   sfx_unit_pickup.wav added to Resources/Audio/SFX/
+     │   BGM Streaming import: 91MB → 256KB RAM
+     │   ⚠️ Inspector: Effect Config.asset entries cho UnitPickup + TowerPlaced pending
+     │
+  ✅ Phase 24  (Victory Stars)           ── DONE (session 58)
+     │   CalculateStars(lives): lives>=30→3, lives>=15→2, else→1
+     │   TDVictoryPanelView: PrepareStars() + PlayShowAnim() DOTween stagger
+     │   Star paths: "PopupWindow/Middle/StarRow/IconStar" (×3)
+     │
   ⬜ Phase 9   (Polish + Perf)           ── final pass
 
-  ── Thứ tự implement đề xuất (cập nhật session 39) ──────────────────────
-  ✅→✅→✅→✅→...→ ✅ Phase 22 (Multi-Gate) → ⬜ Phase 9 (Polish)
+  ── Thứ tự implement đề xuất (cập nhật session 58) ──────────────────────
+  ✅ Phase 22 → ✅ Phase 23 → ✅ Phase 24 → ⬜ Phase 9 (Polish)
 
   Remaining (Phase 9):
-    ⬜ Stage Select UI screen
-    ⬜ VFX/Audio subscribe TDGameEventBus
-    ⬜ Camera shake on life lost
-    ⬜ DEF/RES stats cho enemy; Air Drone tier
-    ⬜ ToonOutlineVolume trong DTGamePlay.unity
-    ⬜ Dead code cleanup (IPathFinderDTO, old TDaStarPathControl methods)
+    ⬜ [P1] Main Menu scene — entry point cho portfolio, dùng Modern UI Pack
+    ⬜ [P2] Stage Select screen — 2 stages cần visible
+    ⬜ [P1] Dead code cleanup:
+         - TDaStarPathControl: FindPath, FindMultiplePaths, events, IPathFinderDTO
+         - ServiceLocator.cs, Injector.cs, Provider.cs, Observer.cs, Singleton.cs
+         - BootsTrapper.cs, Launcher.cs, ServicesManager.cs, MockServices.cs, TDWebService.cs
+         - CONFIG_MAZE_EXTRA_PASSAGE_RATE = 0.45f
+    ⬜ [P2] Effect Config.asset: assign UnitPickup + TowerPlaced entries
+    ⬜ [P2] Camera shake on life lost (TDEffectManager + LifeLost event)
+    ⬜ [P2] Enemy hit flash (visual feedback khi TakeDamage)
+    ⬜ [P2] Tower placed VFX (effect khi tower/operator đặt thành công)
+    ⬜ [P3] ToonOutlineVolume đặt vào DTGamePlay.unity
+    ⬜ [P3] DEF/RES stats cho enemy; Air Drone tier
+    ⬜ [SKIP] A* MinHeap optimization — analyzed, decided NOT to implement (demo portfolio)
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -3541,6 +3616,120 @@ File: Assets/3.Scenes/DTGamePlay.unity
   ⬜ Xóa dead code TDaStarPathControl (FindPath, FindMultiplePaths, IPathFinderDTO)
   ⬜ CONFIG_MAZE_EXTRA_PASSAGE_RATE = 0.45f chưa dùng → xóa
   ⬜ Tách thêm OnValidTowerCellsReady (vẫn còn God Method nhỏ)
+
+
+================================================================================
+  39. SESSIONS 40-58 — AUDIO SYSTEM, EFFECT CONFIG, VICTORY STARS        [✅ DONE]
+================================================================================
+
+  ── BGM Streaming Import Optimization ───────────────────────────────────────
+  bgmClip assigned trong Stage assets (Inspector).
+  Import Settings: Load Type = Streaming → RAM usage 91MB → 256KB.
+  Áp dụng cho tất cả BGM clip dài (background music).
+
+  ── SFX System: UnitPickup + TowerPlaced ────────────────────────────────────
+  Problem: cần SFX cho 2 UI interaction events — drag unit from slot bar và place thành công.
+  Pattern: EventBus (consistent với hệ thống hiện tại); PlaySfxOnly helper (không VFX/shake).
+
+  Files mới:
+    Assets/1.Assets/Resources/Audio/SFX/sfx_unit_pickup.wav  [NEW — copy từ button_click_09.wav]
+    Assets/2.Scripts/Services/TDEffectManager.cs             [NEW]
+    Assets/2.Scripts/Editor/EffectDefDrawer.cs               [NEW]
+
+  Files sửa:
+    Enums.cs (GameEventKey): + UnitPickup, TowerPlaced
+    TDGameEventBus.cs: + OnUnitPickup, OnTowerPlaced events + static fire methods
+    TDSlotHolderMainView.cs:
+      OnCreateTower(): fire TDGameEventBus.UnitPickup() sau IsPlacingUnit=true
+      OnPlaceTowerSuccess(): fire TDGameEventBus.TowerPlaced() sau SpendGold()
+    TDEffectConfig.cs (EffectDef): + bool onlySfx field
+    TDEffectManager.cs:
+      Subscribe/Unsubscribe OnUnitPickup, OnTowerPlaced
+      Handlers: PlaySfxOnly(GameEventKey)
+      PlaySfxOnly(key): s_Effects.TryGetValue(key) → PlaySFX(key, def) — không gọi VFX/shake
+
+  EffectDef.onlySfx UI (EffectDefDrawer.cs):
+    [CustomPropertyDrawer(typeof(EffectDef))]
+    Foldout-based layout; luôn hiện: key, onlySfx, SFX label, sfxClip, sfxVolume
+    onlySfx=false → hiện thêm: VFX label + 3 prefab fields + Camera Shake label + cameraShake
+    cameraShake=true → hiện thêm: shakeStrength, shakeDuration
+    GetPropertyHeight: dynamic, tránh overlap
+
+  Inspector TODO:
+    Effect Config.asset: thêm 2 entries:
+      Entry 1: key=UnitPickup,  onlySfx=true, sfxClip=sfx_unit_pickup, volume=0.65
+      Entry 2: key=TowerPlaced, onlySfx=true, sfxClip=<tower place sfx>, volume=0.70
+
+  ── Victory Star Rating ──────────────────────────────────────────────────────
+  Problem: VictoryPanel always show 3 stars, logic chưa implement.
+
+  TDGameplayHUDView.cs:
+    + CalculateStars(int lives) static:
+        if (lives >= 30) return 3;
+        if (lives >= 15) return 2;
+        return 1;
+    OnVictory(): int stars = CalculateStars(lives); m_VictoryPanel.Show(..., stars)
+
+  TDVictoryPanelView.cs:
+    STAR_PATHS[3]: "PopupWindow/Middle/StarRow/IconStar", "...IconStar (1)", "...IconStar (2)"
+    COLOR_STAR_EARNED   = (1.00, 0.85, 0.10, 1) — gold
+    COLOR_STAR_UNEARNED = (0.25, 0.25, 0.25, 0.5) — grey dim
+    STAR_DELAY_AFTER_POPUP = 0.18f
+    STAR_STAGGER           = 0.20f  (delay giữa mỗi sao)
+    STAR_POP_DURATION      = 0.32f
+    STAR_PUNCH_STRENGTH    = 0.30f
+    STAR_PUNCH_DURATION    = 0.25f
+
+    PrepareStars(earnedCount):
+      earned stars: color=(1,1,1,0) scale=0 → sẵn sàng pop-in
+      unearned stars: color=COLOR_STAR_UNEARNED, scale=1 → dim ngay lập tức
+
+    PlayShowAnim(earnedStars):
+      DOTween.Sequence: popup fade+scale → AppendCallback interactable → interval 0.18s
+      For each earned star: AppendCallback → DOScale OutBack + DOColor gold + OnComplete DOPunchScale
+      AppendInterval(STAR_STAGGER) sau mỗi star
+
+  Show() signature: Show(stageId, killed, total, lives, gold, int stars = 1)
+
+  ── A* Bottleneck Analysis (DECIDED: không implement) ────────────────────────
+  Problem phát hiện trong TDaStarPathControl.cs:
+    Line 47: openSet.OrderBy(node => fScore[...]).First()  → O(n log n) per step
+    Line 53: openSet.Remove(current)                       → O(n) linear scan
+    Line 63: openSet.Contains(neighbor)                    → O(n) linear scan × 4 neighbors
+
+  Solution analyzed: MinHeap + HashSet + Lazy Deletion
+    openHeap (TDMinHeap<T>): Push O(log n), Pop O(log n) — luôn giữ min ở root
+    openHash (HashSet):      Contains O(1) — hash function direct lookup
+    Lazy Deletion: re-push với fScore mới thay vì find+update; skip stale entries qua closedSet
+
+  Quyết định: KHÔNG implement.
+  Lý do: demo portfolio, grid nhỏ (~20×15), A* chạy lúc init không phải per-frame.
+         Optimization không cảm nhận được. Thời gian tốt hơn cho Main Menu + Stage Select.
+
+  CV/Interview tip:
+    "A* trong project dùng List để lấy node nhỏ nhất — tôi nhận ra đây là O(n log n)
+     mỗi bước, và biết cách fix bằng MinHeap để xuống O(log n), nhưng với grid nhỏ
+     của demo thì chưa cần thiết."
+
+  ── Algorithm Concepts Documented (phục vụ kiến thức) ───────────────────────
+  Big O:
+    O(1)      — constant: HashSet.Contains, array index
+    O(log n)  — logarithmic: MinHeap push/pop, Binary Search
+    O(n)      — linear: List scan, Array traverse
+    O(n log n)— List.OrderBy, merge sort, heap sort trên toàn mảng
+    O(n²)     — nested loop, Bubble Sort
+
+  MinHeap Binary Heap:
+    Cây nhị phân trong mảng: parent(i)=(i-1)/2, left=2i+1, right=2i+2
+    Parent luôn ≤ Children (Min property)
+    Push: add cuối → BubbleUp (swap với parent nếu nhỏ hơn) — O(log n)
+    Pop:  lấy root → move last→root → SiftDown (swap với con nhỏ hơn) — O(log n)
+
+  Lazy Deletion Pattern:
+    Thay vì update/remove ngay (expensive) → re-insert với priority mới
+    Khi pop ra bản cũ → closedSet.Contains → skip
+    Trade-off: bộ nhớ cao hơn (duplicates trong heap) ↔ tốc độ tốt hơn (no linear scan)
+    Unity parallel: Destroy() cuối frame, DOTween.Kill() mark+cleanup, Application.Quit() deferred
 
 
 ================================================================================

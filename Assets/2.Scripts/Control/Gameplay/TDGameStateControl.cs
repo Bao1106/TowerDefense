@@ -26,6 +26,7 @@ public class TDGameStateControl
         IsGameEnded     = false;
         CurrentWave     = 0;
         onEnemyCountChanged?.Invoke(KilledEnemies, TotalEnemies);
+        TDGameEventBus.GameplayStarted();
     }
 
     public void OnWaveStarted(int waveNumber, int totalWaves)

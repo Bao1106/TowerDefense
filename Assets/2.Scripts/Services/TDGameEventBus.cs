@@ -26,6 +26,13 @@ public static class TDGameEventBus
     // ── Wave ──────────────────────────────────────────────────────────────────
     public static event Action<int> OnWaveStarted;
 
+    // ── UI interactions ───────────────────────────────────────────────────────
+    public static event Action OnUnitPickup;
+    public static event Action OnTowerPlaced;
+
+    // ── Gameplay lifecycle ────────────────────────────────────────────────────
+    public static event Action OnGameplayStarted;
+
     // ── Raise helpers ─────────────────────────────────────────────────────────
 
     public static void EnemyDied(Vector3 pos, EnemyType type)
@@ -57,4 +64,13 @@ public static class TDGameEventBus
 
     public static void WaveStarted(int waveIndex)
         => OnWaveStarted?.Invoke(waveIndex);
+
+    public static void GameplayStarted()
+        => OnGameplayStarted?.Invoke();
+
+    public static void UnitPickup()
+        => OnUnitPickup?.Invoke();
+
+    public static void TowerPlaced()
+        => OnTowerPlaced?.Invoke();
 }

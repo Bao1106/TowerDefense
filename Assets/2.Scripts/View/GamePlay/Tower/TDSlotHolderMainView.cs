@@ -5,6 +5,10 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
+using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.EnhancedTouch;
+using Touch = UnityEngine.InputSystem.EnhancedTouch.Touch;
+using TouchPhase = UnityEngine.InputSystem.TouchPhase;
 
 public class TDSlotHolderMainView : MonoBehaviour
 {
@@ -16,6 +20,22 @@ public class TDSlotHolderMainView : MonoBehaviour
     // Tỉ lệ cellSize để trigger direction selection (35% = 0.7f khi cellSize=2)
     // Phải < 50% để trigger TRƯỚC khi GetNearestGridPosition snap sang ô mới
     private const float DIRECTION_THRESHOLD_RATIO = 0.35f;
+
+    // Offset ngón tay: ghost hiện lên TRÊN điểm chạm thực để không bị ngón tay che khuất.
+    // Ngón tay người dùng che ~1 ô → offset ~10% chiều cao màn hình.
+    // Chỉ áp dụng trên Android. Tune constant này nếu cần.
+    private const float TOUCH_SCREEN_Y_OFFSET_RATIO = 0.10f;
+
+    // Thời gian tối thiểu (giây) phải giữ nguyên Phase 2 trước khi buông tay = place.
+    // Lọc micro-lift: cảm biến màn hình Android đôi khi báo Ended ngắn trong lúc drag chậm,
+    // sau đó lập tức Began lại → ngón tay có vẻ vẫn chạm nhưng placement đã xảy ra.
+    // 0.2s đủ để lọc micro-lift mà không ảnh hưởng đến thao tác cố ý.
+    private const float MIN_PHASE2_DURATION = 0.20f;
+
+    // Thời gian tối thiểu (giây) finger phải đứng yên trên cùng 1 cell trước khi Phase 2 có thể arm.
+    // Ngăn Phase 2 auto-trigger khi drag qua valid cell (tower zone / path cell) mà không có ý định đặt.
+    // Arknights style: drag vào cell → dừng lại ~0.3s → mới xuất hiện direction selection.
+    private const float MIN_CELL_HOLD_DURATION = 0.35f;
 
     private readonly List<TDSlotHolderItemView> m_SlotHolders = new List<TDSlotHolderItemView>();
     public static bool IsPlacingUnit { get; private set; }
@@ -37,14 +57,19 @@ public class TDSlotHolderMainView : MonoBehaviour
     // Chỉ buông tay = place khi đã qua Phase 2
     // Reset về false khi ghost di chuyển sang cell mới
     private bool m_IsDirectionSelected;
+    private bool m_PhaseArmed; // true khi finger đã vào trong threshold → Phase 2 có thể trigger
     private Vector3 m_LastSnappedPos = Vector3.negativeInfinity;
-    private bool m_TowerCreatedThisFrame; // guard: bỏ qua input frame đầu khi ghost vừa được tạo
+    private bool  m_TowerCreatedThisFrame; // guard: bỏ qua HandlePlacementInput frame đầu khi ghost vừa được tạo
+    private int   m_DragFingerId = -1;     // Android: touchId của ngón tay tạo ghost; -1 = chưa lock
+    private float m_DirectionSelectedTime = -999f; // unscaled time khi Phase 2 bắt đầu (cho MIN_PHASE2_DURATION)
+    private float m_CellEnterTime         = -999f; // unscaled time khi finger vào cell hiện tại (cho MIN_CELL_HOLD_DURATION)
 
     // Panel chỉ chứa nút Cancel — hiện khi đang hold ghost tower
     private GameObject m_PlacementPanel;
 
     private void Start()
     {
+        EnhancedTouchSupport.Enable();
         RegistryTowerControlEvents();
         InitViews();
         InitTowerHolder();
@@ -57,14 +82,33 @@ public class TDSlotHolderMainView : MonoBehaviour
     {
         if (m_CurrentTower == null) return;
 
-        // Bỏ qua toàn bộ input frame đầu sau khi ghost vừa được tạo (slot button click frame)
-        if (m_TowerCreatedThisFrame) { m_TowerCreatedThisFrame = false; return; }
+        bool skipInput = m_TowerCreatedThisFrame;
+        if (m_TowerCreatedThisFrame) m_TowerCreatedThisFrame = false;
 
-        // Khi ngón đang đè lên UI (Cancel button, v.v.) → không di/rotate ghost
-        if (IsPointerOverUI()) return;
+#if UNITY_ANDROID && !UNITY_EDITOR
+        // Lock ngón tay đang drag vào touchId của touch đầu tiên xuất hiện sau khi ghost được tạo.
+        // Mọi ngón tay khác (multi-touch) đều bị bỏ qua → tránh auto-place do multi-touch.
+        if (m_DragFingerId < 0 && Touch.activeTouches.Count > 0)
+            m_DragFingerId = Touch.activeTouches[0].touchId;
+#endif
 
+        // Ghost luôn follow finger — kể cả khi đang trên UI (button/slot),
+        // để drag từ slot thẳng vào map không cần nhấc tay.
         UpdateGhostTransform();
         RefreshRangeHighlights();
+
+        if (skipInput) return;
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+        var dragTouch = FindDragTouch();
+        // TouchPhase.Ended phải luôn được xử lý — kể cả khi nhấc tay trên UI (slot button),
+        // để đảm bảo CancelPlacement() không bị bỏ qua.
+        bool fingerEnded = dragTouch.HasValue && dragTouch.Value.phase == TouchPhase.Ended;
+        if (!fingerEnded && IsPointerOverUI()) return;
+        if (!dragTouch.HasValue) return; // drag touch đã mất (hiếm) — bỏ qua
+#else
+        if (IsPointerOverUI()) return;
+#endif
         HandlePlacementInput();
     }
 
@@ -79,6 +123,10 @@ public class TDSlotHolderMainView : MonoBehaviour
         if (fingerWorld == Vector3.negativeInfinity) return;
 
 #if UNITY_ANDROID && !UNITY_EDITOR
+        // INPUT-05: frame Ended chỉ để HandlePlacementInput xử lý, không update transform
+        var ghostDragTouch = FindDragTouch();
+        if (!ghostDragTouch.HasValue || ghostDragTouch.Value.phase == TouchPhase.Ended) return;
+
         // ── Mobile ──────────────────────────────────────────────────────────
         if (m_IsDirectionSelected)
         {
@@ -104,8 +152,14 @@ public class TDSlotHolderMainView : MonoBehaviour
         }
 
         Vector3 snappedPosMobile = TDGridMainModel.api.GetNearestGridPosition(fingerWorld);
-        if (snappedPosMobile != m_LastSnappedPos)
-            m_LastSnappedPos = snappedPosMobile;
+        bool cellChanged = snappedPosMobile != m_LastSnappedPos;
+        if (cellChanged)
+        {
+            m_LastSnappedPos      = snappedPosMobile;
+            m_IsDirectionSelected = false;
+            m_PhaseArmed          = false;
+            m_CellEnterTime       = Time.unscaledTime; // ghi thời điểm bước vào cell mới
+        }
         m_CurrentTower.transform.position = new Vector3(m_LastSnappedPos.x, TDConstant.CONFIG_TOWER_PLACE_Y, m_LastSnappedPos.z);
 
         Vector3 dirMobile = fingerWorld - m_LastSnappedPos;
@@ -114,8 +168,19 @@ public class TDSlotHolderMainView : MonoBehaviour
         bool cellOk = m_CurrentTowerType == TowerType.Operator
             ? IsValidOperatorPlacement(m_LastSnappedPos)
             : TDGridMainModel.api.IsValidPlacement(m_LastSnappedPos);
-        if (dirMobile.sqrMagnitude > thresholdMobile * thresholdMobile && cellOk)
+
+        bool insideThreshold  = dirMobile.sqrMagnitude <= thresholdMobile * thresholdMobile;
+        bool heldLongEnough   = Time.unscaledTime - m_CellEnterTime >= MIN_CELL_HOLD_DURATION;
+
+        // Arm chỉ khi: đang ở trong threshold + đã đứng trên cell đủ lâu (không arm khi drag qua nhanh)
+        if (!cellChanged && insideThreshold && heldLongEnough)
+            m_PhaseArmed = true;
+
+        // Phase 2 chỉ trigger khi: đã arm + đang ở ngoài threshold + cell hợp lệ
+        if (!cellChanged && m_PhaseArmed && !insideThreshold && cellOk)
         {
+            if (!m_IsDirectionSelected)
+                m_DirectionSelectedTime = Time.unscaledTime; // bắt đầu đếm MIN_PHASE2_DURATION
             m_IsDirectionSelected = true;
             m_CurrentRotationIndex = ComputeRotationIndex(dirMobile);
             m_CurrentTower.transform.rotation =
@@ -152,22 +217,32 @@ public class TDSlotHolderMainView : MonoBehaviour
         // Mobile (Arknights-style 2-phase):
         // Phase 1 — drag đến cell: buông tay KHÔNG place (m_IsDirectionSelected = false)
         // Phase 2 — swipe ra ngoài threshold: m_IsDirectionSelected = true → buông tay = place
-        if (Input.touchCount > 0 && Input.GetTouch(0).phase == TouchPhase.Ended)
+        // Chỉ nhận Ended của đúng ngón tay lock (m_DragFingerId) → không bị multi-touch kích nhầm.
+        var placeDragTouch = FindDragTouch();
+        if (placeDragTouch.HasValue && placeDragTouch.Value.phase == TouchPhase.Ended)
         {
-            if (m_IsDirectionSelected)
+            if (m_IsDirectionSelected &&
+                Time.unscaledTime - m_DirectionSelectedTime >= MIN_PHASE2_DURATION)
+            {
+                // Buông tay sau khi giữ Phase 2 đủ lâu → place (thao tác cố ý).
                 TDUserInputControl.api.OnMouseButton0Clicked();
+            }
             else
-                CancelPlacement(); // nhấc ngón chưa chọn direction = auto cancel
+            {
+                // Nhấc ngón trong Phase 1, hoặc Ended quá nhanh sau khi vào Phase 2 (micro-lift).
+                // Micro-lift: cảm biến Android báo Ended ngắn rồi Began lại → cancel thay vì place sai vị trí.
+                CancelPlacement();
+            }
         }
 #else
         // Desktop: LMB click = đặt, E/Q = rotate thủ công, RMB = cancel
-        if (Input.GetMouseButtonDown(0))
+        if (Mouse.current.leftButton.wasPressedThisFrame)
             TDUserInputControl.api.OnMouseButton0Clicked();
-        else if (Input.GetKeyDown(KeyCode.E))
+        else if (Keyboard.current.eKey.wasPressedThisFrame)
             TDUserInputControl.api.OnMouseButtonEClicked();
-        else if (Input.GetKeyDown(KeyCode.Q))
+        else if (Keyboard.current.qKey.wasPressedThisFrame)
             TDUserInputControl.api.OnMouseButtonQClicked();
-        else if (Input.GetMouseButtonDown(1))
+        else if (Mouse.current.rightButton.wasPressedThisFrame)
             TDUserInputControl.api.OnMouseButton1Clicked();
 #endif
     }
@@ -179,12 +254,23 @@ public class TDSlotHolderMainView : MonoBehaviour
     {
         if (Camera.main == null) return Vector3.negativeInfinity;
 
-        Vector3 screenPos = Input.touchCount > 0
-            ? (Vector3)Input.GetTouch(0).position
-            : Input.mousePosition;
-
+#if UNITY_ANDROID && !UNITY_EDITOR
+        var posDragTouch = FindDragTouch();
+        if (!posDragTouch.HasValue) return Vector3.negativeInfinity;
+        // Dịch điểm chạm lên trên để ghost hiện TRÊN ngón tay (tránh bị che khuất).
+        // Ngón tay người dùng rộng hơn cursor chuột nhiều → cần offset để nhìn thấy ghost.
+        Vector2 touchPos = posDragTouch.Value.screenPosition;
+        touchPos.y += Screen.height * TOUCH_SCREEN_Y_OFFSET_RATIO;
+        Ray ray = Camera.main.ScreenPointToRay(touchPos);
+        var plane = new Plane(Vector3.up, Vector3.zero);
+        return plane.Raycast(ray, out float dist) ? ray.GetPoint(dist) : Vector3.negativeInfinity;
+#else
+        Vector3 screenPos = Touch.activeTouches.Count > 0
+            ? (Vector3)Touch.activeTouches[0].screenPosition
+            : (Vector3)Mouse.current.position.ReadValue();
         Ray ray = Camera.main.ScreenPointToRay(screenPos);
         return Physics.Raycast(ray, out RaycastHit hit) ? hit.point : Vector3.negativeInfinity;
+#endif
     }
 
     // delta = fingerWorld - cellCenter (Y=0)
@@ -201,16 +287,31 @@ public class TDSlotHolderMainView : MonoBehaviour
             return delta.z > 0f ? 0 : 2;
     }
 
+    // Tìm touch đang lock với drag session hiện tại dựa trên m_DragFingerId.
+    // Nếu chưa lock (= -1) thì trả về activeTouches[0] như fallback.
+    // Trả về null nếu không tìm thấy touch nào phù hợp.
+#if UNITY_ANDROID && !UNITY_EDITOR
+    private Touch? FindDragTouch()
+    {
+        if (m_DragFingerId < 0)
+            return Touch.activeTouches.Count > 0 ? Touch.activeTouches[0] : (Touch?)null;
+        foreach (var t in Touch.activeTouches)
+            if (t.touchId == m_DragFingerId) return t;
+        return null;
+    }
+#endif
+
     // Mobile dùng RaycastAll — đáng tin hơn IsPointerOverGameObject(fingerId) trên Android
     private static readonly List<RaycastResult> s_RaycastResults = new List<RaycastResult>();
     private bool IsPointerOverUI()
     {
         if (EventSystem.current == null) return false;
 #if UNITY_ANDROID && !UNITY_EDITOR
-        if (Input.touchCount > 0)
+        var uiDragTouch = FindDragTouch();
+        if (uiDragTouch.HasValue)
         {
             var eventData = new PointerEventData(EventSystem.current)
-                { position = Input.GetTouch(0).position };
+                { position = uiDragTouch.Value.screenPosition };
             s_RaycastResults.Clear();
             EventSystem.current.RaycastAll(eventData, s_RaycastResults);
             return s_RaycastResults.Count > 0;
@@ -269,6 +370,7 @@ public class TDSlotHolderMainView : MonoBehaviour
 
     private void OnDestroy()
     {
+        EnhancedTouchSupport.Disable();
         TDTowerMainControl.api.onGetTowerPrefab -= OnCreateTower;
         TDTowerMainControl.api.onGetCurrentRotationIndex -= OnGetCurrentRotationIndex;
         TDPlaceTowerControl.api.onPlaceTowerSuccess -= OnPlaceTowerSuccess;
@@ -331,12 +433,20 @@ public class TDSlotHolderMainView : MonoBehaviour
     {
         for (int i = 0; i < m_SlotHolders.Count; i++)
         {
-            int index = i; // capture
-            m_SlotHolders[i].towerSelectButton.onClick.AddListener(() =>
+            int index = i;
+            var btn = m_SlotHolders[i].towerSelectButton;
+
+            // PointerDown thay vì onClick: ghost tạo ngay khi finger nhấn,
+            // cho phép drag liền từ slot button vào map mà không cần nhấc tay.
+            var trigger = btn.gameObject.GetComponent<EventTrigger>()
+                       ?? btn.gameObject.AddComponent<EventTrigger>();
+            var entry = new EventTrigger.Entry { eventID = EventTriggerType.PointerDown };
+            entry.callback.AddListener(_ =>
             {
                 m_CurrentSlotIndex = index;
                 TDTowerMainControl.api.OnSelectTowerHolder(index);
             });
+            trigger.triggers.Add(entry);
         }
     }
 
@@ -352,15 +462,24 @@ public class TDSlotHolderMainView : MonoBehaviour
         if (m_CurrentTower != null)
             Destroy(m_CurrentTower);
 
-        m_CurrentTower        = Instantiate(slot.prefab, Vector3.zero, Quaternion.identity);
-        IsPlacingUnit         = true;
+        m_CurrentTower = Instantiate(slot.prefab, new Vector3(0f, -999f, 0f), Quaternion.identity);
+        var unit = m_CurrentTower.GetComponent<IPlacedUnit>() as MonoBehaviour;
+        if (unit != null) unit.enabled = false;
+        foreach (var col in m_CurrentTower.GetComponentsInChildren<Collider>())
+            col.enabled = false;
+        IsPlacingUnit = true;
         m_TowerCreatedThisFrame = true; // bỏ qua input frame này để tránh cancel ngay lập tức
+        TDGameEventBus.UnitPickup();
         m_CurrentTower.transform.localScale = slot.towerType == TowerType.Operator
             ? new Vector3(1.5f, 1.5f, 1.5f)
             : new Vector3(1.0f, 1.0f, 1.0f);
-        m_CurrentRotationIndex = 0;
-        m_IsDirectionSelected = false;
-        m_LastSnappedPos = Vector3.negativeInfinity;
+        m_CurrentRotationIndex  = 0;
+        m_IsDirectionSelected   = false;
+        m_PhaseArmed            = false;
+        m_LastSnappedPos        = Vector3.negativeInfinity;
+        m_DragFingerId          = -1;
+        m_DirectionSelectedTime = -999f;
+        m_CellEnterTime         = -999f;
         m_CurrentTowerType    = slot.towerType;
         m_CurrentOperatorType = slot.operatorType;
         m_LastRangeCell = new Vector2Int(int.MinValue, int.MinValue);
@@ -559,10 +678,12 @@ public class TDSlotHolderMainView : MonoBehaviour
                 ? TDTowerMainControl.api.ActiveSlots[m_CurrentSlotIndex].cost
                 : 0;
             TDGoldControl.api.SpendGold(cost);
+            TDGameEventBus.TowerPlaced();
 
             Destroy(m_CurrentTower);
             m_CurrentTower = null;
             IsPlacingUnit  = false;
+            m_DragFingerId = -1;
             TDPlaceTowerControl.api.onPlaceTowerSuccess?.Invoke(false);
             HideHighlights();
             HideRangeHighlights();
@@ -617,9 +738,12 @@ public class TDSlotHolderMainView : MonoBehaviour
             Destroy(m_CurrentTower);
             m_CurrentTower = null;
         }
-        IsPlacingUnit = false;
-        m_IsDirectionSelected = false;
-        m_LastSnappedPos      = Vector3.negativeInfinity;
+        IsPlacingUnit           = false;
+        m_IsDirectionSelected   = false;
+        m_LastSnappedPos        = Vector3.negativeInfinity;
+        m_DragFingerId          = -1;
+        m_DirectionSelectedTime = -999f;
+        m_CellEnterTime         = -999f;
         HideHighlights();
         HideRangeHighlights();
         HidePlacementPanel();

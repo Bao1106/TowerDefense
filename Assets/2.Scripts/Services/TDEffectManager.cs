@@ -15,6 +15,12 @@ public static class TDEffectManager
     private static readonly List<Vector3> s_GatePositions = new();
     private static Transform s_Root;
 
+    // ── SFX Pool (P1 + P2 fix) ───────────────────────────────────────────────
+    private const int   SFX_POOL_SIZE    = 8;
+    private const float SFX_MIN_INTERVAL = 0.05f;   // per-key rate limit
+    private static AudioSource[]                     s_SfxPool    = new AudioSource[SFX_POOL_SIZE];
+    private static readonly Dictionary<GameEventKey, float> s_LastSfxTime = new();
+
     // ── Init / Cleanup ────────────────────────────────────────────────────────
 
     public static void Init()
@@ -44,9 +50,13 @@ public static class TDEffectManager
         TDGameEventBus.OnWaveStarted      += OnWaveStarted;
         TDGameEventBus.OnVictory          += OnVictory;
         TDGameEventBus.OnGameOver         += OnGameOver;
+        TDGameEventBus.OnUnitPickup       += OnUnitPickup;
+        TDGameEventBus.OnTowerPlaced      += OnTowerPlaced;
 
         if (TDEnemyPathMainControl.api != null)
             TDEnemyPathMainControl.api.onGroupsReady += CacheGatePositions;
+
+        InitSfxPool();
     }
 
     public static void Cleanup()
@@ -59,6 +69,8 @@ public static class TDEffectManager
         TDGameEventBus.OnWaveStarted      -= OnWaveStarted;
         TDGameEventBus.OnVictory          -= OnVictory;
         TDGameEventBus.OnGameOver         -= OnGameOver;
+        TDGameEventBus.OnUnitPickup       -= OnUnitPickup;
+        TDGameEventBus.OnTowerPlaced      -= OnTowerPlaced;
 
         if (TDEnemyPathMainControl.api != null)
             TDEnemyPathMainControl.api.onGroupsReady -= CacheGatePositions;
@@ -67,6 +79,8 @@ public static class TDEffectManager
         s_Pools.Clear();
         s_GatePositions.Clear();
         s_Effects.Clear();
+        s_LastSfxTime.Clear();
+        s_SfxPool = new AudioSource[SFX_POOL_SIZE]; // refs destroyed with s_Root
     }
 
     // ── Event handlers ────────────────────────────────────────────────────────
@@ -109,6 +123,8 @@ public static class TDEffectManager
     private static void OnLifeLost(Vector3 pos) => Play(GameEventKey.LifeLost, pos);
     private static void OnVictory()              => Play(GameEventKey.Victory, GetSceneCenter());
     private static void OnGameOver()             => Play(GameEventKey.GameOver, GetSceneCenter());
+    private static void OnUnitPickup()           => PlaySfxOnly(GameEventKey.UnitPickup);
+    private static void OnTowerPlaced()          => PlaySfxOnly(GameEventKey.TowerPlaced);
 
     private static void OnWaveStarted(int _)
     {
@@ -124,12 +140,19 @@ public static class TDEffectManager
 
         SpawnVFX(def.vfxPrefab,  pos);
         SpawnVFX(def.vfxPrefab2, pos);
-        PlaySFX(def, pos);
+        PlaySFX(key, def);
 
         if (def.cameraShake)
             Camera.main?.transform
                 .DOShakePosition(def.shakeDuration, def.shakeStrength, 10, 90f, false)
                 .SetUpdate(true);
+    }
+
+    // UI events (pickup, place) — chỉ SFX, không VFX, không camera shake
+    private static void PlaySfxOnly(GameEventKey key)
+    {
+        if (!s_Effects.TryGetValue(key, out var def)) return;
+        PlaySFX(key, def);
     }
 
     // Spawn chỉ impactVfxPrefab tại vị trí enemy (không play attack VFX hay SFX lần 2)
@@ -172,12 +195,48 @@ public static class TDEffectManager
         });
     }
 
-    // ── SFX ───────────────────────────────────────────────────────────────────
+    // ── SFX pool ──────────────────────────────────────────────────────────────
 
-    private static void PlaySFX(EffectDef def, Vector3 pos)
+    private static void InitSfxPool()
+    {
+        var root = GetRoot();
+        for (int i = 0; i < SFX_POOL_SIZE; i++)
+        {
+            var go  = new GameObject($"SFX_{i}");
+            go.transform.SetParent(root);
+            var src = go.AddComponent<AudioSource>();
+            src.playOnAwake  = false;
+            src.spatialBlend = 0f; // 2D — camera fixed, spatial không cần thiết
+            s_SfxPool[i]     = src;
+        }
+    }
+
+    /// <summary>
+    /// P1: reuse pooled AudioSource thay vì tạo GO mới mỗi lần.
+    /// P2: per-key cooldown SFX_MIN_INTERVAL để tránh chồng âm.
+    /// </summary>
+    private static void PlaySFX(GameEventKey key, EffectDef def)
     {
         if (def.sfxClip == null) return;
-        AudioSource.PlayClipAtPoint(def.sfxClip, pos, def.sfxVolume);
+
+        // P2 — rate limit per key
+        float now = Time.time;
+        if (s_LastSfxTime.TryGetValue(key, out float last) && now - last < SFX_MIN_INTERVAL)
+            return;
+        s_LastSfxTime[key] = now;
+
+        // P1 — find free AudioSource in pool
+        for (int i = 0; i < SFX_POOL_SIZE; i++)
+        {
+            var src = s_SfxPool[i];
+            if (src == null || src.isPlaying) continue;
+
+            src.clip   = def.sfxClip;
+            src.volume = def.sfxVolume;
+            src.Play();
+            return;
+        }
+        // pool exhausted — skip rather than allocate (P2 side effect: no sound spam)
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

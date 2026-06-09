@@ -1,6 +1,6 @@
 ================================================================================
   TOWER DEFENSE — RECENT SESSIONS CHANGELOG
-  Updated: 2026-06-06
+  Updated: 2026-06-08
 ================================================================================
 
 
@@ -362,10 +362,6 @@
     → TDOffsetRangeDTO (dùng cho highlight) là directional cell offsets
     → 2 hệ thống khác nhau hoàn toàn
 
-  Fix v1 (sai SOLID): thêm Quaternion rotation vào IOperatorBehavior.TryAttack()
-    → PathCellOperatorBehavior nhận rotation nhưng không dùng → ISP violation
-    → new TDOffsetRangeDTO() mỗi frame → allocation trong hot path
-
   Fix v2 (đúng):
 
   [MODIFIED] IOperatorBehavior.cs
@@ -449,30 +445,6 @@
     Slash_stone_once, Hit_light, Hit_dark_magic
     Area_generic_red, Eff_Muzzle
 
-  ── SO asset cần tạo thủ công ─────────────────────────────────────────────────
-
-  Path: Assets/1.Assets/Resources/Configs/Effect Config.asset
-  Menu: Create → Game Configs → Effect Config
-  14 entries, mỗi entry: key + vfxPrefab (từ Prefabs/VFX/) + sfxClip (để trống)
-  Victory: vfxPrefab=Burst_rings, vfxPrefab2=Poof_coins
-  LifeLost: cameraShake=true, shakeStrength=0.3, shakeDuration=0.25
-
-  ── Bug discovered ────────────────────────────────────────────────────────────
-
-  BUG: TDAttackVFX.OnImpact() không fire TDGameEventBus.TowerAttacked
-    → OnTowerAttacked event chưa bao giờ được trigger từ regular tower
-    → TDEffectManager.OnTowerAttacked subscribe nhưng không chạy
-    Fix cần: thêm TDGameEventBus.TowerAttacked(transform.position, OwnerType) vào OnImpact()
-
-  BUG: Ranger/Mage operator không có projectile
-    → TowerZoneOperatorBehavior.TryAttack() direct TakeDamage, không có arrow/orb bay
-    → OperatorAttacked event fire tại OPERATOR pos, không phải TARGET pos
-    Fix plan:
-      + TDOperatorProjectile component (homing, OnImpact → TakeDamage + OperatorAttacked)
-      + EffectDef thêm projectilePrefab field
-      + Lana Studio: Projectiles_wind (Ranger) + Projectiles_magic (Mage)
-      + Copy 2 prefab vào Resources/Prefabs/VFX/
-
 
 ════════════════════════════════════════════════════════════════════════════════
   SESSION 50 — DRAGONBOAR ANIM FIX + SELECTION INDICATOR + RETREAT TRANSITION  [✅ DONE]
@@ -497,77 +469,708 @@
     Get Hit → Walk         (exitTime=0.9, duration=0.1)
     Die → (no exit)
   Animation clips giữ nguyên (guid không đổi).
-  Parameters còn lại (Basic Attack, Get Hit, Run, Scream) đã xóa.
 
   ── SelectionIndicator scale apply batch ─────────────────────────────────────
 
-  OperatorKnight.prefab SelectionIndicator được cập nhật:
-    localPosition=(0,2,0), localEulerAngles=(90,0,0), localScale=(6,6,1)
-  Script batch apply cho 10 prefabs còn lại — kết quả: 10/10 updated, 0 not found.
+  OperatorKnight.prefab SelectionIndicator: localPosition=(0,2,0), localEulerAngles=(90,0,0),
+  localScale=(6,6,1). Script batch apply cho 10 prefabs còn lại — 10/10 updated.
 
   ── Retreat Panel smooth transition ──────────────────────────────────────────
 
   File: Assets/2.Scripts/View/GamePlay/Tower/TDOperatorSelectionView.cs
 
-  Trước: SetActive(true/false) trực tiếp — không có animation.
+  ShowPanel(): SetActive(true) → localScale=0 + alpha=0 → DOScale OutBack 0.25s
+               JOIN DOFade 0→1 OutCubic 0.16s → OnComplete: interactable=true
+  HidePanel(): interactable=false → DOScale InBack 0.16s JOIN DOFade InCubic 0.12s
+               → OnComplete: SetActive(false)
+  DeselectImmediate(): không animate — dùng khi switch selection A→B tránh flicker.
+  SetUpdate(true): tween chạy khi timeScale=0.
 
-  Sau: DOTween transitions với CanvasGroup + DOScale.
 
-  Fields mới:
-    + CanvasGroup m_PanelCanvasGroup  (auto-add nếu chưa có)
-    + Sequence    m_PanelTween        (single sequence, Kill() trước mỗi transition)
-    + Vector3     m_PanelBaseScale    (cache localScale gốc trong Start() — robust vs any scale)
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 55 — ANDROID MOBILE INPUT SYSTEM OVERHAUL (PHASE 1)          [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
 
-  ShowPanel():
-    SetActive(true) → localScale=Vector3.zero + alpha=0 + interactable=false
-    DOScale: 0 → baseScale (0.25s OutBack) JOIN DOFade: 0→1 (0.16s OutCubic)
-    OnComplete: interactable=true, blocksRaycasts=true
+  Date: 2026-06-08
 
-  HidePanel():
-    interactable=false + blocksRaycasts=false
-    DOScale: baseScale → 0 (0.16s InBack) JOIN DOFade: 1→0 (0.12s InCubic)
-    OnComplete: SetActive(false)
+  Context: Test video SVID_20260608_103614_1 + SVID_20260608_113514_1 reveal
+           3 critical mobile input bugs sau khi migrate sang New Input System.
 
-  DeselectImmediate() [NEW]: dùng khi switch selection (A→B) — không animate hide,
-    tránh flicker. ShowPanel() kế tiếp Kill() tween cũ nếu có.
+  File: Assets/2.Scripts/View/GamePlay/Tower/TDSlotHolderMainView.cs
 
-  SetUpdate(true): tween chạy được khi Time.timeScale=0.
-  m_PanelTween?.Kill(): đảm bảo không bao giờ stacked tweens.
+  BUG-1: Ghost tạo ra ở vị trí 0,0,0 — user phải nhấc tay → tap lại mới drag được.
+    Root cause: onClick fires on PointerUp → finger đã lifted → ghost tạo nhưng không
+                còn touch nào active → drag không hoạt động.
+    Fix: SetupOnSelectSlot() dùng EventTrigger.PointerDown thay vì onClick.
+         Ghost tạo ngay khi finger down → drag tiếp luôn mà không cần nhấc tay.
 
-  ── Result ───────────────────────────────────────────────────────────────────
-    ✅ DragonBoarBoss Walk/Attack/GetHit/Die đều hoạt động đúng
-    ✅ SelectionIndicator scale (6,6,1) đồng nhất 11 operator prefabs
-    ✅ Retreat panel pop-in (OutBack) + pop-out (InBack) — DOTween, unscaled
-    ✅ blocksRaycasts=false trong animation → không click xuyên được
-    ✅ Switch selection không flicker (DeselectImmediate)
-    ✅ 0 compile errors
+  BUG-2: Ghost không follow finger khi ngón tay còn trên slot button.
+    Root cause: Update() gọi IsPointerOverUI() trước UpdateGhostTransform()
+                → khi finger trên UI, exit sớm, ghost đứng yên.
+    Fix: Di chuyển UpdateGhostTransform() + RefreshRangeHighlights() lên TRƯỚC
+         IsPointerOverUI() check. Ghost luôn follow, bất kể UI hay không.
+
+  BUG-3: Cancel bị block khi nhấc tay trên slot button area.
+    Root cause: IsPointerOverUI() return true → HandlePlacementInput() bị skip
+                → TouchPhase.Ended không xử lý → ghost không cancel.
+    Fix: Android: check fingerEnded trước IsPointerOverUI(). Nếu Ended thì
+         vẫn cho HandlePlacementInput() chạy. Cancel/Place luôn được xử lý.
+    Code:
+      bool fingerEnded = dragTouch.HasValue && dragTouch.Value.phase == TouchPhase.Ended;
+      if (!fingerEnded && IsPointerOverUI()) return;
+
+  BUG-4: Ghost hiện DƯỚI ngón tay — bị che khuất, user không thấy.
+    Root cause: Android touch point = bottom-center của fingertip. Camera isometric
+                → finger che toàn bộ ghost.
+    Fix: + const TOUCH_SCREEN_Y_OFFSET_RATIO = 0.10f
+         GetFingerWorldPosition(): touchPos.y += Screen.height * 0.10f trước raycast.
+         Ghost hiện phía trên ngón tay → visible.
+
+  BUG-5: Phase 2 arm trong cùng frame cellChanged → auto-trigger direction ngay.
+    Root cause: m_PhaseArmed = true set ngay cả khi cellChanged = true.
+                Frame sau: ngón tay ra ngoài threshold → Phase 2 trigger tức thì.
+    Fix: Guard: if (!cellChanged && insideThreshold) m_PhaseArmed = true.
+         Phải vào threshold zone ít nhất 1 frame KHÔNG cellChanged mới arm được.
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 56 — ANDROID MOBILE INPUT SYSTEM (PHASE 2) + GOLD RATE       [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-08
+
+  File: Assets/2.Scripts/View/GamePlay/Tower/TDSlotHolderMainView.cs
+
+  BUG-6: Ghost auto-place trong khi user đang drag (finger chưa nhấc).
+    Root cause A (ban đầu nghĩ): multi-touch — ngón tay thứ 2 chạm, activeTouches[0]
+                bị re-order → Ended ngón phụ trigger placement.
+    Root cause B (confirmed sau khi user xác nhận test 1 finger):
+      Android micro-lift: cảm biến capacitive mất tiếp xúc ngắn (~ms) trong lúc drag
+      chậm → TouchPhase.Ended fire → m_IsDirectionSelected=true → placement xảy ra.
+      Sensor lấy lại tín hiệu ngay → TouchPhase.Began → ngón tay "vẫn đang chạm".
+
+    Fix A — Finger ID locking (giữ để handle edge case re-order):
+      + field int m_DragFingerId = -1
+      + helper Touch? FindDragTouch(): tìm touch theo touchId, fallback activeTouches[0]
+      + Update(): capture m_DragFingerId = activeTouches[0].touchId khi = -1
+      + Tất cả touch reads (UpdateGhostTransform, GetFingerWorldPosition,
+        HandlePlacementInput, IsPointerOverUI) dùng FindDragTouch() thay activeTouches[0]
+      + Reset m_DragFingerId = -1 tại OnCreateTower(), CancelPlacement(), OnPlaceTowerSuccess()
+
+    Fix B — Minimum Phase 2 duration (lọc micro-lift):
+      + const MIN_PHASE2_DURATION = 0.20f
+      + field float m_DirectionSelectedTime = -999f
+      + Khi m_IsDirectionSelected set = true lần đầu: ghi m_DirectionSelectedTime = Time.unscaledTime
+      + HandlePlacementInput(): chỉ place nếu Time.unscaledTime - m_DirectionSelectedTime >= 0.20f
+        Nếu Ended < 0.20s sau Phase 2 start → CancelPlacement() thay vì place
+
+  BUG-7: Ghost auto-trigger Phase 2 khi drag qua valid cell (tower zone / path cell).
+    Root cause: Khi drag liên tục qua cell, sequence xảy ra:
+      1. cellChanged → PhaseArmed=false
+      2. Vài frame sau: finger qua center → insideThreshold=true → PhaseArmed=true
+      3. Finger tiếp tục di chuyển → !insideThreshold + cellOk → Phase 2 trigger!
+      Trên path cell: cellOk=false (tower không valid trên path) → không bị.
+      Trên tower zone: cellOk=true → bị. Tương tự operator trên path cell.
+
+    Fix — Minimum cell hold duration:
+      + const MIN_CELL_HOLD_DURATION = 0.35f
+      + field float m_CellEnterTime = -999f
+      + Khi cellChanged: m_CellEnterTime = Time.unscaledTime
+      + Arm condition: if (!cellChanged && insideThreshold
+                           && Time.unscaledTime - m_CellEnterTime >= 0.35f)
+                           m_PhaseArmed = true
+      → Drag qua nhanh (<0.35s trên cell): không arm, Phase 2 không trigger
+      → Dừng ≥0.35s tại center rồi swipe: arm → Phase 2 → direction selection ✅
+
+  CHANGE: CONFIG_GOLD_PASSIVE_RATE 5f → 3f
+    File: Assets/2.Scripts/Model/Config/Constant/TDConstant.cs
+    Gold passive income tăng từ +1 mỗi 5 giây lên +1 mỗi 3 giây.
 
 
 ================================================================================
-  TODO — DEVELOPMENT PRIORITY                              [updated 2026-06-06]
+  PROJECT REVIEW — 2026-06-08
 ================================================================================
 
-  ⬜ [P1] Tạo Effect Config.asset tại Resources/Configs/ — assign 14 EffectDef entries
-          OperatorAttacked_Ranger: vfxPrefab=Burst_sharp, impactVfxPrefab=Hit_wind
-          OperatorAttacked_Mage:   vfxPrefab=Flash_dubble_circle, impactVfxPrefab=Hit_magic
-          TowerAttacked: impactVfxPrefab=Hit_light (hoặc Slash_stone_once)
-          Victory: vfxPrefab=Burst_rings, vfxPrefab2=Poof_coins
-          LifeLost: cameraShake=true, shakeStrength=0.3, shakeDuration=0.25
-  ⬜ [P2] Audio system (ít nhất SFX attack + coin)
+  Đánh giá sau khi review 104 file .cs, cross-checked với actual code.
+
+  ── Architecture ─────────────────────────────────────────────────────────────
+
+  [TỐTT] MVC separation rõ ràng: Control/View/Model đúng layer.
+  [TỐT] Event bus pattern (TDGameEventBus) — VFX/Audio hoàn toàn decoupled.
+  [TỐT] Flyweight pattern cho operator/bullet data — không alloc OperatorData mỗi frame.
+  [TỐT] Strategy pattern: IGateAssignmentStrategy, IOperatorBehavior — đúng chỗ.
+  [TỐT] Object pooling: enemy + projectile — không GC spike khi spawn.
+  [TỐT] TDOffsetRangeDTO cache trong OnInit() (S54) — hot path sạch.
+
+  [NỢ] 20+ class dùng static .api singleton — khó test, hidden dependencies.
+       Không phải bug nhưng là design debt nếu scale lên.
+  [NỢ] TDEnemyPathMainControl.cs quá lớn (366 lines, 8 responsibilities).
+       Nên tách: WaveSpawner, PoolManager, PathGenerator riêng.
+  [NỢ] Hai event system song song: TDGameEventBus (static events) + Action<T> delegates.
+       Nên chọn 1 pattern duy nhất, hiện tại inconsistent.
+
+  ── Real Bugs (confirmed bằng code) ─────────────────────────────────────────
+
+  [HIGH] TDTowerWeaponView.cs:102 — m_PosSpawnBullet truyền vào AttackTargets()
+         không có null guard. Nếu prefab thiếu child "BulletSpawn" → NullRef crash.
+         Fix: if (m_PosSpawnBullet == null) return; trong Init() hoặc Update().
+
+  [HIGH] TDGridMainModel.cs:105 — CellToWorld(cell) = m_Grid[cell.x, cell.y]
+         không có bounds check. WorldToCell() clamps, nhưng cell từ
+         TDOffsetRangeDTO.GetCellsInRange() có thể ra ngoài grid ở edge cases.
+         Fix: IsInBounds() guard trước khi access, trả Vector3.zero nếu out of bounds.
+
+  [MED] TDOperatorRegistry.cs:114 — GetBlockedEnemies() trả new List<> mỗi lần gọi.
+        Called từ PathCellOperatorBehavior.TryAttack() mỗi frame khi có enemy.
+        Fix: Trả IReadOnlyList<TDEnemyView> trực tiếp (caller không modify).
+        Nếu cần snapshot: chỉ tạo khi list thực sự thay đổi.
+
+  [MED] TDTowerWeaponView.cs:125 — Sort() với lambda (a,b) => ... allocate delegate
+        mỗi SCAN_INTERVAL (0.2s). Với 5+ towers = 25+ allocs/giây.
+        Fix: Cache static Comparison<TDEnemyView> hoặc implement IComparer.
+
+  [LOW] TDAttackVFX.cs:77 — AOE: new HashSet<Vector2Int>(cells) + new List<>(enemies)
+        mỗi lần AOE impact. Acceptable nếu AOE ít nhưng nên pool về sau.
+
+  ── False positives từ review (đã verify là OK) ─────────────────────────────
+
+  TDSpeedControl.cs:25 — toggle logic đúng: IsFast ? SPEED_NORMAL : SPEED_FAST ✅
+  TDAttackVFX.cs — dùng Time.deltaTime: pause-aware vì timeScale=0 khi pause ✅
+  Observer.cs — file không tồn tại trong project ✅
+
+  ── Mobile Input (sau S55+S56) ───────────────────────────────────────────────
+
+  [TỐT] EnhancedTouch + FindDragTouch() — track đúng ngón tay, immune micro-lift.
+  [TỐT] MIN_CELL_HOLD_DURATION = 0.35s — Phase 2 không trigger khi drag nhanh.
+  [TỐT] Finger Y offset 10% — ghost visible trên ngón tay.
+  [TỐT] Ended luôn được xử lý dù trên UI — cancel không bị block.
+  [TODO] TOUCH_SCREEN_Y_OFFSET_RATIO (0.10f) cần tune theo thiết bị thực tế.
+
+  ── Gameplay State ────────────────────────────────────────────────────────────
+
+  8 operators (5 class types: Knight/Defender/Striker/Ranger/Mage)
+  4 enemies (Normal/Fast/Tank/Boss)
+  5 towers
+  2 stages (DEMO-1 City, DEMO-2 Desert)
+  Core loop: hoàn chỉnh ✅ | VFX: wired, cần Effect Config.asset | Audio: 0%
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 58 — PORTFOLIO P0: FRAME RATE CAP + AUDIO MIX TUNE             [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-08
+
+  [MODIFIED] Assets/2.Scripts/View/LoadFirst/TDLoadFirst.cs
+    + Application.targetFrameRate = 60   — tránh unlimited FPS drain battery/heat mobile
+    + Screen.sleepTimeout = SleepTimeout.NeverSleep — màn hình không tắt khi demo
+
+  [MODIFIED] Assets/1.Assets/Resources/Configs/Effect Config.asset — sfxVolume tune:
+    BGM baseline = 0.45. SFX mix theo tần suất + importance:
+    TowerAttacked:              0.55  (nhiều nhất → thấp nhất, tránh muddy)
+    OperatorAttacked_* (×5):    0.60  (thường xuyên, background layer)
+    EnemyDied_Normal:           0.70
+    EnemyDied_Fast:             0.65
+    EnemyDied_Tank:             0.75  (hiếm hơn → punch hơn)
+    WaveStarted:                0.70  (signal quan trọng)
+    EnemyDied_Boss:             0.85  (highlight moment, to nhất)
+
+
+================================================================================
+  TODO — DEVELOPMENT PRIORITY                              [updated 2026-06-08]
+================================================================================
+
+  ── ✅ DONE ───────────────────────────────────────────────────────────────────
+
+  ✅ [P1-BUG] TDTowerWeaponView null guard m_PosSpawnBullet          (S57)
+  ✅ [P1-BUG] TDGridMainModel CellToWorld() bounds check             (S57)
+  ✅ [P1]     Effect Config.asset — 11 entries wired + sfxVolume mix (S57/S58)
+  ✅ [P0]     Application.targetFrameRate = 60 + NeverSleep          (S58)
+  ✅ [P2]     Audio system: SFX pool + BGM streaming + TDBGMManager  (S57)
+
+  ── P1 — Portfolio critical ───────────────────────────────────────────────────
+
+  ⬜ [P1] Main Menu screen — game không có entry point, vào thẳng gameplay
+          Cần: tên game + Play button + background đơn giản
+  ⬜ [P1] Dead code cleanup: xóa 10 files không dùng
+          ServiceLocator.cs, Injector.cs, Provider.cs, Observer.cs,
+          Singleton.cs, BootsTrapper.cs, Launcher.cs, ServicesManager.cs,
+          MockServices.cs, TDWebService.cs
+
+  ── P2 ───────────────────────────────────────────────────────────────────────
+
+  ⬜ [P2] Stage Select UI screen — hiện Next/Retry skip qua đây
+  ⬜ [P2] GetBlockedEnemies() — trả IReadOnlyList thay vì new List() mỗi frame
+  ⬜ [P2] TDTowerWeaponView ScanForTargets() — cache Sort Comparison, bỏ lambda alloc
+  ⬜ [P2] 4 SFX chưa có event: sfx_gold_gained / sfx_tower_placed /
+          sfx_victory / sfx_insufficient_gold → thêm GameEventKey + wire
+  ⬜ [P2] Tune TOUCH_SCREEN_Y_OFFSET_RATIO (0.10f) trên thiết bị thực
+
+  ── P3 ───────────────────────────────────────────────────────────────────────
+
+  ⬜ [P3] Loading transition screen (scene load đột ngột)
+  ⬜ [P3] Settings menu: volume sliders (master/BGM/SFX)
+  ✅ [P3] ToonOutlineVolume → đã assign trong DTGamePlay.unity  (confirmed S58)
+  ⬜ [P3] async void StartWaveLoop() → đổi sang async Task + exception handler
+  ⬜ [P3] sfx_gold_gained / sfx_tower_placed kích hoạt từ GoldControl + PlaceTower
+  ⬜ [P3] Enemy: Armored + Flying (khi đó mới cần DamageType)
+  ⬜ [P3] Operator: Medic (heal support)
+
+  ── P4 ───────────────────────────────────────────────────────────────────────
+
+  ⬜ [P4] Tiny variant operators (KnightTiny/DefenderTiny/StrikerTiny)
+  ⬜ [P4] TDEnemyPathMainControl.cs tách WaveSpawner + PoolManager riêng (SRP)
+  ⬜ [P4] Consolidate event system: chọn TDGameEventBus hoặc Action<T>
+  ⬜ [P4] GoldControl.Tick() tách khỏi HUDView.Update() (SRP)
+  ⬜ [P4] IsPlacingUnit reset on scene load
+  ⬜ [P4] A* openSet.OrderBy() → PriorityQueue O(log n)
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 57 — AUDIO SYSTEM: SFX + BGM FULL IMPLEMENTATION               [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-08
+
+  ── SFX: CelerisLab clips copy + Effect Config wire ──────────────────────────
+
+  Source: Assets/1.Assets/UnityStore Resources/CelerisLab/CompleteUISFX/ (505 clips)
+  Dest:   Assets/1.Assets/Resources/Audio/SFX/ (15 clips copy với tên gameplay)
+
+  Mapping:
+    sfx_enemy_died_normal.wav   ← item_acquired_01.wav
+    sfx_enemy_died_fast.wav     ← item_acquired_02.wav
+    sfx_enemy_died_tank.wav     ← item_acquired_long_01.wav
+    sfx_enemy_died_boss.wav     ← achievement_unlocked_01.wav
+    sfx_operator_attack_melee_01/02/03.wav ← metallic_button_01/02/03.wav
+    sfx_operator_attack_ranger.wav  ← wooden_button_01.wav
+    sfx_operator_attack_mage.wav    ← magic_button_01.wav
+    sfx_tower_attack.wav            ← heavy_mechanical_button_01.wav
+    sfx_wave_started.wav            ← dramatic_button_01.wav
+    sfx_gold_gained.wav             ← currency_gained.wav
+    sfx_tower_placed.wav            ← purchase_success_01.wav
+    sfx_victory.wav                 ← mission_success_01.wav
+    sfx_insufficient_gold.wav       ← insufficient_currency_01.wav
+
+  [MODIFIED] Assets/1.Assets/Resources/Configs/Effect Config.asset
+    11/11 entries wired: sfxClip + sfxVolume = 1.0 (sẽ tune xuống khi có BGM)
+    Keys: EnemyDied_Normal/Fast/Tank/Boss + OperatorAttacked_Knight/Defender/
+          Striker/Ranger/Mage + TowerAttacked + WaveStarted
+
+  Note: 4 clips còn lại (sfx_gold_gained, sfx_tower_placed, sfx_victory,
+        sfx_insufficient_gold) sẵn trong SFX/ — dành cho future GameEventKey entries.
+
+  ── BGM: 2 Arknights OST tracks + import optimization ────────────────────────
+
+  Files: Assets/1.Assets/Resources/Audio/
+    [Arknights OST] sjoyasorrow.mp3  (259.7s)
+    [Arknights OST] street.mp3       (263.4s)
+
+  Import optimization (cả 2 track, cả Default + Android platform):
+    LoadType:          DecompressOnLoad → Streaming  ← CRITICAL (91MB → ~256KB RAM)
+    CompressionFormat: Vorbis (giữ nguyên)
+    Quality:           1.0 → 0.7  (giảm disk ~30%, nghe không phân biệt được)
+    SampleRateSetting: PreserveSampleRate → OptimizeSampleRate
+
+  ── TDBGMManager.cs (NEW) ────────────────────────────────────────────────────
+
+  File: Assets/2.Scripts/Services/TDBGMManager.cs
+  Pattern: static class — consistent với TDEffectManager.
+
+  Init() / Cleanup():
+    Subscribe: TDGameEventBus.OnGameplayStarted + OnVictory + OnGameOver
+    Cleanup(): unsubscribe + StopImmediate() + Destroy [BGM] GameObject
+
+  Play(clip, volume):
+    EnsureSource() → tạo GameObject("[BGM]") DontDestroyOnLoad + AudioSource lần đầu
+    Kill fade tween nếu đang chạy
+    source.volume = 0 → Play() → DOFade(targetVolume, 1s).SetUpdate(true)
+
+  Stop(fadeDuration = 1.5s):
+    DOFade(0, 1.5s) → OnComplete: source.Stop()
+
+  OnGameplayStarted():
+    Resources.Load<TDStageRepository>("Configs/Stage Repository")
+    → GetStage(SelectedStageId) → Play(stage.bgmClip, stage.bgmVolume)
+
+  ── TDStageConfig.cs ─────────────────────────────────────────────────────────
+
+  [MODIFIED] Assets/2.Scripts/Model/Config/TDStageConfig.cs
+    + [Header("Audio")] public AudioClip bgmClip
+    + [Range(0,1)] public float bgmVolume = 0.45f
+  → Mỗi stage SO assign BGM clip riêng trong Inspector.
+
+  ── TDGameEventBus.cs ────────────────────────────────────────────────────────
+
+  [MODIFIED] Assets/2.Scripts/Services/TDGameEventBus.cs
+    + static event Action OnGameplayStarted
+    + static void GameplayStarted()
+
+  ── TDGameStateControl.cs ────────────────────────────────────────────────────
+
+  [MODIFIED] Assets/2.Scripts/Control/Gameplay/TDGameStateControl.cs
+    Initialize(): + TDGameEventBus.GameplayStarted() ở cuối
+    → Trigger BGM ngay khi wave system khởi tạo xong (grid ready + paths ready).
+
+  ── TDControl.cs ─────────────────────────────────────────────────────────────
+
+  [MODIFIED] Assets/2.Scripts/Control/TDControl.cs
+    InitOtherControl(): + TDBGMManager.Init() sau TDEffectManager.Init()
+
+  ── TDEffectManager.cs — P1 + P2 Performance Fix ─────────────────────────────
+
+  [MODIFIED] Assets/2.Scripts/Services/TDEffectManager.cs
+
+  P1 — SFX AudioSource Pool (thay AudioSource.PlayClipAtPoint):
+    Vấn đề: PlayClipAtPoint tạo new GameObject + AudioSource mỗi lần gọi
+            → 5-10 alloc/giây khi tower đang bắn → GC spike → micro-stutter mobile.
+    Fix:
+      + const SFX_POOL_SIZE = 8
+      + static AudioSource[] s_SfxPool
+      + InitSfxPool(): tạo 8 AudioSource dưới [Effect Pool] root khi Init()
+                       spatialBlend=0f (2D — camera fixed, spatial không cần)
+      + PlaySFX(): scan s_SfxPool tìm !isPlaying → reuse; pool exhausted → skip
+      GC alloc per SFX = 0
+
+  P2 — Per-key SFX rate limit:
+    Vấn đề: 5 tower bắn cùng frame → 5 AudioSource play clip giống nhau
+            → volume tổng 5×0.7=3.5 → clip/distort → tiếng rè trên speaker mobile.
+    Fix:
+      + const SFX_MIN_INTERVAL = 0.05f
+      + static Dictionary<GameEventKey, float> s_LastSfxTime
+      + PlaySFX(): if (now - lastTime < 0.05f) return
+      Cùng key tối đa 1 lần / 0.05s; các key khác nhau độc lập.
+
+  Signature change: PlaySFX(EffectDef def, Vector3 pos) → PlaySFX(GameEventKey key, EffectDef def)
+  Play() updated để truyền key xuống PlaySFX.
+  Cleanup() thêm: s_LastSfxTime.Clear() + s_SfxPool = new AudioSource[SFX_POOL_SIZE]
+
+  ── Bugs fixed (từ Project Review S56) ───────────────────────────────────────
+
+  [P1-BUG FIXED] TDTowerWeaponView.cs — null guard m_PosSpawnBullet:
+    + m_PosSpawnBullet = transform.Find(...) → nếu null → LogError + return
+    + Update(): if (m_Targets.Count > 0 && m_PosSpawnBullet != null) mới fire
+
+  [P1-BUG FIXED] TDGridMainModel.cs — CellToWorld() bounds check:
+    + if (!IsInBounds(cell)) return Vector3.zero
+
+
+================================================================================
+  TODO — DEVELOPMENT PRIORITY                              [updated 2026-06-08]
+================================================================================
+
+  ── P1 — Cần làm ngay ────────────────────────────────────────────────────────
+
+  ✅ [P1] Assign bgmClip vào Stage_1-1.asset + Stage_1-2.asset + Stage_2-1.asset
+          trong Inspector (AudioClip field mới trên TDStageConfig)
+  ⬜ [P1] Tune sfxVolume các entry trong Effect Config.asset sau khi có BGM
+          (hiện = 1.0, nên hạ xuống 0.7–0.8 khi mix cùng BGM 0.45)
+
+  ── P2 ───────────────────────────────────────────────────────────────────────
+
+  ⬜ [P2] GetBlockedEnemies() — trả IReadOnlyList thay vì new List() mỗi frame
+  ⬜ [P2] TDTowerWeaponView ScanForTargets() — cache Sort Comparison, bỏ lambda alloc
   ⬜ [P2] Stage Select UI screen
+  ⬜ [P2] Tune TOUCH_SCREEN_Y_OFFSET_RATIO (0.10f) trên thiết bị thực
+
+  ── P3 ───────────────────────────────────────────────────────────────────────
+
   ⬜ [P3] Enemy: Armored (DEF cao, Arts damage bypass) + Flying (bypass obstacle)
           → Khi đó mới cần DamageType (Physical/Arts) vào OperatorData
   ⬜ [P3] Operator: Medic (heal support) — Regeneration_health.prefab sẵn sàng
   ⬜ [P3] ToonOutlineVolume → đặt vào DTGamePlay.unity
+  ⬜ [P3] sfx_gold_gained / sfx_tower_placed / sfx_victory / sfx_insufficient_gold
+          → thêm GameEventKey entries tương ứng + wire vào Effect Config
+
+  ── P4 ───────────────────────────────────────────────────────────────────────
+
   ⬜ [P4] Tiny variant operators (KnightTiny/DefenderTiny/StrikerTiny) → thêm vào config
-  ⬜ [P4] Fine-tune weapon rotation 5 custom operators trong Inspector
   ⬜ [P4] Dead code cleanup: ServiceLocator, Injector, TDWebService,
           IPathFinderDTO, CONFIG_MAZE_EXTRA_PASSAGE_RATE
-  ⬜ [P4] Enemy state machine enum (4 booleans → enum)
+  ⬜ [P4] TDEnemyPathMainControl.cs tách WaveSpawner + PoolManager riêng (SRP)
+  ⬜ [P4] Consolidate event system: chọn TDGameEventBus hoặc Action<T>, bỏ song song
   ⬜ [P4] GoldControl.Tick() tách khỏi HUDView.Update() (SRP)
   ⬜ [P4] IsPlacingUnit reset on scene load
 
-  Content state: 8 operators (5 class types) | 4 enemies | 5 towers | 2 stages (City + Desert)
+
+================================================================================
+  PROJECT ANALYSIS — 2026-06-08  (Portfolio/Demo readiness)
+================================================================================
+
+  Đánh giá toàn diện sau S58. Góc nhìn Unity dev 4 năm kinh nghiệm.
+
+  ── ĐIỂM SỐ TỔNG ────────────────────────────────────────────────────────────
+
+  Architecture       7.0 / 10
+  Code Quality       6.5 / 10
+  Performance        6.0 / 10
+  Mobile Readiness   5.5 / 10  (sau S58: +0.5 → 6.0 nhờ frame rate cap)
+  Gameplay Systems   8.0 / 10
+  Audio              6.5 / 10  (sau S57/S58: từ 0 lên 6.5)
+  UI/UX              5.0 / 10
+  ─────────────────────────────
+  Trung bình         6.5 / 10
+
+  ── ARCHITECTURE — 7/10 ──────────────────────────────────────────────────────
+
+  [TỐT]
+  - MVC separation: Control/View/Model không cross-layer
+  - TDGameEventBus: VFX/Audio/UI decoupled hoàn toàn khỏi gameplay
+  - Strategy Pattern: IGateAssignmentStrategy (4 impl), IOperatorBehavior (2 impl)
+  - Flyweight: TDFlyweightEnemyDataSettings — data không alloc mỗi frame
+  - Object pooling: Unity ObjectPool<T> cho enemy, Queue<GO> cho VFX, AudioSource[] cho SFX
+  - Data-driven SO: Stage/Tower/Enemy/Operator/Effect config — không hardcode
+  - CancellationToken trong async wave loop — ít dev làm đúng điều này
+  - IPathFinder inject qua constructor (DIP) — TDMazePathGenerator không biết A* impl
+
+  [NỢ KỸ THUẬT]
+  - 20+ static .api singleton — hidden deps, không testable (acceptable indie scale)
+  - 2 event system song song: TDGameEventBus static events VÀ Action<T> delegates
+  - TDEnemyPathMainControl 367 lines: pool + wave planning + path building + spawning (SRP)
+  - TDGameplayMainControl chỉ 10 lines, không làm gì thực sự
+
+  ── CODE QUALITY — 6.5/10 ────────────────────────────────────────────────────
+
+  [TỐT]
+  - async/await + CancellationToken đúng — PauseAwareDelay tự implement
+  - C# expression bodies, pattern matching, switch expression
+  - Null guards đầy đủ sau fixes gần đây
+  - Iterative CarveFrom (Stack) tránh StackOverflow maze gen
+
+  [YẾU]
+  - async void StartWaveLoop() — exception bị nuốt, không await được → nên async Task
+  - Dead code ~10-15% codebase: ServiceLocator, Injector, Provider, Observer, Singleton,
+    BootsTrapper, Launcher, ServicesManager, MockServices, TDWebService — DI framework bỏ dở
+  - ComputeValidTowerCells: new Vector2Int() trong double nested loop
+  - Debug.Log <color=cyan/green> tags trong production — strip trước release
+  - TDConstant.cs 145 lines — nên split theo domain
+
+  ── PERFORMANCE — 6/10 ───────────────────────────────────────────────────────
+
+  [XONG]
+  - Enemy ObjectPool<T>, VFX Queue pool, SFX AudioSource[8] pool         (S57)
+  - SFX per-key rate limit 0.05s — không spam AudioSource               (S57)
+  - BGM Streaming (91MB → 256KB RAM), Vorbis q=0.7                      (S57)
+  - TDOffsetRangeDTO cache trong OnInit()                                (S54)
+  - Flyweight operator/tower/enemy data                                  (S51)
+
+  [CÒN LẠI]
+  - Sort lambda alloc mỗi 0.2s × 5 towers = 25 alloc/s → cache Comparison<T>
+  - GetBlockedEnemies() new List<> mỗi frame khi có enemy → IReadOnlyList
+  - ComputeValidTowerCells: new Vector2Int in double loop
+  - Camera.main repeated lookup trong TDEffectManager (minor)
+  - A* openSet.OrderBy().First() O(n) per iteration → PriorityQueue O(log n)
+
+  ── MOBILE READINESS — 6/10 ──────────────────────────────────────────────────
+
+  [XONG]
+  - targetFrameRate = 60 + NeverSleep                                   (S58)
+  - New Input System + EnhancedTouch + Finger ID locking                (S55/S56)
+  - MIN_CELL_HOLD_DURATION + MIN_PHASE2_DURATION                        (S56)
+  - BGM Streaming, SFX pool                                             (S57)
+
+  [CÒN LẠI]
+  - TOUCH_SCREEN_Y_OFFSET_RATIO (0.10f) cần tune trên thiết bị thực
+  - Không có texture compression audit (ETC2/ASTC cho Android)
+  - Không có memory budget tracking — peak RAM chưa đo
+  - Debug.Log trong production code (nhỏ nhưng có overhead)
+
+  ── ALGORITHMS (summary) ─────────────────────────────────────────────────────
+
+  Recursive Backtracker (iterative Stack) → maze generation O(w×h)
+  A* Manhattan heuristic, 4-dir, List openSet → O(n²) hiện tại
+  Multi-path extraction via interior cell blocking → k paths, k = CONFIG_NUM_PATHS
+  TDOffsetRangeDTO RotateOffset: discrete 2D rotation matrix theo 4 cardinal dirs
+  PathProgress (0→1): enemy ưu tiên theo tiến độ trên path (focus-fire nearest-to-end)
+  DifficultyRatioTable: lookup O(1), Distribute() → Fisher-Yates shuffle wave
+  PauseAwareDelay: poll Time.deltaTime (bị timeScale affect) thay Task.Delay wall-clock
+
+  ── DEAD CODE (nên xóa trước khi push GitHub) ────────────────────────────────
+
+  10 files từ DI framework bỏ dở — compile vào build, confuse reviewer:
+    Assets/2.Scripts/Services/ServiceLocator.cs      — Service Locator pattern
+    Assets/2.Scripts/Services/DependencyInjection/   — Injector.cs, Provider.cs
+    Assets/2.Scripts/Services/Observer.cs            — Reactive Observable<T>
+    Assets/2.Scripts/Services/Utils/Singleton.cs     — MonoBehaviour Singleton base
+    Assets/2.Scripts/Services/BootsTrapper.cs        — SL bootstrap component
+    Assets/2.Scripts/Services/Launcher.cs            — không dùng
+    Assets/2.Scripts/Services/ServicesManager.cs     — không dùng
+    Assets/2.Scripts/Services/MockServices.cs        — không dùng
+    Assets/2.Scripts/Services/TDServices/TDWebService.cs — web API bỏ dở
+
+  ServiceLocator pattern: đúng kỹ thuật (giải quyết hidden dep của static singleton),
+  nhưng không fit với direction pivot sang static .api. Nếu muốn explain trong interview:
+  "Biết pattern, biết trade-off, chọn static vì cost/benefit không hợp lý ở scale này."
+
+  ── CÒN THIẾU CHO PORTFOLIO ──────────────────────────────────────────────────
+
+  CRITICAL (làm ngay):
+  1. Main Menu screen — không có entry point, vào thẳng gameplay
+     → 1 scene: tên game + Play button + background đơn giản
+
+  HIGH (ảnh hưởng experience):
+  2. Stage Select screen — hiện skip qua, 2 stages không thấy được
+  3. 4 SFX chưa fire: sfx_gold_gained / sfx_tower_placed /
+     sfx_victory / sfx_insufficient_gold → thêm GameEventKey + wire từ code
+  4. Dead code cleanup (30 phút, zero risk)
+
+  MEDIUM (polish):
+  5. Loading transition — scene load đột ngột
+  6. Settings: volume sliders (BGM/SFX) — player expectation cơ bản
+  7. async void → async Task cho StartWaveLoop
+
+  LOW (content):
+  8. Thêm stages (DEMO-3, DEMO-4) với difficulty escalation
+  9. Enemy: Armored + Flying (khi đó cần DamageType)
+  10. Operator: Medic (Regeneration_health.prefab đã có)
+
+  ── ĐÁNH GIÁ TỪNG GÓC ───────────────────────────────────────────────────────
+
+  Dev 4 năm sẽ IMPRESSED:
+  - Gameplay core non-trivial: maze gen + A* + multi-gate + Arknights placement
+  - Design patterns đúng chỗ, không overengineered
+  - async/await + CancellationToken đúng
+  - TDGameEventBus decoupling hoàn chỉnh
+  - Object pool ở đúng chỗ (enemy + VFX + SFX)
+  - Audio import settings tối ưu (Streaming BGM)
+
+  Dev 4 năm sẽ FLAG:
+  - async void fire-and-forget risk
+  - Dead code từ DI framework
+  - 2 event systems song song
+  - Không có Main Menu
+  - Sort lambda GC còn
+
+  Kết luận: Solid portfolio project, chưa ship-ready.
+  Core gameplay strength > presentation weakness.
+  Fix P1 (Menu + Dead code) → presentation gap giảm đáng kể.
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 59 — ASSET & DRAW CALL OPTIMIZATION (MOBILE)                  [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-09
+
+  ── Results (Unity Statistics) ───────────────────────────────────────────────
+
+  Batches:          2792 → 887   (-1905, -68%)
+  Saved by batch:      0 → 1079  (Static Batching hoạt động)
+  Shadow casters:    914 → 75    (-839,  -92%)
+  SetPass calls:      78 → 70    (-8)
+  FPS:                49 → 56.7  (+7.7)
+  CPU main:            ? → 18.0ms (bottleneck mới — game logic)
+
+  ── 1. Texture Optimization ──────────────────────────────────────────────────
+
+  CustomOperator textures (5 files — T_Operator*ColorMap.png.meta):
+    maxTextureSize: 2048 → 512 (root)
+    Android block: maxTextureSize: 512, textureFormat: 50 (ASTC_6x6), overridden: 1
+    Files: T_OperatorAce, T_OperatorLayla, T_OperatorTart, T_OperatorGinger, T_OperatorMoon
+
+  GameIcon operator icons (8 files — Operator*.png.meta):
+    maxTextureSize: 2048 → 256 (root)
+    Android block: maxTextureSize: 256, textureFormat: 50, overridden: 1
+    Files: OperatorKnight, OperatorStriker, OperatorDefender, Ace, Ginger, Layla, Moon, Tart
+
+  Third-party textures (17 files):
+    Synty PolygonStarter_01..04, Polygon_Plane_01..04, SimpleSky_01 → root 1024, ASTC_6x6
+    RPGTinyHeroWavePBR: Albedo, Emission, Metallic-Smoothness, AlbedoMaskTint, Mask01 → root 512
+    RPG Monster DUO PBR Polyart: Albedo, Emission, Metallic-Smoothness → root 512
+    FattyPolyTurretFree: Palette256 → root 512 (existing Android block modified)
+
+  ── 2. Audio Optimization ────────────────────────────────────────────────────
+
+  SFX 3D flag (16 files — Resources/Audio/SFX/*.wav.meta):
+    3D: 1 → 3D: 0 trên tất cả SFX clips
+    Lý do: gameplay SFX không cần spatial attenuation
+    Files: sfx_enemy_died_*, sfx_operator_attack_*, sfx_tower_attack, sfx_wave_started,
+           sfx_gold_gained, sfx_tower_placed, sfx_victory, sfx_insufficient_gold, sfx_unit_pickup
+
+  AudioManager.asset:
+    Doppler Factor: 1 → 0 (không có 3D SFX cần Doppler)
+
+  ── 3. Project Settings ──────────────────────────────────────────────────────
+
+  ProjectSettings/ProjectSettings.asset:
+    StripUnusedMeshComponents: 0 → 1 (bỏ UV2, tangent không dùng)
+    AndroidTargetArchitectures: 3 → 2 (ARMv7+ARM64 → ARM64 only)
+    AndroidMinifyRelease: 0 → 1 (R8 code shrinking)
+
+  ProjectSettings/GraphicsSettings.asset:
+    m_LightmapStripping: 0 → 1
+    m_FogStripping: 0 → 1
+
+  ── 4. Prefab Deletion ───────────────────────────────────────────────────────
+
+  Deleted Tiny operator prefabs (không dùng, replaced by CustomOperator):
+    Resources/Prefabs/OperatorKnightTiny.prefab + .meta
+    Resources/Prefabs/OperatorDefenderTiny.prefab + .meta
+    Resources/Prefabs/OperatorStrikerTiny.prefab + .meta
+  KenneyTower prefabs: GIỮ LẠI.
+
+  ── 5. Draw Call Optimization — Static Batching + Shadow ─────────────────────
+
+  Root cause:
+    2792 batches = SM_Gen_Env_Sidewalk_01 (3000+ instances) + Bush/Tree/Grass/Cliff không static
+    914 shadow casters = mọi env object cast shadow → 33% batches là shadow pass
+    m_StaticEditorFlags: 0 trên toàn scene → Static Batching = 0
+
+  Direct SM_Gen prefabs (40 files — m_CastShadows: 1→0, m_StaticEditorFlags: 0→4):
+    Building/SM_Gen_Bld_Beam_01, Pipe_Straight_01, Pipe_Cap_01
+    Base/SM_Bld_Base_Pillar_01
+    Environment/SM_Gen_Env_Ground_Grass_01
+    Environment/SM_Gen_Env_Bush_01..04, Bush_Large_01..04
+    Environment/SM_Gen_Env_Fern_01..03, Flowers_01..08
+    Environment/SM_Gen_Env_Grass_01..07, Grass_Tall_01, Ground_Dirt_04
+    Environment/SM_Gen_Env_Rock_01..02, Tree_01..02
+    Environment/SM_Gen_Env_Background_Mountain_01..03
+
+  Nested PrefabInstance SM_Gen prefabs (15 files — inject m_Modifications[] entries):
+    Building/SM_Gen_Bld_Background_01..11
+    Environment/SM_Gen_Env_Sidewalk_01
+    Environment/SM_Gen_Env_Dirt_Cliff_01..03
+    Technique: thêm propertyPath m_CastShadows (value:0) + m_StaticEditorFlags (value:4)
+               vào m_Modifications array trước m_RemovedComponents:
+    fileIDs consistent toàn bộ nested prefabs:
+      MeshRenderer = -7511558181221131132
+      root GO      = 919132149155446097
+
+  Scene file (Assets/3.Scenes/DTGamePlay.unity):
+    292x m_StaticEditorFlags: 0 → 4 (explicit scene overrides)
+    7x m_CastShadows: 1 → 0 (7 Plane quad objects)
+
+  Tile prefabs (4 files — CastShadows only, runtime-spawned nên không static batch được):
+    PathTile.prefab, ObstacleTile.prefab, PathTile_Desert.prefab, ObstacleTile_Desert.prefab
+    m_CastShadows: 1 → 0
+
+  ── 6. Key Technical Notes ───────────────────────────────────────────────────
+
+  Nested PrefabInstance: SM_Gen_Bld_Background + SM_Gen_Env_Sidewalk wrap source FBX
+    → không có m_StaticEditorFlags trực tiếp → phải inject qua m_Modifications[]
+  Scene override wins: scene explicit values > prefab → phải patch cả hai
+  Bones + BatchingStatic: Transform-only bones nhận StaticEditorFlags: 4 → an toàn,
+    engine skip khi batch vì không có MeshRenderer
+  Static Batch limit: chỉ batch cùng material; runtime-spawned objects không batchable
+  Shadow casters 75 còn lại: tower + enemy runtime → intentional (giữ shadow)
+
+  ── 7. Pending (chưa làm) ────────────────────────────────────────────────────
+
+  [ ] Additional Lights: URP-Balanced.asset → m_AdditionalLightsRenderingMode: 0 (~-200 batch)
+  [ ] GPU Instancing: bật trên tile materials (PathTile/ObstacleTile runtime-spawned)
+  [ ] HP Bar World Space Canvas → Screen Space (~-40 DC)
+  [ ] Shadow Distance: m_ShadowDistance: 50 → 15
+  [ ] Upgrade 10 Built-in materials (fileID:46/200) → URP shaders
+  [ ] managedStrippingLevel → Medium (cần link.xml cho Odin Inspector trước)
+  [ ] AndroidTargetSdkVersion → 34
+  [ ] Dead code cleanup: ServiceLocator, Injector, Provider, Observer, Singleton,
+      BootsTrapper, Launcher, ServicesManager, MockServices, TDWebService
+  [ ] Effect Config.asset: assign UnitPickup + TowerPlaced entries
+  [ ] 4 SFX wiring: sfx_gold_gained, sfx_victory, sfx_insufficient_gold, sfx_unit_pickup
+  [ ] VFX prefabs: cross-check 16 trong Resources vs Effect Config assignments
+  [ ] KenneyAmmo/Bullet0x prefabs: check SO reference trước khi delete
+  [ ] Main Menu scene (P1)
+  [ ] Stage Select UI screen (P2)
 
 
 ================================================================================
