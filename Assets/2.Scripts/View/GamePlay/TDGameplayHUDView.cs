@@ -3,7 +3,6 @@ using System.Collections;
 using DG.Tweening;
 using TMPro;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 /// <summary>
@@ -270,13 +269,12 @@ public class TDGameplayHUDView : MonoBehaviour
     // ── Button callbacks ──────────────────────────────────────────────────────
     private void OnBackClicked()
     {
-        PlaySceneFadeOut(() => SceneManager.LoadScene(TDConstant.SCENE_LOAD_FIRST));
+        PlaySceneFadeOut(TDSceneController.api.GoToMainMenu);
     }
 
     private void OnRetryClicked()
     {
-        // Stage ID is preserved (TDGameStateControl uses ??= when re-initialized)
-        PlaySceneFadeOut(() => SceneManager.LoadScene(TDConstant.SCENE_LOAD_FIRST));
+        PlaySceneFadeOut(TDSceneController.api.RetryGameplay);
     }
 
     private void OnNextClicked()
@@ -284,7 +282,7 @@ public class TDGameplayHUDView : MonoBehaviour
         string        currentId = TDGameStateControl.api.SelectedStageId;
         TDStageConfig next      = m_StageRepository?.GetNextStage(currentId);
         if (next != null) TDGameStateControl.api.SelectStage(next.StageId);
-        PlaySceneFadeOut(() => SceneManager.LoadScene(TDConstant.SCENE_LOAD_FIRST));
+        PlaySceneFadeOut(TDSceneController.api.RetryGameplay);
     }
 
     private void OnSettingClicked()

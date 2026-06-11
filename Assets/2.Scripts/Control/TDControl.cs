@@ -17,11 +17,14 @@ public class TDControl
     public void Init()
     {
         Debug.Log("Init mini app main control");
+        TDAudioService.Init();
         InitOtherControl();
 
-        LoadGameplayScene();
+        LoadMainMenuScene();
         //AppBridge.Instance.CallOnMiniAPIReady(OnApiMiniAppReady);
     }
+
+    public void ReinitControls() => InitOtherControl();
 
     private void InitOtherControl()
     {
@@ -51,7 +54,7 @@ public class TDControl
         TDTowerRetreatControl.api    = new TDTowerRetreatControl();
 
         TDEffectManager.Init();
-        TDBGMManager.Init();
+        TDGameplayAudioContext.Init();
     }
     
     // private void OnApiMiniAppReady(APIUnity apiUnity)
@@ -95,8 +98,8 @@ public class TDControl
         _                                       => new RoundRobinStrategy(),
     };
 
-    private void LoadGameplayScene()
+    private void LoadMainMenuScene()
     {
-        SceneManager.LoadSceneAsync(TDConstant.SCENE_GAMEPLAY, LoadSceneMode.Additive);
+        SceneManager.LoadSceneAsync(TDConstant.SCENE_MAIN_MENU, LoadSceneMode.Additive);
     }
 }

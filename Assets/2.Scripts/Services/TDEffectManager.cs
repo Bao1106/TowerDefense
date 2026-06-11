@@ -3,23 +3,14 @@ using DG.Tweening;
 using TDEnums;
 using UnityEngine;
 
-/// <summary>
-/// Static effect system — no MonoBehaviour on the scene.
-/// Loads the TDEffectConfig ScriptableObject from Resources and maps GameEventKey → EffectDef.
-/// Init() is called from TDControl.InitOtherControl() after TDEnemyPathMainControl has finished setup.
-/// </summary>
+/// VFX + camera shake system — SFX delegated to TDAudioService.SFX.
+/// Init() is called from TDControl.InitOtherControl().
 public static class TDEffectManager
 {
-    private static readonly Dictionary<GameEventKey, EffectDef> s_Effects  = new();
+    private static readonly Dictionary<GameEventKey, EffectDef> s_Effects = new();
     private static readonly Dictionary<GameObject, Queue<GameObject>> s_Pools = new();
     private static readonly List<Vector3> s_GatePositions = new();
     private static Transform s_Root;
-
-    // ── SFX Pool (P1 + P2 fix) ───────────────────────────────────────────────
-    private const int   SFX_POOL_SIZE    = 8;
-    private const float SFX_MIN_INTERVAL = 0.05f;   // per-key rate limit
-    private static AudioSource[]                     s_SfxPool    = new AudioSource[SFX_POOL_SIZE];
-    private static readonly Dictionary<GameEventKey, float> s_LastSfxTime = new();
 
     // ── Init / Cleanup ────────────────────────────────────────────────────────
 
@@ -55,8 +46,6 @@ public static class TDEffectManager
 
         if (TDEnemyPathMainControl.api != null)
             TDEnemyPathMainControl.api.onGroupsReady += CacheGatePositions;
-
-        InitSfxPool();
     }
 
     public static void Cleanup()
@@ -79,8 +68,6 @@ public static class TDEffectManager
         s_Pools.Clear();
         s_GatePositions.Clear();
         s_Effects.Clear();
-        s_LastSfxTime.Clear();
-        s_SfxPool = new AudioSource[SFX_POOL_SIZE]; // refs destroyed with s_Root
     }
 
     // ── Event handlers ────────────────────────────────────────────────────────
@@ -140,7 +127,7 @@ public static class TDEffectManager
 
         SpawnVFX(def.vfxPrefab,  pos);
         SpawnVFX(def.vfxPrefab2, pos);
-        PlaySFX(key, def);
+        TDAudioService.SFX.Play(def.sfxClip, def.sfxVolume);
 
         if (def.cameraShake)
             Camera.main?.transform
@@ -148,14 +135,12 @@ public static class TDEffectManager
                 .SetUpdate(true);
     }
 
-    // UI events (pickup, place) — SFX only, no VFX, no camera shake
     private static void PlaySfxOnly(GameEventKey key)
     {
         if (!s_Effects.TryGetValue(key, out var def)) return;
-        PlaySFX(key, def);
+        TDAudioService.SFX.Play(def.sfxClip, def.sfxVolume);
     }
 
-    // Spawns only the impactVfxPrefab at the enemy's position (does not replay the attack VFX or SFX)
     private static void PlayImpact(GameEventKey key, Vector3 impactPos)
     {
         if (!s_Effects.TryGetValue(key, out var def)) return;
@@ -193,50 +178,6 @@ public static class TDEffectManager
             instance.SetActive(false);
             if (s_Pools.TryGetValue(prefab, out var p)) p.Enqueue(instance);
         });
-    }
-
-    // ── SFX pool ──────────────────────────────────────────────────────────────
-
-    private static void InitSfxPool()
-    {
-        var root = GetRoot();
-        for (int i = 0; i < SFX_POOL_SIZE; i++)
-        {
-            var go  = new GameObject($"SFX_{i}");
-            go.transform.SetParent(root);
-            var src = go.AddComponent<AudioSource>();
-            src.playOnAwake  = false;
-            src.spatialBlend = 0f; // 2D audio — camera is fixed, spatial blending is not needed
-            s_SfxPool[i]     = src;
-        }
-    }
-
-    /// <summary>
-    /// P1: reuses a pooled AudioSource instead of creating a new GameObject each time.
-    /// P2: applies a per-key cooldown of SFX_MIN_INTERVAL to prevent sound stacking.
-    /// </summary>
-    private static void PlaySFX(GameEventKey key, EffectDef def)
-    {
-        if (def.sfxClip == null) return;
-
-        // P2 — rate limit per key
-        float now = Time.time;
-        if (s_LastSfxTime.TryGetValue(key, out float last) && now - last < SFX_MIN_INTERVAL)
-            return;
-        s_LastSfxTime[key] = now;
-
-        // P1 — find free AudioSource in pool
-        for (int i = 0; i < SFX_POOL_SIZE; i++)
-        {
-            var src = s_SfxPool[i];
-            if (src == null || src.isPlaying) continue;
-
-            src.clip   = def.sfxClip;
-            src.volume = def.sfxVolume;
-            src.Play();
-            return;
-        }
-        // pool exhausted — skip rather than allocate (P2 side effect: no sound spam)
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

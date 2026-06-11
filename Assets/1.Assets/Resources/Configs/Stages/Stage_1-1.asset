@@ -13,12 +13,15 @@ MonoBehaviour:
   m_Name: Stage_1-1
   m_EditorClassIdentifier: 
   StageId: DEMO-1
-  DisplayName: DEMO-1
+  DisplayName: City Siege
   LevelIndex: 0
   VisualConfig: {fileID: 11400000, guid: 3536dc5a21801de4da3c845bf8eb1fcd, type: 2}
   StartGateCount: 1
   EndGateCount: 2
   Layout: 2
   GateMode: 1
+  stageDescription: Urban combat zone. Defend the city gates across 5 waves.
+  previewSprite: {fileID: 21300000, guid: 8233aea8408fd2a4ead729ec44edc440, type: 3}
+  isLocked: 0
   bgmClip: {fileID: 8300000, guid: 4912b8edcc580984f87712da5b34fbe8, type: 3}
   bgmVolume: 0.45

@@ -18,6 +18,8 @@ public class TDStageRepository : ScriptableObject
         return stage;
     }
 
+    public IReadOnlyList<TDStageConfig> GetAll() => m_Stages;
+
     public TDStageConfig GetNextStage(string currentStageId)
     {
         if (m_Stages == null) return null;

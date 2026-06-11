@@ -184,7 +184,7 @@ public class TDEnemyPathMainControl
 
     // ── Wave Loop ────────────────────────────────────────────────────────────
 
-    public async void StartWaveLoop(List<TDPathGroup> groups,
+    public async Task StartWaveLoop(List<TDPathGroup> groups,
         List<List<EnemyType>> wavePlans, LevelConfig config, CancellationToken ct)
     {
         if (groups == null || groups.Count == 0 || groups.All(g => g.Corridors.Count == 0))

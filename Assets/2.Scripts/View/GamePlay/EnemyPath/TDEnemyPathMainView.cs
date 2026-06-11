@@ -154,7 +154,8 @@ public class TDEnemyPathMainView : MonoBehaviour
         TDGameStateControl.api?.Initialize(actualCount);
 
         m_WaveCts = new CancellationTokenSource();
-        TDEnemyPathMainControl.api.StartWaveLoop(groups, wavePlans, config, m_WaveCts.Token);
+        TDEnemyPathMainControl.api.StartWaveLoop(groups, wavePlans, config, m_WaveCts.Token)
+            .Forget("StartWaveLoop");
     }
 
     private void OnValidTowerCellsReady(List<Vector3> validPositions)

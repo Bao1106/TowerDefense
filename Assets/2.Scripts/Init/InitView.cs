@@ -1,4 +1,3 @@
-using System;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -6,36 +5,22 @@ public class InitView : MonoBehaviour
 {
     private void Start()
     {
-        Init();
-    }
-
-    private void Init()
-    {
         Application.runInBackground = true;
         Application.targetFrameRate = 60;
-        
-        SceneManager.sceneLoaded += SceneManagerOnSceneLoaded;
-        
+
+        SceneManager.sceneLoaded += OnSceneLoaded;
         SceneManager.LoadSceneAsync(TDConstant.SCENE_LOAD_FIRST, LoadSceneMode.Additive);
-        SceneManager.UnloadSceneAsync(TDConstant.SCENE_INIT);
-    }
-    
-    private void SceneManagerOnSceneLoaded(Scene scene, LoadSceneMode mode)
-    {
-        if (scene.name == TDConstant.SCENE_GAMEPLAY)
-        {
-            DisableCamera();
-        }
     }
 
-    private void DisableCamera()
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
-        if (Camera.main != null)
-            Camera.main.enabled = false;
+        if (scene.name != TDConstant.SCENE_LOAD_FIRST) return;
+        SceneManager.SetActiveScene(scene);
+        SceneManager.UnloadSceneAsync(TDConstant.SCENE_INIT);
     }
 
     private void OnDestroy()
     {
-        SceneManager.sceneLoaded -= SceneManagerOnSceneLoaded;
+        SceneManager.sceneLoaded -= OnSceneLoaded;
     }
 }

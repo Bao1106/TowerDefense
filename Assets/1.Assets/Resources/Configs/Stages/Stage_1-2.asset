@@ -13,12 +13,16 @@ MonoBehaviour:
   m_Name: Stage_1-2
   m_EditorClassIdentifier: 
   StageId: DEMO-2
-  DisplayName: DEMO-2
+  DisplayName: Desert Storm
   LevelIndex: 1
   VisualConfig: {fileID: 11400000, guid: e8f462d5f57b6d74ba71033054f5b897, type: 2}
   StartGateCount: 1
   EndGateCount: 1
   Layout: 0
   GateMode: 0
+  stageDescription: Scorching desert warfare. Repel 6 waves of relentless assault
+    across open sand.
+  previewSprite: {fileID: 21300000, guid: e363f5524fbf23e47849b1c482b36027, type: 3}
+  isLocked: 0
   bgmClip: {fileID: 8300000, guid: 81eaa8fc334a3354dbe776176eb4a17e, type: 3}
   bgmVolume: 0.45

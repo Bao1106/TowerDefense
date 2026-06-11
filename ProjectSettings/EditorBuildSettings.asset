@@ -14,4 +14,7 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/3.Scenes/DTGamePlay.unity
     guid: 99c9720ab356a0642a771bea13969a05
+  - enabled: 1
+    path: Assets/3.Scenes/DTMainMenu.unity
+    guid: fc4cdacd52e3ded4fb4f7f1832725952
   m_configObjects: {}

@@ -1173,6 +1173,384 @@
   [ ] Stage Select UI screen (P2)
 
 
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 60 — CODEBASE COMMENT TRANSLATION (Vietnamese → English)        [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-09
+
+  Scanned all 110 .cs files in Assets/2.Scripts.
+  73 files contained Vietnamese comments.
+  69 files modified (57 by agent + 9 manual fixes + 3 overlap).
+  0 Vietnamese comment lines remaining after final pass.
+
+  ── Approach ─────────────────────────────────────────────────────────────────
+
+  Step 1 — Agent (worktree isolated):
+    Read and translated 57 files automatically.
+    Worktree: .claude/worktrees/agent-ac6f7fb803424a194
+    Changes copied back to main project via file diff + cp.
+
+  Step 2 — Manual fix (9 files agent missed):
+    TDMazePathGenerator.cs       lines 121-122  (tránh, trên, lớn, tại, giữa)
+    EffectDefDrawer.cs            lines 6-8, 25  (cho, Khi, Chỉ hiện, luôn hiện)
+    TDTowerBehaviorModel.cs       line 31        (Gọi khi, để, từ)
+    TDTowerSlotInfo.cs            lines 5-6, 12  (Dữ liệu, dùng chung, chỉ meaningful)
+    TDEnemyPathMainView.cs        line 165       (tách từ)
+    TDEnemyPathView.cs            line 35        (duy nhất, clear trước)
+    TDSlotHolderItemView.cs       line 31        (nếu chưa gán, giữ nguyên)
+    TDSlotHolderMainView.cs       line 724       (hoặc)
+    TDTowerFactoryView.cs         lines 4-6      (Subscriber của, giờ, giữ lại)
+
+  ── False positives (grep matched but NOT Vietnamese) ────────────────────────
+
+  The following Unicode characters triggered the grep pattern but are intentional
+  and were left unchanged:
+    ﻿  (U+FEFF) — UTF-8 BOM at line 1 of ~18 files (file encoding marker)
+    →  ←  ↑     — direction arrows in rotation/axis comments
+    ×  –  ≥  ≤  — math operators in range/threshold comments
+    ♥  ⭐        — emoji in string literals and star-rating comments
+    °            — degree symbol in rotation angle comments
+
+  ── Sample translations ──────────────────────────────────────────────────────
+
+  "// tránh StackOverflow trên grid lớn"
+    → "// avoids StackOverflow on large grids"
+
+  "// Room cells tại even (x,y); corridor cells (walls giữa 2 rooms) tại odd coords"
+    → "// Room cells are at even (x,y) coordinates; corridor cells (walls between two rooms) are at odd coordinates"
+
+  "/// Dữ liệu một slot trong thanh chọn unit — dùng chung cho Regular tower lẫn Operator"
+    → "/// Data for a single slot in the unit selection bar — shared by both Regular towers and Operators"
+
+  "// Gọi khi scene reload để force rebuild map từ SO mới"
+    → "// Called on scene reload to force a full rebuild of the data map from the updated ScriptableObject"
+
+  "// LMB (desktop) hoặc TouchPhase.Ended (mobile)"
+    → "// LMB (desktop) or TouchPhase.Ended (mobile)"
+
+  "/// File này giữ lại để không break scene reference; không còn logic thực"
+    → "/// This file is retained to avoid breaking scene references; it no longer contains active logic"
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 61 — MAIN MENU: SCENE ARCHITECTURE + UI + ANIMATIONS            [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-10
+
+  ── Scene Architecture ───────────────────────────────────────────────────────
+
+  [NEW] Assets/2.Scripts/Control/TDSceneController.cs
+    Persistent MonoBehaviour trong DTLoadFirst. Owns MenuCamera + FadeOverlay.
+    GoToMainMenu() / RetryGameplay() / GoToGameplay() — async Task với fade.
+    OnSceneLoaded/Unloaded toggle MenuCamera.enabled (AudioListener luôn active).
+
+  [NEW] Assets/3.Scenes/DTMainMenu.unity
+    Scene mới, buildIndex=3. Canvas (Screen Space - Camera) + EventSystem.
+    TDMainMenuView assign worldCamera = TDSceneController.api.MenuCamera tại Awake().
+
+  [MODIFIED] Assets/2.Scripts/Control/TDControl.cs
+    LoadGameplayScene() → LoadMainMenuScene() — load SCENE_MAIN_MENU thay SCENE_GAMEPLAY.
+    + ReinitControls() → gọi InitOtherControl().
+
+  [MODIFIED] Assets/2.Scripts/Model/Config/Constant/TDConstant.cs
+    + SCENE_MAIN_MENU = "DTMainMenu"
+
+  [MODIFIED] Assets/2.Scripts/Init/InitView.cs
+    Bỏ DisableCamera() + SCENE_GAMEPLAY switch. OnSceneLoaded chỉ xử lý DTLoadFirst.
+
+  [MODIFIED] Assets/2.Scripts/View/GamePlay/TDGameplayHUDView.cs
+    OnBackClicked / OnRetryClicked / OnNextClicked → delegate sang TDSceneController.api.
+
+  ── Main Menu UI — Golden + Black Palette ────────────────────────────────────
+
+  Arknights-inspired palette:
+    Camera bg        #0A0A0B (deep black, clearFlags=SolidColor)
+    Panel bg         #111113
+    Button bg        #191812 (warm dark)
+    Button border    #4A3F28 (dark gold)
+    Button text      #D4B870 (mid gold)
+    Icon tint        #C49830 (amber gold)
+    Title gradient   #F2E4C4 (top) → #C49830 (bottom) — TMP VertexGradient
+    Tagline          #7A6B4A (warm muted gold)
+    Divider          #3A3220
+    Version/BGM      #3A3220 / #574B2E
+
+  Hierarchy sau rename:
+    Canvas/Container/Middle/RightPanel/
+      GroupPlay    → BtnPlay    (Border + TxtLabel + Icon)
+      GroupSettings → BtnSettings
+      GroupExit    → BtnExit
+    RotationY = 20° trên GroupPlay/GroupSettings/GroupExit.
+
+  Icons (PictoIconPack01, tint #C49830):
+    GroupPlay     → Icon_PictoIcon_Control_Play
+    GroupSettings → Icon_PictoIcon_Setting_1
+    GroupExit     → Icon_PictoIcon_Exit
+
+  ── TDMainMenuView.cs — Intro Animation ──────────────────────────────────────
+
+  [MODIFIED] Assets/2.Scripts/View/MainMenu/TDMainMenuView.cs
+    Serialized fields: m_BgGroup, m_LeftPanel, m_RightPanel, m_BottomGroup.
+    PlayIntro() via DOTween.Sequence (Start + Canvas.ForceUpdateCanvases):
+      t=0.0s  BG fade in            (0.35s)
+      t=0.1s  LeftPanel  slide ←280px + fade  (0.45s OutQuart)
+      t=0.22s RightPanel slide +220px + fade  (0.45s OutQuart)
+      t=0.30s buttons stagger fade  (0.08s delay each)
+      t=0.6s  Bottom bar fade in    (0.30s)
+    Fix: animate panel cả khối, không dùng position trên LayoutGroup children.
+
+  ── TDButtonFeedback.cs — Press Feedback ─────────────────────────────────────
+
+  [NEW] Assets/2.Scripts/View/MainMenu/TDButtonFeedback.cs
+    IPointerDownHandler / IPointerUpHandler / IPointerExitHandler.
+    OnPointerDown: m_ScaleTarget (GroupXxx) DOScale → 0.94 (0.1s OutQuad)
+                   m_Border DOColor → #C49830 (0.08s)
+    Release:       DOScale → 1.0 (0.18s OutQuart)
+                   DOColor → #4A3F28 (0.2s)
+    Assigned lên BtnPlay/BtnSettings/BtnExit — m_ScaleTarget = GroupPlay/etc.
+
+  ── Scene Transition Fade ─────────────────────────────────────────────────────
+
+  [MODIFIED] Assets/2.Scripts/Control/TDSceneController.cs
+    + [SerializeField] CanvasGroup fadeGroup
+    FadeToBlack() 0.25s → scene ops → FadeFromBlack() 0.4s (InOutSine)
+    TaskCompletionSource-based async: caller await trực tiếp.
+    blocksRaycasts=true suốt transition, false khi alpha=0.
+
+  DTLoadFirst — FadeOverlay GameObject (tạo qua script + saved):
+    Canvas sortingOrder=999, Screen Space Overlay
+    BlackPanel Image stretch full screen, color black
+    CanvasGroup alpha=0, blocksRaycasts=false — assigned vào fadeGroup
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 62 — AUDIO ARCHITECTURE MIGRATION: SOLID 3-LAYER SYSTEM        [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-11
+
+  Motivation: TDBGMManager vi phạm SRP (event wiring + audio playing cùng 1 class).
+  SFX pool trong TDEffectManager bị destroy mỗi lần ReinitControls() → alloc lại.
+  Main Menu không có BGM. Mute state không persist qua app restart.
+
+  ── Architecture: 3 Layer ────────────────────────────────────────────────────
+
+  Layer 1 — Audio Layer (pure, scene-agnostic, DontDestroyOnLoad):
+    [NEW] TDAudioPrefs.cs     — PlayerPrefs-backed BGM/SFX mute state.
+                                static events OnBgmMuteChanged / OnSfxMuteChanged.
+    [NEW] TDBGMPlayer.cs      — AudioSource "[BGM]" DontDestroyOnLoad, DOFade in/out.
+                                Play() FADE_IN=1s, Stop() FADE_OUT=1.5s, ApplyMute() 0.3s.
+    [NEW] TDSFXPlayer.cs      — Pool 8 AudioSources "[SFX Pool]" DontDestroyOnLoad.
+                                Rate limiter: cùng clip tối đa 1 lần / 0.05s.
+    [NEW] TDAudioService.cs   — Facade. BGM + SFX properties. Init() once in TDControl.
+                                TDAudioPrefs.OnBgmMuteChanged += BGMPlayer.ApplyMute wired here.
+
+  Layer 2 — Context Layer (scene event wiring):
+    [NEW] TDGameplayAudioContext.cs  — Subscribe TDGameEventBus OnGameplayStarted/Victory/
+                                       GameOver → drive gameplay BGM.
+    [NEW] TDMainMenuAudioContext.cs  — Activate(clip): TDAudioService.BGM.PlayIfDifferent().
+                                       Called by TDSceneController on DTMainMenu load.
+
+  Layer 3 — VFX Layer:
+    [MODIFIED] TDEffectManager.cs   — Removed SFX pool (~60 lines). Play() và PlaySfxOnly()
+                                       now call TDAudioService.SFX.Play() directly.
+
+  ── UI Layer ─────────────────────────────────────────────────────────────────
+
+  [NEW] TDBGMToggleView.cs (Assets/2.Scripts/View/MainMenu/)
+    MonoBehaviour on BGMToggle. Serialized: m_IconNormal (Icon), m_IconMute (IconMute).
+    Awake(): subscribe OnBgmMuteChanged + ApplyState(IsBgmMuted, animate:false).
+    OnClick(): TDAudioPrefs.ToggleBgm().
+    ApplyState(muted): SetActive swap + DOPunchScale(0.25f, 0.2s) khi animate=true.
+
+  [MODIFIED] TDButtonFeedback.cs
+    + [SerializeField] AudioClip m_ClickSfx
+    OnPointerDown(): TDAudioService.SFX.Play(m_ClickSfx)
+    Fixed double SetEase bug: .SetEase(OutBack).SetEase(OutQuart) → chỉ OutQuart.
+
+  ── Flow mới ─────────────────────────────────────────────────────────────────
+
+  App start  → TDAudioService.Init() once → BGMPlayer + SFXPlayer (DontDestroyOnLoad)
+  MainMenu   → TDSceneController.OnSceneLoaded → TDMainMenuAudioContext.Activate(clip)
+                → BGMPlayer.PlayIfDifferent → DOFade in 1s
+  BGMToggle  → TDAudioPrefs.ToggleBgm() → PlayerPrefs save
+                → OnBgmMuteChanged fires both BGMPlayer.ApplyMute + TDBGMToggleView.OnMuteChanged
+  BtnClick   → TDButtonFeedback.OnPointerDown → TDAudioService.SFX.Play(button_click_01.wav)
+  Gameplay   → TDGameStateControl.Initialize → GameplayStarted event
+                → TDGameplayAudioContext → BGMPlayer.Play(stage.bgmClip)
+  GameSFX    → TDGameEventBus → TDEffectManager → TDAudioService.SFX.Play(def.sfxClip)
+  End        → OnVictory/OnGameOver → TDGameplayAudioContext → BGMPlayer.Stop (fade 1.5s)
+  BackMenu   → TDSceneController → BGMPlayer.PlayIfDifferent (cùng clip → skip)
+
+  ── Modified files ───────────────────────────────────────────────────────────
+
+  TDControl.cs        — TDAudioService.Init() trước InitOtherControl(); thay TDBGMManager
+                        → TDGameplayAudioContext.Init()
+  TDSceneController.cs — + [SerializeField] AudioClip mainMenuBgm
+                          OnSceneLoaded(DTMainMenu): TDMainMenuAudioContext.Activate(mainMenuBgm)
+
+  ── Scene setup (via MCP) ─────────────────────────────────────────────────────
+
+  DTMainMenu.unity:
+    BGMToggle: TDBGMToggleView component added. m_IconNormal→Icon (64074),
+               m_IconMute→IconMute (64332). Button.onClick → TDBGMToggleView.OnClick.
+    BtnPlay/BtnSettings/BtnExit: TDButtonFeedback.m_ClickSfx = button_click_01.wav (3 buttons).
+
+  DTLoadFirst.unity:
+    TDSceneController.mainMenuBgm = [Arknights OST] sjoyasorrow.mp3
+
+  ── Deleted ───────────────────────────────────────────────────────────────────
+
+  [DELETED] Assets/2.Scripts/Services/TDBGMManager.cs
+    Replaced by TDBGMPlayer (audio) + TDGameplayAudioContext (event wiring).
+
+  ── SOLID mapping ────────────────────────────────────────────────────────────
+
+  SRP: TDBGMPlayer chỉ play/stop/fade. TDGameplayAudioContext chỉ wire events.
+       TDBGMToggleView chỉ handle UI. TDAudioPrefs chỉ persist state.
+  OCP: thêm scene mới chỉ cần thêm AudioContext, không đụng Audio Layer.
+  DIP: TDEffectManager và Context layer gọi qua TDAudioService facade, không biết impl.
+
+  ── Pending test ─────────────────────────────────────────────────────────────
+
+  Cần test trong Play mode:
+  [ ] Main Menu BGM phát khi load (sjoyasorrow.mp3, fade in 1s)
+  [ ] BGMToggle mute/unmute + icon swap + punch scale
+  [ ] Button click SFX (BtnPlay/BtnSettings/BtnExit)
+  [ ] Gameplay BGM switch khi gameplay start (stage.bgmClip)
+  [ ] BGM stop khi Victory/GameOver (fade out 1.5s)
+  [ ] Mute state persist qua app restart (PlayerPrefs)
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 63 — STAGE SELECT UI: FULL IMPLEMENTATION + MAINMENU FLOW        [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-11
+
+  ── TDStageSelectView.cs (complete rewrite) ──────────────────────────────────
+
+  Scene hierarchy mapped:
+    StageSelect (CanvasGroup show/hide)
+      Middle/LeftPanel: ThemeBackground (Image), TxtStageNum, TxtStageTitle,
+                        TxtStageName, TxtDescription
+      Middle/RightPanel/StageScroll/Viewport/Content  ← m_CardContainer
+      Bottom: BtnPlay (+ CanvasGroup), BtnBack
+
+  Key design:
+  - Show(): m_MainMenuView.Hide() → BuildCards() → SelectCard(first) → DOFade in
+  - Hide(): DOFade out → m_MainMenuView.Show()   (BtnBack)
+  - BuildCards(): TDResourceObject.GetResource<GameObject>(PREFAB_STAGE_CARD)
+                  → Instantiate into m_CardContainer
+  - ThemeBackground crossfade: DOFade 0 → change sprite → DOFade 1
+  - SetBtnPlayState(enabled): CanvasGroup.DOFade (0.35↔1.0) + DOPunchScale on enable
+  - Awake(): alpha=0, interactable=false, blocksRaycasts=false (starts hidden)
+
+  ── TDStageCardView.cs (complete rewrite) ────────────────────────────────────
+
+  Prefab structure (StagePrefab):
+    Root: ProceduralImage (gold border) + Button + TDStageCardView
+      Outline        — dark fill (ProceduralImage)
+      TxtStageNum    — "01"
+      StageInfo/TxtStageTitle  — DisplayName
+      StageInfo/TxtStageName   — StageId
+      Selected       — badge (SetActive on select)
+      IconLock       — lock icon
+
+  SetSelected(bool, animate): root Graphic DOFade alpha (1.0 selected / 0.15 unselected)
+  m_RootGraphic = GetComponent<Graphic>() — handles ProceduralImage (not Image)
+
+  ── TDConstant.cs ────────────────────────────────────────────────────────────
+
+  + PREFAB_STAGE_CARD = "StagePrefab"
+
+  ── Stage Assets ─────────────────────────────────────────────────────────────
+
+  Stage_1-1.asset: DisplayName → "City Siege"
+                   stageDescription: "Urban combat zone. Defend the city gates across 5 waves."
+  Stage_1-2.asset: DisplayName → "Desert Storm"
+                   stageDescription: "Scorching desert warfare. Repel 6 waves of relentless assault across open sand."
+
+  ── TDMainMenuView.cs ────────────────────────────────────────────────────────
+
+  + CanvasGroup m_CanvasGroup (auto-fetched in Awake)
+  + Show(): DOFade 1f + blocksRaycasts=true + interactable=true
+  + Hide(): DOFade 0f + blocksRaycasts=false + interactable=false
+
+  PlayIntro() bug fix:
+    Root cause: Canvas layout not computed before Start() → anchoredPosition wrong
+                → panels offset from wrong origin → broken layout on first frame
+    Fix:
+      Awake(): set all alphas=0 (no frame-0 flash)
+      Start(): LayoutRebuilder.ForceRebuildLayoutImmediate(transform as RectTransform)
+               BEFORE PlayIntro() reads anchoredPosition
+
+  ── MainMenu ↔ StageSelect flow wired (DTMainMenu.unity) ─────────────────────
+
+  TDStageSelectView.m_MainMenuView → MainMenu (TDMainMenuView)
+  MainMenu BtnPlay onClick → TDStageSelectView.Show()
+  StageSelect BtnBack onClick → TDStageSelectView.Hide() → MainMenu.Show()
+
+  ── StagePrefab setup ────────────────────────────────────────────────────────
+
+  Button + TDStageCardView added to StagePrefab root via MCP.
+  All fields wired: m_TxtNumber, m_TxtTitle, m_TxtSubInfo, m_SelectedGroup, m_LockIcon, m_Button.
+  StagePrefab already registered in TDResourceObject at index [11] (no change needed).
+
+  ── DTMainMenu.unity scene wiring ────────────────────────────────────────────
+
+  StageSelect GO:
+    + CanvasGroup added (for TDStageSelectView show/hide)
+    + TDStageSelectView added, all SerializedFields wired via MCP script:
+      m_TxtStageNum, m_TxtStageTitle, m_TxtStageName, m_TxtDescription,
+      m_ThemeBackground, m_CardContainer (Content), m_BtnPlay, m_BtnPlayGroup,
+      m_BtnBack, m_StageRepository, m_MainMenuView
+
+  MainMenu GO:
+    + CanvasGroup added (for TDMainMenuView.Show/Hide)
+    + TDMainMenuView added (was not in scene previously)
+    Fields wired: m_Canvas, m_BgGroup (Background), m_LeftPanel, m_RightPanel, m_BottomGroup (Bottom)
+
+
+================================================================================
+  TODO — DEVELOPMENT PRIORITY                              [updated 2026-06-11]
+================================================================================
+
+  ── P1 ───────────────────────────────────────────────────────────────────────
+
+  ⬜ [P1] Dead code cleanup: ServiceLocator, Injector, Provider, Observer, Singleton,
+          BootsTrapper, Launcher, ServicesManager, MockServices, TDWebService
+
+  ── P2 ───────────────────────────────────────────────────────────────────────
+
+  ✅ [P2] Stage Select UI screen                                           (S63)
+  ⬜ [P2] GetBlockedEnemies() — trả IReadOnlyList thay vì new List() mỗi frame
+  ⬜ [P2] TDTowerWeaponView ScanForTargets() — cache Sort Comparison, bỏ lambda alloc
+  ⬜ [P2] Tune TOUCH_SCREEN_Y_OFFSET_RATIO (0.10f) trên thiết bị thực
+
+  ── P3 ───────────────────────────────────────────────────────────────────────
+
+  ⬜ [P3] SFX wiring: sfx_gold_gained, sfx_victory, sfx_insufficient_gold, sfx_unit_pickup
+          → thêm GameEventKey entries + wire vào Effect Config
+  ⬜ [P3] SFXToggle UI — TDAudioPrefs.ToggleSfx() đã có, cần thêm TDSFXToggleView + button
+  ⬜ [P3] Settings menu: volume sliders (BGM/SFX) thay mute toggle
+  ⬜ [P3] Button idle animation — subtle pulse on PLAY button (loop DOTween)
+  ⬜ [P3] Effect Config.asset: assign UnitPickup + TowerPlaced entries
+  ⬜ [P3] Additional Lights OFF, GPU Instancing tiles, HP Bar Screen Space, Shadow Distance 50→15
+  ⬜ [P3] async void StartWaveLoop() → async Task + exception handler
+
+  ── P4 ───────────────────────────────────────────────────────────────────────
+
+  ⬜ [P4] Tiny variant operators (KnightTiny/DefenderTiny/StrikerTiny) → thêm vào config
+  ⬜ [P4] TDEnemyPathMainControl.cs tách WaveSpawner + PoolManager riêng (SRP)
+  ⬜ [P4] Consolidate event system: chọn TDGameEventBus hoặc Action<T>
+  ⬜ [P4] GoldControl.Tick() tách khỏi HUDView.Update() (SRP)
+  ⬜ [P4] IsPlacingUnit reset on scene load
+  ⬜ [P4] A* openSet.OrderBy() → PriorityQueue O(log n)
+
+
 ================================================================================
   END OF CHANGELOG
 ================================================================================

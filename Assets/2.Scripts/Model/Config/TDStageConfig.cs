@@ -15,6 +15,13 @@ public class TDStageConfig : ScriptableObject
     public MapLayout                  Layout         = MapLayout.LeftToRight;
     public GateAssignmentMode         GateMode       = GateAssignmentMode.RoundRobin;
 
+    [Header("Display")]
+    public string stageDescription;
+    public Sprite previewSprite;
+
+    [Header("State")]
+    public bool isLocked;
+
     [Header("Audio")]
     public AudioClip bgmClip;
     [Range(0f, 1f)] public float bgmVolume = 0.45f;

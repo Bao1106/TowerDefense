@@ -6,6 +6,7 @@ public static class TDConstant
 
     public const string SCENE_INIT = "Init";
     public const string SCENE_LOAD_FIRST = "DTLoadFirst";
+    public const string SCENE_MAIN_MENU = "DTMainMenu";
     public const string SCENE_GAMEPLAY = "DTGamePlay";
 
     #endregion
@@ -139,6 +140,7 @@ public static class TDConstant
     public const string PREFAB_PATH = "PathTile";
     public const string PREFAB_SLOT_HOLDER = "SlotHolder";
     public const string PREFAB_RANGE_HIGH_LIGHT = "RangeHighlight";
+    public const string PREFAB_STAGE_CARD = "StagePrefab";
 
   #endregion
 }

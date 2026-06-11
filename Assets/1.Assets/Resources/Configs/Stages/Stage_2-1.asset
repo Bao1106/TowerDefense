@@ -13,5 +13,15 @@ MonoBehaviour:
   m_Name: Stage_2-1
   m_EditorClassIdentifier: 
   StageId: 2-1
-  ChapterId: 2
+  DisplayName: 
   LevelIndex: 0
+  VisualConfig: {fileID: 0}
+  StartGateCount: 1
+  EndGateCount: 1
+  Layout: 0
+  GateMode: 0
+  stageDescription: 
+  previewSprite: {fileID: 0}
+  isLocked: 1
+  bgmClip: {fileID: 0}
+  bgmVolume: 0.45

@@ -3,9 +3,9 @@ using UnityEditor;
 using UnityEngine;
 
 /// <summary>
-/// Custom PropertyDrawer cho EffectDef.
-/// Khi onlySfx = true: ẩn toàn bộ VFX fields + Camera Shake fields.
-/// Chỉ hiện: key | onlySfx | sfxClip | sfxVolume.
+/// Custom PropertyDrawer for EffectDef.
+/// When onlySfx = true: hides all VFX fields and Camera Shake fields.
+/// Only shows: key | onlySfx | sfxClip | sfxVolume.
 /// </summary>
 [CustomPropertyDrawer(typeof(EffectDef))]
 public class EffectDefDrawer : PropertyDrawer
@@ -22,7 +22,7 @@ public class EffectDefDrawer : PropertyDrawer
         bool onlySfx    = prop.FindPropertyRelative("onlySfx").boolValue;
         bool shakeOn    = !onlySfx && prop.FindPropertyRelative("cameraShake").boolValue;
 
-        // luôn hiện: foldout + key + onlySfx + [SFX label] + sfxClip + sfxVolume
+        // always visible: foldout + key + onlySfx + [SFX label] + sfxClip + sfxVolume
         float h = (LineHeight + PADDING) * 6f;
 
         if (!onlySfx)
