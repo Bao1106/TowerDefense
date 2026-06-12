@@ -1215,7 +1215,7 @@ File: Assets/3.Scenes/DTGamePlay.unity
   ─────────────────────────────────────────────────────────────────────────────
 
   ╔══════════════════════════════════════════════════════════════════════════╗
-  ║  PHASE 9 — Polish & Performance                         [TODO]            ║
+  ║  PHASE 9 — Polish & Performance              [PHẦN LỚN DONE S64]            ║
   ╚══════════════════════════════════════════════════════════════════════════╝
     Polish: particles, VFX, sounds, camera shake on life lost
     Performance: object pooling (tiles, ammo) — enemies DONE (Phase 8.5) ✓
@@ -3731,6 +3731,83 @@ File: Assets/3.Scenes/DTGamePlay.unity
     Trade-off: bộ nhớ cao hơn (duplicates trong heap) ↔ tốc độ tốt hơn (no linear scan)
     Unity parallel: Destroy() cuối frame, DOTween.Kill() mark+cleanup, Application.Quit() deferred
 
+
+════════════════════════════════════════════════════════════════════════════════
+  OPTIMIZATION — CONSOLIDATED REFERENCE                    [updated 2026-06-12]
+════════════════════════════════════════════════════════════════════════════════
+
+  Phần này tổng hợp TOÀN BỘ công việc optimize của project.
+  Chi tiết từng session: xem RECENT_SESSIONS_CHANGELOG.txt.
+
+  ── A. NỀN TẢNG ĐÃ XONG TỪ LÂU (tóm tắt) ────────────────────────────────────
+
+  ✅ Object Pooling (Phase 7-12, s57):
+     - Enemy pool (ReturnToPool thay Destroy)         [Phase 8.5]
+     - Bullet/TDAttackVFX pool per TowerType (lazy)    [Phase 7]
+     - Range highlight tile pool (tower + operator dùng chung) [Phase 12]
+     - VFX pool per prefab trong TDEffectManager (Queue<GO>)
+     - SFX AudioSource pool 8 — thay PlayClipAtPoint (5-10 alloc/s → 0) [s57]
+
+  ✅ Audio import (s58): BGM Streaming + Vorbis
+     LoadType DecompressOnLoad → Streaming = 91MB → ~256KB RAM per track
+
+  ✅ Hot-path alloc fixes (s54):
+     TDOffsetRangeDTO + OperatorTransform cache trong OnInit — không alloc mỗi frame
+
+  ✅ UI refs cache: Result popups 15 fields → cache 1 lần trong Awake
+
+  ✅ TDStageMaterialCache: material cache tập trung per stage, Clear() khi reset
+
+  ⬜ A* MinHeap — PHÂN TÍCH XONG, QUYẾT ĐỊNH KHÔNG LÀM:
+     grid nhỏ ~20x15, A* chạy lúc init (không per-frame) → không cảm nhận được.
+     Solution đã document (MinHeap + HashSet + Lazy Deletion) — xem section trên.
+
+  ── B. BUILD SIZE: 255 MB → 102 MB (Session 64, VERIFIED) ───────────────────
+
+  Bối cảnh: APK gốc 130 MB → sau khi thêm Sidekick/Synty/OST phình lên 255 MB.
+
+  Chẩn đoán (build report): Shaders 169.5 MB (24%), nguyên nhân kép:
+  (1) Android gánh CẢ Vulkan + GLES3 → mỗi shader variant compile x2
+  (2) URP-Balanced bật dư feature (SoftShadows, HDR, AdditionalLights PerPixel)
+
+  ROUND 1 (255 → 116 MB):
+  - Graphics API: chỉ GLES3 (bỏ Vulkan)                ← đòn bẩy lớn nhất
+  - ManagedStrippingLevel: Minimal → Low (IL2CPP)
+  - URP-Balanced: AdditionalLights PerVertex, SoftShadows OFF, HDR OFF
+  - 3 texture Synty Generic_*: ASTC 6x6 + maxSize 2048 (10.7MB → <1MB/file)
+  - BGM sjoyasorrow: Vorbis q0.7 → q0.4
+
+  ROUND 2 (116 → 102 MB):
+  - SidekickCharacters/Resources/Meshes (69 MB) → đổi tên MeshLibrary
+    (thoát force-include; folder tên "Resources" = nhét hết vào build)
+  - Resources/Fonts (8.6 MB) → move ra 1.Assets/Fonts (GUID refs không gãy)
+  - street.mp3 + void.mp3: Vorbis q0.4
+
+  BÀI HỌC RÚT RA (giá trị phỏng vấn):
+  - File .shader vài chục KB có thể thành 50+ MB trong build (variant explosion)
+  - Mỗi graphics API trong list = nhân đôi toàn bộ shader variants
+  - Folder tên "Resources" force-include MỌI THỨ bên trong, kể cả không dùng
+  - Source texture size không quan trọng — import maxSize/format mới quyết định
+
+  ── C. RUNTIME PERF (Session 64) ─────────────────────────────────────────────
+
+  ✅ Camera.main cached 9 chỗ / 3 files (OperatorSelection, SlotHolder, EffectManager)
+     Pattern: prop => cam != null ? cam : (cam = Camera.main) — tự re-resolve
+  ✅ TDOperatorView.Update(): GetData() = List.Find MỖI FRAME mỗi operator
+     → cache m_Data 1 lần tại Init (nghiêm trọng nhất trong audit 8 Update())
+  ✅ Read/Write meshes: TẮT 355/2360 models (publisher bake sẵn trong .meta,
+     game không đọc mesh runtime → x2 RAM vô ích)
+  ⚠ TDHPBarView.LateUpdate set rotation mỗi frame = CHỦ ĐÍCH (billboard chống
+     xoay theo enemy cha) — ĐÃ THỬ optimize và phải revert, đừng lặp lại.
+
+  ── D. CÒN LẠI (theo priority) ───────────────────────────────────────────────
+
+  ⬜ [P2] GetBlockedEnemies() — new List mỗi call → IReadOnlyList + buffer
+  ⬜ [P2] ScanForTargets() — cache Sort Comparison (bỏ lambda alloc / 0.2s / tower)
+  ⬜ [P3] Dọn SidekickCharacters duplicate (Assets/Synty vs 1.Assets/UnityStore)
+  ⬜ [P3] Quality levels 1-5 null RP — xóa bớt
+  ⬜ [P3] ~24 textures >=2048 chưa có Android override (ngoài 3 đã fix)
+  ⬜ [P4] Mesh compression cho operator meshes (OperatorTart 12.4MB)
 
 ================================================================================
   END OF DOCUMENT

@@ -1,30 +1,1 @@
-using System.Collections.Generic;
-using UnityEngine;
-
-// Abstract base — GetCellsInRange is derived from IsInRange to ensure consistency.
-// Subclasses only need to implement DetectionRadius + IsInRange; overriding GetCellsInRange is optional.
-public abstract class TDRangeDTO : ITowerRangeDTO
-{
-    public abstract float DetectionRadius { get; }
-
-    public abstract bool IsInRange(Vector3 towerPosition, Vector3 enemyPosition, Quaternion towerRotation);
-
-    public virtual List<Vector2Int> GetCellsInRange(Vector2Int towerCell, Quaternion towerRotation)
-    {
-        var grid         = TDGridMainModel.api;
-        float cellSize   = TDConstant.CONFIG_GRID_CELL_SIZE;
-        int searchRadius = Mathf.CeilToInt(DetectionRadius / cellSize);
-        Vector3 towerWorld = grid.CellToWorld(towerCell);
-
-        var cells = new List<Vector2Int>();
-        for (int dx = -searchRadius; dx <= searchRadius; dx++)
-        for (int dz = -searchRadius; dz <= searchRadius; dz++)
-        {
-            var cell = new Vector2Int(towerCell.x + dx, towerCell.y + dz);
-            if (!grid.IsInBounds(cell)) continue;
-            if (IsInRange(towerWorld, grid.CellToWorld(cell), towerRotation))
-                cells.Add(cell);
-        }
-        return cells;
-    }
-}
+﻿using System.Collections.Generic;using UnityEngine;// Abstract base — GetCellsInRange is derived from IsInRange to ensure consistency.// Subclasses only need to implement DetectionRadius + IsInRange; overriding GetCellsInRange is optional.public abstract class TDRangeDTO : ITowerRangeDTO{    public abstract float DetectionRadius { get; }    public abstract bool IsInRange(Vector3 towerPosition, Vector3 enemyPosition, Quaternion towerRotation);    public virtual List<Vector2Int> GetCellsInRange(Vector2Int towerCell, Quaternion towerRotation)    {        var grid = TDGridMainModel.api;        float cellSize = TDConstant.CONFIG_GRID_CELL_SIZE;        int searchRadius = Mathf.CeilToInt(DetectionRadius / cellSize);        Vector3 towerWorld = grid.CellToWorld(towerCell);        var cells = new List<Vector2Int>();        for (int dx = -searchRadius; dx <= searchRadius; dx++)        for (int dz = -searchRadius; dz <= searchRadius; dz++)        {            var cell = new Vector2Int(towerCell.x + dx, towerCell.y + dz);            if (!grid.IsInBounds(cell)) continue;            if (IsInRange(towerWorld, grid.CellToWorld(cell), towerRotation))                cells.Add(cell);        }        return cells;    }}

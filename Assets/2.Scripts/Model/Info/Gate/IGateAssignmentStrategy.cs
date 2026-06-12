@@ -1,11 +1,1 @@
-using System.Collections.Generic;
-
-// Strategy interface for gate assignment — OCP: adding a new mode means adding a new class,
-// not modifying StartWaveLoop.
-public interface IGateAssignmentStrategy
-{
-    // Returns the list of (group, corridor) pairs to spawn enemies from for this wave.
-    // Simultaneous returns multiple entries; all other modes return exactly one.
-    List<(TDPathGroup group, List<IGridCellDTO> corridor)>
-        SelectForWave(List<TDPathGroup> groups, int waveIndex);
-}
+﻿using System.Collections.Generic;// Strategy interface for gate assignment — OCP: adding a new mode means adding a new class,// not modifying StartWaveLoop.public interface IGateAssignmentStrategy{    // Returns the list of (group, corridor) pairs to spawn enemies from for this wave.    // Simultaneous returns multiple entries; all other modes return exactly one.    List<(TDPathGroup group, List<IGridCellDTO> corridor)>        SelectForWave(List<TDPathGroup> groups, int waveIndex);}

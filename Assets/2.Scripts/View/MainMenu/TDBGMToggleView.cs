@@ -1,10 +1,10 @@
-using DG.Tweening;
+﻿using DG.Tweening;
 using UnityEngine;
 
 public class TDBGMToggleView : MonoBehaviour
 {
-    [SerializeField] private GameObject m_IconNormal;  // child "Icon"
-    [SerializeField] private GameObject m_IconMute;    // child "IconMute"
+    [SerializeField] private GameObject m_IconNormal; // child "Icon"
+    [SerializeField] private GameObject m_IconMute; // child "IconMute"
 
     private void Awake()
     {
@@ -24,7 +24,7 @@ public class TDBGMToggleView : MonoBehaviour
     private void ApplyState(bool muted, bool animate)
     {
         if (m_IconNormal != null) m_IconNormal.SetActive(!muted);
-        if (m_IconMute   != null) m_IconMute.SetActive(muted);
+        if (m_IconMute != null) m_IconMute.SetActive(muted);
 
         if (!animate) return;
         var active = muted ? m_IconMute : m_IconNormal;

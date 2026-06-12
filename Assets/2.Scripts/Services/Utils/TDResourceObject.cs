@@ -1,41 +1,35 @@
-using System;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
-using UnityEngine.UI;
 using Object = UnityEngine.Object;
 
 public class TDResourceObject : MonoBehaviour
 {
     [SerializeField] private List<Object> objects;
+
     public static TDResourceObject Instance;
 
     private void Awake()
     {
         Instance = this;
     }
-    
+
     public static T GetResource<T>(string name) where T : Object
     {
-        if (Instance.objects != null)
+        if (Instance == null || Instance.objects == null)
         {
-            Debug.Log("ResourceObject GetResource:" + Instance.objects.Count);
+            Debug.LogError($"[TDResourceObject] Instance not ready — cannot resolve '{name}'");
+            return null;
         }
-        else
-        {
-            Debug.Log("ResourceObject GetResource null");
 
-        }
-        
         var realName = Path.GetFileNameWithoutExtension(name);
-        foreach (var prefab in Instance.objects!)
+        foreach (var obj in Instance.objects)
         {
-            if (prefab.name.Equals(realName))
-            {
-                return prefab as T;
-            }
+            if (obj != null && obj.name.Equals(realName))
+                return obj as T;
         }
 
-        return default(T);
+        Debug.LogError($"[TDResourceObject] Resource not found: '{realName}'");
+        return null;
     }
 }

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using DG.Tweening;
 using TDEnums;
 using UnityEngine;
@@ -6,7 +6,7 @@ using UnityEngine;
 /// VFX + camera shake system — SFX delegated to TDAudioService.SFX.
 /// Init() is called from TDControl.InitOtherControl().
 public static class TDEffectManager
-{
+{    // Cached main camera (Camera.main does a tag search per call); re-resolved after scene change    private static Camera s_MainCam;    private static Camera MainCam => s_MainCam != null ? s_MainCam : (s_MainCam = Camera.main);
     private static readonly Dictionary<GameEventKey, EffectDef> s_Effects = new();
     private static readonly Dictionary<GameObject, Queue<GameObject>> s_Pools = new();
     private static readonly List<Vector3> s_GatePositions = new();
@@ -33,16 +33,16 @@ public static class TDEffectManager
                 Debug.LogWarning($"[TDEffectManager] Duplicate key: {def.key} — only the first entry will be used.");
         }
 
-        TDGameEventBus.OnEnemyDied        += OnEnemyDied;
+        TDGameEventBus.OnEnemyDied += OnEnemyDied;
         TDGameEventBus.OnOperatorAttacked += OnOperatorAttacked;
         TDGameEventBus.OnOperatorImpacted += OnOperatorImpacted;
-        TDGameEventBus.OnTowerAttacked    += OnTowerAttacked;
-        TDGameEventBus.OnLifeLost         += OnLifeLost;
-        TDGameEventBus.OnWaveStarted      += OnWaveStarted;
-        TDGameEventBus.OnVictory          += OnVictory;
-        TDGameEventBus.OnGameOver         += OnGameOver;
-        TDGameEventBus.OnUnitPickup       += OnUnitPickup;
-        TDGameEventBus.OnTowerPlaced      += OnTowerPlaced;
+        TDGameEventBus.OnTowerAttacked += OnTowerAttacked;
+        TDGameEventBus.OnLifeLost += OnLifeLost;
+        TDGameEventBus.OnWaveStarted += OnWaveStarted;
+        TDGameEventBus.OnVictory += OnVictory;
+        TDGameEventBus.OnGameOver += OnGameOver;
+        TDGameEventBus.OnUnitPickup += OnUnitPickup;
+        TDGameEventBus.OnTowerPlaced += OnTowerPlaced;
 
         if (TDEnemyPathMainControl.api != null)
             TDEnemyPathMainControl.api.onGroupsReady += CacheGatePositions;
@@ -50,16 +50,16 @@ public static class TDEffectManager
 
     public static void Cleanup()
     {
-        TDGameEventBus.OnEnemyDied        -= OnEnemyDied;
+        TDGameEventBus.OnEnemyDied -= OnEnemyDied;
         TDGameEventBus.OnOperatorAttacked -= OnOperatorAttacked;
         TDGameEventBus.OnOperatorImpacted -= OnOperatorImpacted;
-        TDGameEventBus.OnTowerAttacked    -= OnTowerAttacked;
-        TDGameEventBus.OnLifeLost         -= OnLifeLost;
-        TDGameEventBus.OnWaveStarted      -= OnWaveStarted;
-        TDGameEventBus.OnVictory          -= OnVictory;
-        TDGameEventBus.OnGameOver         -= OnGameOver;
-        TDGameEventBus.OnUnitPickup       -= OnUnitPickup;
-        TDGameEventBus.OnTowerPlaced      -= OnTowerPlaced;
+        TDGameEventBus.OnTowerAttacked -= OnTowerAttacked;
+        TDGameEventBus.OnLifeLost -= OnLifeLost;
+        TDGameEventBus.OnWaveStarted -= OnWaveStarted;
+        TDGameEventBus.OnVictory -= OnVictory;
+        TDGameEventBus.OnGameOver -= OnGameOver;
+        TDGameEventBus.OnUnitPickup -= OnUnitPickup;
+        TDGameEventBus.OnTowerPlaced -= OnTowerPlaced;
 
         if (TDEnemyPathMainControl.api != null)
             TDEnemyPathMainControl.api.onGroupsReady -= CacheGatePositions;
@@ -78,27 +78,27 @@ public static class TDEffectManager
             EnemyType.Fast => GameEventKey.EnemyDied_Fast,
             EnemyType.Tank => GameEventKey.EnemyDied_Tank,
             EnemyType.Boss => GameEventKey.EnemyDied_Boss,
-            _              => GameEventKey.EnemyDied_Normal,
+            _ => GameEventKey.EnemyDied_Normal,
         }, pos);
 
     private static void OnOperatorAttacked(Vector3 pos, OperatorType type)
         => Play(type switch
         {
             OperatorType.Defender => GameEventKey.OperatorAttacked_Defender,
-            OperatorType.Striker  => GameEventKey.OperatorAttacked_Striker,
-            OperatorType.Ranger   => GameEventKey.OperatorAttacked_Ranger,
-            OperatorType.Mage     => GameEventKey.OperatorAttacked_Mage,
-            _                     => GameEventKey.OperatorAttacked_Knight,
+            OperatorType.Striker => GameEventKey.OperatorAttacked_Striker,
+            OperatorType.Ranger => GameEventKey.OperatorAttacked_Ranger,
+            OperatorType.Mage => GameEventKey.OperatorAttacked_Mage,
+            _ => GameEventKey.OperatorAttacked_Knight,
         }, pos);
 
     private static void OnOperatorImpacted(Vector3 impactPos, OperatorType type)
         => PlayImpact(type switch
         {
             OperatorType.Defender => GameEventKey.OperatorAttacked_Defender,
-            OperatorType.Striker  => GameEventKey.OperatorAttacked_Striker,
-            OperatorType.Ranger   => GameEventKey.OperatorAttacked_Ranger,
-            OperatorType.Mage     => GameEventKey.OperatorAttacked_Mage,
-            _                     => GameEventKey.OperatorAttacked_Knight,
+            OperatorType.Striker => GameEventKey.OperatorAttacked_Striker,
+            OperatorType.Ranger => GameEventKey.OperatorAttacked_Ranger,
+            OperatorType.Mage => GameEventKey.OperatorAttacked_Mage,
+            _ => GameEventKey.OperatorAttacked_Knight,
         }, impactPos);
 
     private static void OnTowerAttacked(Vector3 pos, TowerType type)
@@ -108,10 +108,10 @@ public static class TDEffectManager
     }
 
     private static void OnLifeLost(Vector3 pos) => Play(GameEventKey.LifeLost, pos);
-    private static void OnVictory()              => Play(GameEventKey.Victory, GetSceneCenter());
-    private static void OnGameOver()             => Play(GameEventKey.GameOver, GetSceneCenter());
-    private static void OnUnitPickup()           => PlaySfxOnly(GameEventKey.UnitPickup);
-    private static void OnTowerPlaced()          => PlaySfxOnly(GameEventKey.TowerPlaced);
+    private static void OnVictory() => Play(GameEventKey.Victory, GetSceneCenter());
+    private static void OnGameOver() => Play(GameEventKey.GameOver, GetSceneCenter());
+    private static void OnUnitPickup() => PlaySfxOnly(GameEventKey.UnitPickup);
+    private static void OnTowerPlaced() => PlaySfxOnly(GameEventKey.TowerPlaced);
 
     private static void OnWaveStarted(int _)
     {
@@ -125,12 +125,12 @@ public static class TDEffectManager
     {
         if (!s_Effects.TryGetValue(key, out var def)) return;
 
-        SpawnVFX(def.vfxPrefab,  pos);
+        SpawnVFX(def.vfxPrefab, pos);
         SpawnVFX(def.vfxPrefab2, pos);
         TDAudioService.SFX.Play(def.sfxClip, def.sfxVolume);
 
         if (def.cameraShake)
-            Camera.main?.transform
+            MainCam?.transform
                 .DOShakePosition(def.shakeDuration, def.shakeStrength, 10, 90f, false)
                 .SetUpdate(true);
     }
@@ -196,7 +196,7 @@ public static class TDEffectManager
 
     private static Vector3 GetSceneCenter()
     {
-        var cam = Camera.main;
+        var cam = MainCam;
         return cam != null ? cam.transform.position + cam.transform.forward * 6f : Vector3.zero;
     }
 }

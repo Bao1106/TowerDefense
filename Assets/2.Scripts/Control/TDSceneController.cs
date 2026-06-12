@@ -1,4 +1,4 @@
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 using DG.Tweening;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -10,30 +10,27 @@ public class TDSceneController : MonoBehaviour
 {
     public static TDSceneController api;
 
-    [SerializeField] private Camera       menuCamera;
-    [SerializeField] private CanvasGroup  fadeGroup;
-    [SerializeField] private AudioClip    mainMenuBgm;
+    [SerializeField] private Camera menuCamera;
+    [SerializeField] private CanvasGroup fadeGroup;
+    [SerializeField] private AudioClip mainMenuBgm;
 
     public Camera MenuCamera => menuCamera;
-
-    private const float FADE_OUT_DUR = 0.25f;
-    private const float FADE_IN_DUR  = 0.4f;
 
     private void Awake()
     {
         api = this;
         if (fadeGroup != null)
         {
-            fadeGroup.alpha          = 0f;
+            fadeGroup.alpha = 0f;
             fadeGroup.blocksRaycasts = false;
         }
-        SceneManager.sceneLoaded   += OnSceneLoaded;
+        SceneManager.sceneLoaded += OnSceneLoaded;
         SceneManager.sceneUnloaded += OnSceneUnloaded;
     }
 
     private void OnDestroy()
     {
-        SceneManager.sceneLoaded   -= OnSceneLoaded;
+        SceneManager.sceneLoaded -= OnSceneLoaded;
         SceneManager.sceneUnloaded -= OnSceneUnloaded;
     }
 
@@ -58,9 +55,9 @@ public class TDSceneController : MonoBehaviour
 
     // ── Public API ────────────────────────────────────────────────────────────
 
-    public void GoToMainMenu()  => GoToMainMenuAsync().Forget("GoToMainMenu");
+    public void GoToMainMenu() => GoToMainMenuAsync().Forget("GoToMainMenu");
     public void RetryGameplay() => RetryGameplayAsync().Forget("RetryGameplay");
-    public void GoToGameplay()  => GoToGameplayAsync().Forget("GoToGameplay");
+    public void GoToGameplay() => GoToGameplayAsync().Forget("GoToGameplay");
 
     // ── Private Async ─────────────────────────────────────────────────────────
 
@@ -92,8 +89,8 @@ public class TDSceneController : MonoBehaviour
 
     // ── Fade helpers ──────────────────────────────────────────────────────────
 
-    private Task FadeToBlack()   => FadeAsync(1f, FADE_OUT_DUR);
-    private Task FadeFromBlack() => FadeAsync(0f, FADE_IN_DUR);
+    private Task FadeToBlack() => FadeAsync(1f, TDConstant.SCENE_FADE_OUT_DUR);
+    private Task FadeFromBlack() => FadeAsync(0f, TDConstant.SCENE_FADE_IN_DUR);
 
     private Task FadeAsync(float target, float duration)
     {

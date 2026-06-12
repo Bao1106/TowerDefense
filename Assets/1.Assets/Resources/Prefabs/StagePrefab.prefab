@@ -178,7 +178,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: SLECTED
+  m_text: SELECTED
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: a90d654aeef9d2a41abc4f1112cfd17e, type: 2}
   m_sharedMaterial: {fileID: -6470350767637389269, guid: a90d654aeef9d2a41abc4f1112cfd17e, type: 2}
@@ -546,7 +546,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 0.6039216, g: 0.49803922, b: 0.23529412, a: 1}
+  m_Color: {r: 0.6039216, g: 0.49803922, b: 0.23529412, a: 0.4}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -1107,7 +1107,7 @@ MonoBehaviour:
   m_MinWidth: -1
   m_MinHeight: -1
   m_PreferredWidth: -1
-  m_PreferredHeight: -1
+  m_PreferredHeight: 132
   m_FlexibleWidth: 1
   m_FlexibleHeight: -1
   m_LayoutPriority: 1

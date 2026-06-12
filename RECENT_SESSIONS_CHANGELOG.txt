@@ -1,6 +1,6 @@
-================================================================================
+﻿================================================================================
   TOWER DEFENSE — RECENT SESSIONS CHANGELOG
-  Updated: 2026-06-08
+  Updated: 2026-06-12
 ================================================================================
 
 
@@ -1514,14 +1514,250 @@
     Fields wired: m_Canvas, m_BgGroup (Background), m_LeftPanel, m_RightPanel, m_BottomGroup (Bottom)
 
 
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 64 — CONFIG LOAD STANDARDIZATION + BUILD SIZE OPTIMIZATION      [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-12
+
+  ── Locked stage card polish ─────────────────────────────────────────────────
+
+  TDStageCardView.cs: LOCKED_ALPHA 0.4 → 0.25 (locked card mờ hơn, giống design)
+
+  ── Code style: column alignment removal (116 files) ─────────────────────────
+
+  Toàn bộ Assets/2.Scripts/**/*.cs: collapse mọi chuỗi 2+ spaces giữa dòng
+  thành 1 space (giữ nguyên indentation đầu dòng). Lý do: IDE column alignment
+  gây diff noise + không nhất quán. PowerShell batch script, 116 files changed.
+
+  ── Config load standardization — Cơ chế 1 (TDResourceObject + static api) ───
+
+  Chuẩn hóa TẤT CẢ 6 config class về cùng 1 pattern:
+    private static T m_api;
+    public static T api => m_api ??= TDResourceObject.GetResource<T>(TDConstant.CONFIG_X);
+
+  1. TDFlyweightEnemyDataSettings   — CONFIG_ENEMY      (api added)
+  2. TDFlyweightOperatorDataSettings — CONFIG_OPERATOR  (đã có từ trước)
+  3. TDFlyweightTowerDataSettings   — CONFIG_TOWER      (api added — trước đây
+     là ngoại lệ: cache trong TDFlyweightBulletFactoryModel.Setting)
+  4. TDLevelConfigSettings          — CONFIG_LEVEL      (api added)
+  5. TDEffectConfig                 — CONFIG_EFFECT     (Resources.Load → api)
+  6. TDStageRepository              — CONFIG_STAGE_REPO (api added)
+
+  Callers migrated:
+  - TDFlyweightBulletFactoryModel: XÓA m_Setting + property Setting;
+    nội bộ dùng TDFlyweightTowerDataSettings.api?.GetAmmoPrefab(type)
+  - TDTowerMainControl:   BulletFactoryModel.api?.Setting → TDFlyweightTowerDataSettings.api
+  - TDSlotHolderMainView: BulletFactoryModel.api.Setting.GetData → TDFlyweightTowerDataSettings.api?.GetData
+  - TDTowerBehaviorModel: BulletFactoryModel.api?.Setting? → TDFlyweightTowerDataSettings.api?
+  - TDGameplayAudioContext: Resources.Load<TDStageRepository> → TDStageRepository.api
+  - TDGameplayHUDView:  XÓA [SerializeField] m_StageRepository → TDStageRepository.api
+  - TDGameplayMainView: XÓA [SerializeField] m_StageRepository → TDStageRepository.api
+  - TDStageSelectView:  m_StageRepository SerializeField → TDStageRepository.api
+  - TDEnemyPathMainView: flyweightEnemyDataSettings/m_LevelConfigSettings → api
+
+  ⚠ MANUAL STEP (bắt buộc, chưa làm): kéo 4 asset vào list Objects của
+    TDResourceObject (GenerateObject, scene DTLoadFirst):
+    Enemy Data Config, Level Config, Stage Repository, Effect Config
+    (Tower Bullet Config + Melee Operator Config đã có sẵn trong list)
+
+  ── TDResourceObject.cs hardening ────────────────────────────────────────────
+
+  - Null-guard Instance (trước: NRE nếu gọi trước Awake / test thẳng scene khác)
+  - Bỏ 2 dòng Debug.Log spam mỗi lần lookup
+  - Skip phần tử null trong list (slot trống Inspector không còn NRE)
+  - LogError khi không tìm thấy resource (trước: silent return null)
+  - File được format lại multi-line chuẩn (trước: single-line)
+
+  ── BUILD SIZE OPTIMIZATION (APK 255 MB → mục tiêu ~100-120 MB) ──────────────
+
+  Chẩn đoán (build report 2026Jun12-105200):
+  - APK cũ 130 MB → APK "optimize" 255 MB (TĂNG 125 MB!)
+  - Thủ phạm #1: SHADERS 169.5 MB (24.3% build) — variant explosion:
+      Lit.shader 52.9MB, PolygonShader 37.7MB, Generic_Standard 22.5MB,
+      Generic_Basic 22.4MB, SimpleLit 18.3MB, Sidekick 12.3MB
+  - Thủ phạm #2: Android build gánh CẢ HAI graphics API (Vulkan + GLES3)
+      → mỗi shader variant compile 2 lần = x2 dung lượng shader
+  - Textures 92.3MB (3 file Synty Generic_* 4096px = 10.7MB/file)
+  - URP strip flags đã bật sẵn (StripUnusedVariants etc. — không phải vấn đề)
+
+  Đã áp dụng (qua MCP script-execute):
+  1. Graphics API Android: Vulkan + GLES3 → CHỈ GLES3 (auto API = false)
+       → ước tính giảm ~50% của 169.5MB shader
+  2. ManagedStrippingLevel Android: Minimal → Low (IL2CPP)
+  3. URP-Balanced.asset (RP đang dùng, default + quality level 0):
+       AdditionalLights: PerPixel → PerVertex (point lights vẫn hoạt động)
+       SoftShadows: ON → OFF
+       HDR: ON → OFF
+  4. Texture Android override ASTC 6x6, maxSize 4096 → 2048:
+       Generic_01_A.png, Generic_Emissive_01_A.png, Generic_Normals_01.png
+       → ~10.7MB/file → ước tính <1MB/file
+  5. BGM sjoyasorrow.mp3: Vorbis quality 0.7 → 0.4 (Streaming giữ nguyên)
+
+  ✅ KẾT QUẢ VERIFIED: rebuild APK = 116 MB (255 → 116, giảm 54%;
+     thấp hơn cả bản gốc 130 MB trước khi thêm Sidekick/Synty/OST)
+
+  ── ROUND 2: full asset + scene audit (ước tính cắt thêm ~50 MB) ─────────────
+
+  Audit findings (script-execute scan toàn bộ AssetDatabase + scene deps):
+  - Sidekick Resources/Meshes 69.1 MB FORCE-INCLUDED (folder tên "Resources")
+    → chính là lý do Meshes = 64.2 MB trong build. Game chỉ dùng characters
+    bake sẵn (Characters/Starter/*.asset — ngoài Resources). Resources.Load
+    mesh chỉ có trong _Demos + Editor tool → an toàn để move.
+  - street.mp3 (10 MB) + void.mp3 (6.7 MB) còn Vorbis q=0.7
+  - Resources/Fonts 8.6 MB: 4 OpenSans SDF variants force-included
+  - DragonBoar PBR source textures to (12-18 MB/file) NHƯNG maxSize=512
+    → trong build chỉ ~200 KB/file, không phải vấn đề
+  - SyntyLensDirt (34.9 MB), icons_slices.psd (30 MB): không scene nào
+    reference → không vào build, chỉ tốn disk
+  - 355/2360 models bật Read/Write (nhân đôi RAM mesh runtime — TODO riêng)
+  - Scene deps sạch: DTMainMenu 36 MB, DTGamePlay 128 MB (texture đã cap 512)
+
+  Đã áp dụng (AssetDatabase.MoveAsset — giữ GUID, refs trực tiếp không gãy):
+  1. SidekickCharacters/Resources → SidekickCharacters/MeshLibrary
+     (69 MB thoát force-include; Sidekick editor tool sẽ không tìm thấy parts
+      — chấp nhận được, game không ảnh hưởng)
+  2. street.mp3 + void.mp3: Vorbis q=0.4 (đồng bộ với sjoyasorrow)
+  3. Resources/Fonts → 1.Assets/Fonts (thoát force-include; verified
+     DTMainMenu vẫn reference OpenSans-Bold SDF qua GUID)
+
+  ✅ KẾT QUẢ VERIFIED ROUND 2: rebuild APK = 102 MB (116 → 102)
+     Tổng hành trình: 255 MB → 116 MB (round 1) → 102 MB (round 2)
+     = giảm 60% so với bản lỗi, thấp hơn bản gốc 130 MB ~22%
+
+  ── CONST CONSOLIDATION: 56 consts → TDConstant.cs ───────────────────────────
+
+  Audit: 62 consts nằm ngoài TDConstant trong 24 files.
+  Move tất cả vào TDConstant (region "Class Constants"), TRỪ:
+  - Editor drawers (OperatorDataDrawer, TowerDataDrawer, EffectDefDrawer) — Editor-only
+  - Dead code (ServiceLocator, Injector, TDServiceKey) — sẽ xóa cùng P1 cleanup
+
+  Rename để tránh trùng tên (prefix theo domain):
+  - TDSceneController: FADE_*_DUR → SCENE_FADE_*_DUR
+  - TDBGMPlayer: FADE_IN/OUT, MUTE_FADE → BGM_*
+  - TDSFXPlayer: POOL_SIZE, MIN_INTERVAL → SFX_*
+  - TDAudioPrefs: KEY_BGM/SFX → AUDIO_KEY_*
+  - TDGameplayHUDView: PUNCH_*, PAUSE_FADE_*, SCENE_FADE_* → HUD_*
+  - TDHPBarView: → HPBAR_*
+  - TDEnemyView: TRIGGER_* → ANIM_TRIGGER_*
+  - TDAttackVFX: MOVE_SPEED, ARRIVE_THRESHOLD → VFX_*
+  - TDTowerWeaponView: SCAN_INTERVAL → TOWER_SCAN_INTERVAL
+  - TDStageCardView: LOCKED_ALPHA → STAGE_CARD_LOCKED_ALPHA
+  - TDMazePathGenerator: MAX_ATTEMPTS → MAZE_MAX_ATTEMPTS
+  - TDTowerMainControl: MAX_SLOTS → CONFIG_MAX_SLOTS
+  - TDEnemyPathMainControl: gateBuffer (local) → CONFIG_GATE_BUFFER
+
+  DEDUP: SHOW/HIDE_BG/POPUP_DURATION trùng giá trị giữa TDVictoryPanelView và
+  TDGameOverPanelView → merge thành POPUP_* chung (4 consts); chỉ SCALE_FROM
+  tách riêng (VICTORY=0.75 / GAMEOVER=1.15).
+
+  Verified: compile clean (isCompiling=False, compileFailed=False).
+
+  ── MIGRATE SerializeField → transform.Find: menu views ──────────────────────
+
+  Audit toàn codebase: 2 pattern song song — gameplay UI dùng Find+TDConstant
+  (HUDView 17, VictoryPanel 9, GameOverPanel 8), menu UI dùng SerializeField.
+
+  Quyết định phân loại (nguyên tắc cho codebase):
+  - Scene UI view tìm CON CỦA CHÍNH NÓ      → transform.Find(TDConstant.PATH_*)
+  - Prefab refs nội bộ (StageCardView, HPBar) → giữ SerializeField
+  - Asset refs (prefabs/configs)              → TDResourceObject api / SerializeField
+  - Tuning values                             → SerializeField hoặc TDConstant
+
+  Migrated (15 SerializeFields → private + ResolveReferences() trong Awake):
+  - TDStageSelectView (10 fields): PATH_STAGESEL_* (8 paths mới trong TDConstant)
+    m_MainMenuView resolve qua sibling: transform.parent.Find(NAME_MAIN_MENU)
+  - TDMainMenuView (5 fields): PATH_MENU_* (4 paths), m_Canvas → GetComponentInParent
+  + 13 constants mới: NAME_MAIN_MENU, PATH_MENU_* (4), PATH_STAGESEL_* (8)
+
+  Verified: compile clean + 14/14 paths resolve OK với scene hierarchy thật.
+  Lợi ích: hết phụ thuộc scene wiring (nguồn bug session 63), nhất quán toàn codebase.
+
+  ── DEVICE BUG FIX: locked stage card bị cắt trên máy 20:9 ───────────────────
+
+  Repro: Xiaomi 12 (2400x1080, 20:9) — card 03 (???/COMING SOON) bị viewport
+  cắt giữa chừng; Editor 16:9 không thấy vì viewport cao hơn.
+  Root cause: CanvasScaler match=0.5 → máy 20:9 effective canvas height nhỏ hơn
+  → StageScroll viewport 547 (16:9) co còn ~432 (20:9). Card cao ~150 →
+  3 cards + spacing = ~510 > 432 → card cuối tràn khỏi mask.
+  Fix (StagePrefab.prefab):
+  - + LayoutElement preferredHeight=118 → 12 + 3x118 + 2x24 = 414 <= 432
+    (3 cards luôn vừa viewport trên mọi aspect ratio phổ biến)
+  - Typo badge: "SLECTED" → "SELECTED" (TxtLabel)
+
+  Nếu cần giảm thêm:
+    - Dọn bản copy SidekickCharacters trùng (Assets/Synty/ vs
+      Assets/1.Assets/UnityStore Resources/Synty/)
+    - URP-Toon.asset (Toon Shaders Pro/Demo) còn full feature — check material
+      nào dùng Toon.shader có kéo variant không
+    - Quality levels 1-5 đang null RP (fallback default) — có thể xóa bớt
+    - Models Read/Write disable batch (355 models — RAM optimization)
+    - Mesh compression cho OperatorTart.asset (12.4 MB) + operator meshes
+
+  ── RUNTIME PERF PASS: Camera.main + Update() audit + Read/Write models ──────
+
+  1. Camera.main cached (9 chỗ, 3 files):
+     - TDOperatorSelectionView: static s_MainCam (có method static dùng), 4 chỗ
+     - TDSlotHolderMainView: instance m_MainCam, 3 chỗ
+     - TDEffectManager (static class): static s_MainCam, 2 chỗ
+     Pattern: prop => cam != null ? cam : (cam = Camera.main)
+     → null-check Unity tự re-resolve sau scene change/camera destroy
+
+  2. Audit 8 Update()/LateUpdate() methods:
+     ✅ Sạch: TDGameplayHUDView (gold tick), TDSlotHolderMainView (early-out),
+        TDOperatorSelectionView (sau fix cam), TDAttackVFX, TDEnemyView
+     🔴 FIXED TDOperatorView.Update(): GetData(type) = List.Find chạy MỖI FRAME
+        mỗi operator → cache m_Data 1 lần tại Init (cả OnAttackHit cũng dùng cache)
+     ⚪ TDHPBarView: thử move rotation ra OnEnable → PHÁT HIỆN SAI và revert:
+        HP bar là con của enemy đang xoay (LookRotation) → set world rotation
+        mỗi frame là CHỦ ĐÍCH (billboard chống xoay theo cha). Thêm comment giải thích.
+     ⚪ TDTowerWeaponView: còn lambda Sort alloc trong ScanForTargets (TODO P2)
+
+  3. Read/Write models: TẮT 355/2360 models
+     Nguồn gốc: publisher asset store bake sẵn isReadable=true trong .meta khi
+     export package (Synty 157+74, RPGMonster 77, FreeDragons 28, FattyTurret 17,
+     khác 2) — không phải team bật. Game không đọc mesh data runtime
+     (không có code động vào mesh.vertices/triangles) → mỗi mesh load là
+     tốn x2 RAM (bản CPU + bản GPU) vô ích.
+     Batch script: ModelImporter.isReadable=false + SaveAndReimport toàn bộ.
+     Nếu sau này cần (non-convex MeshCollider bake runtime, mesh combine):
+     Unity sẽ báo lỗi rõ ràng → bật lại đúng model đó.
+
+  4. Manual step ĐÃ XONG: 4 config (Enemy Data, Level, Stage Repository, Effect)
+     đã được kéo vào TDResourceObject list (DTLoadFirst) ✅
+
+  ── DEAD CODE CLEANUP (P1 — tồn đọng lâu nhất): 11 files DELETED ─────────────
+
+  Verify trước khi xóa: grep references (chỉ còn comment/commented-out code)
+  + quét GUID trong scenes/prefabs → phát hiện Injector còn GẮN trên
+  GameplayMainView (DTGamePlay) → gỡ component trước, save scene.
+
+  Deleted: ServiceLocator, Injector, Provider, Observer, Singleton,
+           BootsTrapper, Launcher, ServicesManager, MockServices,
+           TDWebService, TDServiceKey
+  + 2 folder rỗng (DependencyInjection, TDServices)
+  + 26 dòng commented-out code trong TDControl.cs (OnApiMiniAppReady block)
+  + 2 stale using Services.DependencyInjection; (TDEnemyPathView,
+    TDSlotHolderMainView — gây compile error, đã gỡ)
+
+  Verified: compile clean sau cleanup.
+
+  ── SCENE BUG FIX: duplicate TDMainMenuView trên Canvas ──────────────────────
+
+  Sau migrate Find-based, Play mode báo "[TDMainMenuView] ResolveReferences
+  failed". Điều tra: scene có 2 TDMainMenuView — 1 trên MainMenu (đúng) và
+  1 trên Canvas (rác từ đợt wire MCP session 63). Bản SerializeField cũ
+  im lặng che giấu component rác này (fields null, không ai gọi).
+  → Xóa instance trên Canvas, scene saved. Migration Find-based chính là
+  thứ giúp lộ bug — validate giá trị của approach.
+
 ================================================================================
-  TODO — DEVELOPMENT PRIORITY                              [updated 2026-06-11]
+  TODO — DEVELOPMENT PRIORITY                              [updated 2026-06-12]
 ================================================================================
 
   ── P1 ───────────────────────────────────────────────────────────────────────
 
-  ⬜ [P1] Dead code cleanup: ServiceLocator, Injector, Provider, Observer, Singleton,
-          BootsTrapper, Launcher, ServicesManager, MockServices, TDWebService
+  ✅ [P1] Dead code cleanup: 11 files DELETED                            (S64)
 
   ── P2 ───────────────────────────────────────────────────────────────────────
 

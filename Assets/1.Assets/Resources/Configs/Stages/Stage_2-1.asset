@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   StageId: 2-1
   DisplayName: 
-  LevelIndex: 0
+  LevelIndex: 2
   VisualConfig: {fileID: 0}
   StartGateCount: 1
   EndGateCount: 1

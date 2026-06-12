@@ -1,17 +1,1 @@
-using TDEnums;
-using UnityEngine;
-
-/// <summary>
-/// Common stats for any unit that can be placed on the map and engage in combat — towers and operators alike.
-/// Both TowerData and OperatorData implement this interface.
-/// Used by TDTowerBehaviorModel for Dictionary lookups instead of if/else chains.
-/// </summary>
-public interface IDeployableDTO
-{
-    TowerType TowerType { get; }
-    float Damage { get; }
-    float AttackSpeed { get; }
-    AttackType AttackType { get; }
-    int MaxTargets { get; }
-    Vector2Int[] RangeOffsets { get; }
-}
+﻿using TDEnums;using UnityEngine;/// <summary>/// Common stats for any unit that can be placed on the map and engage in combat — towers and operators alike./// Both TowerData and OperatorData implement this interface./// Used by TDTowerBehaviorModel for Dictionary lookups instead of if/else chains./// </summary>public interface IDeployableDTO{    TowerType TowerType { get; }    float Damage { get; }    float AttackSpeed { get; }    AttackType AttackType { get; }    int MaxTargets { get; }    Vector2Int[] RangeOffsets { get; }}

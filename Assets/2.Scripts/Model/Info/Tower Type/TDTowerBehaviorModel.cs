@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using TDEnums;
 using UnityEngine;
 
@@ -21,7 +21,7 @@ public class TDTowerBehaviorModel : IWeaponBehaviorDTO
     private void BuildDataMap()
     {
         m_DataMap = new Dictionary<TowerType, IDeployableDTO>();
-        var towers = TDFlyweightBulletFactoryModel.api?.Setting?.GetAllTowers();
+        var towers = TDFlyweightTowerDataSettings.api?.GetAllTowers();
         if (towers == null) return;
         foreach (var t in towers)
             m_DataMap[t.type] = t;
