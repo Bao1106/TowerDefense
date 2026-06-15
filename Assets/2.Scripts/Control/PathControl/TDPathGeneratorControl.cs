@@ -1,1 +1,1 @@
-﻿// Removed — replaced by TDMazePathGenerator (Maze Extraction refactor)
+// Removed — replaced by TDMazePathGenerator (Maze Extraction refactor)

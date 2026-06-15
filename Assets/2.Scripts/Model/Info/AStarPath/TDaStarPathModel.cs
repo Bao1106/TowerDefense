@@ -1,1 +1,54 @@
-﻿using System.Collections.Generic;using TDEnums;using UnityEngine;// ReSharper disable InconsistentNamingpublic class TDaStarPathModel{    private static TDaStarPathModel m_api;    public static TDaStarPathModel api    {        get        {            return m_api ??= new TDaStarPathModel();        }    }        public float HeuristicCostEstimate(IGridCellDTO start, IGridCellDTO goal)    {        Vector2 startPos = start.position;        Vector2 goalPos = goal.position;        float dx = Mathf.Abs(startPos.x - goalPos.x);        float dy = Mathf.Abs(startPos.y - goalPos.y);        return dx + dy;    }        public float GetMovementCost(IGridCellDTO from, IGridCellDTO to)    {        // Only horizontal and vertical movement is allowed        return 1.0f;    }        public List<IGridCellDTO> GetNeighbors(IGridDTO gridDTO, IGridCellDTO cellDto)    {        List<IGridCellDTO> neighbors = new List<IGridCellDTO>();        int[] dx = { 0, 1, 0, -1 }; // Only up, right, down, left movement allowed        int[] dy = { 1, 0, -1, 0 };        for (int i = 0; i < 4; i++)        {            var checkX = cellDto.position.x + dx[i];            var checkY = cellDto.position.y + dy[i];            if (checkX >= 0 && checkX < gridDTO.width && checkY >= 0 && checkY < gridDTO.height)            {                var neighbor = gridDTO.GetCell(checkX, checkY);                if (neighbor.isWalkable && neighbor.type != CellType.Obstacle)                {                    neighbors.Add(neighbor);                }            }        }        return neighbors;    }}
+using System.Collections.Generic;
+using TDEnums;
+using UnityEngine;
+
+// ReSharper disable InconsistentNaming
+public class TDaStarPathModel
+{
+    private static TDaStarPathModel m_api;
+    public static TDaStarPathModel api
+    {
+        get
+        {
+            return m_api ??= new TDaStarPathModel();
+        }
+    }
+    
+    public float HeuristicCostEstimate(IGridCellDTO start, IGridCellDTO goal)
+    {
+        Vector2 startPos = start.position;
+        Vector2 goalPos = goal.position;
+        float dx = Mathf.Abs(startPos.x - goalPos.x);
+        float dy = Mathf.Abs(startPos.y - goalPos.y);
+        return dx + dy;
+    }
+    
+    public float GetMovementCost(IGridCellDTO from, IGridCellDTO to)
+    {
+        // Only horizontal and vertical movement is allowed
+        return 1.0f;
+    }
+    
+    public List<IGridCellDTO> GetNeighbors(IGridDTO gridDTO, IGridCellDTO cellDto)
+    {
+        List<IGridCellDTO> neighbors = new List<IGridCellDTO>();
+        int[] dx = { 0, 1, 0, -1 }; // Only up, right, down, left movement allowed
+        int[] dy = { 1, 0, -1, 0 };
+
+        for (int i = 0; i < 4; i++)
+        {
+            var checkX = cellDto.position.x + dx[i];
+            var checkY = cellDto.position.y + dy[i];
+
+            if (checkX >= 0 && checkX < gridDTO.width && checkY >= 0 && checkY < gridDTO.height)
+            {
+                var neighbor = gridDTO.GetCell(checkX, checkY);
+                if (neighbor.isWalkable && neighbor.type != CellType.Obstacle)
+                {
+                    neighbors.Add(neighbor);
+                }
+            }
+        }
+        return neighbors;
+    }
+}

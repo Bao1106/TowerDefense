@@ -1,1 +1,117 @@
-﻿using System.Collections.Generic;using UnityEngine;/// <summary>/// Singleton registry for operators placed on path cells.////// Responsibilities:/// 1. Track valid operator cells (path cells, excluding gate cells)/// 2. Track operator positions + block capacity / blocked enemy references/// 3. CanBlock(cell) → used by TDEnemyView when stepping onto a cell/// 4. GetBlockedEnemies(cell) → used by TDOperatorView when attacking/// </summary>public class TDOperatorRegistry{    public static TDOperatorRegistry api;    // Valid path cells where operators can be placed (gate cells excluded)    private readonly HashSet<Vector2Int> m_ValidOperatorCells = new HashSet<Vector2Int>();    // cell → (blockCapacity, currentBlockedCount)    private readonly Dictionary<Vector2Int, (int capacity, int count)> m_Operators        = new Dictionary<Vector2Int, (int, int)>();    // cell → list of enemies currently blocked at that cell    private readonly Dictionary<Vector2Int, List<TDEnemyView>> m_BlockedEnemies        = new Dictionary<Vector2Int, List<TDEnemyView>>();    // cell → TDOperatorView standing at that cell (so enemies can call TakeDamage on it)    private readonly Dictionary<Vector2Int, TDOperatorView> m_OperatorViews        = new Dictionary<Vector2Int, TDOperatorView>();    // ─── Path cell registration ───────────────────────────────────────────────    public void RegisterPathCell(Vector2Int cell)        => m_ValidOperatorCells.Add(cell);    public bool IsValidOperatorCell(Vector2Int cell)        => m_ValidOperatorCells.Contains(cell);    public List<Vector2Int> GetValidOperatorCells()        => new List<Vector2Int>(m_ValidOperatorCells);    // ─── Operator management ──────────────────────────────────────────────────    public void RegisterOperator(Vector2Int cell, int blockCapacity)    {        m_Operators[cell] = (Mathf.Max(1, blockCapacity), 0);        m_BlockedEnemies[cell] = new List<TDEnemyView>();        Debug.Log($"[OperatorRegistry] Operator registered at {cell}, blockCapacity={blockCapacity}");    }    /// Called from TDOperatorView.Init() to store the view reference (used so enemies can counter-attack).    public void RegisterOperatorView(Vector2Int cell, TDOperatorView view)        => m_OperatorViews[cell] = view;    /// Returns the TDOperatorView at the given cell (null if none is registered).    public TDOperatorView GetOperatorView(Vector2Int cell)        => m_OperatorViews.TryGetValue(cell, out var v) ? v : null;    /// Unregisters the operator — automatically force-unblocks all enemies currently held at that cell.    public void UnregisterOperator(Vector2Int cell)    {        if (m_BlockedEnemies.TryGetValue(cell, out var list))        {            // Snapshot to avoid modifying the list while iterating            var snapshot = new List<TDEnemyView>(list);            list.Clear();            foreach (var enemy in snapshot)                enemy?.ForceUnblock();        }        m_Operators.Remove(cell);        m_BlockedEnemies.Remove(cell);        m_OperatorViews.Remove(cell);    }    public bool HasOperatorAt(Vector2Int cell)        => m_Operators.ContainsKey(cell);    // ─── Blocking state ───────────────────────────────────────────────────────    /// True if the cell has a registered operator AND still has available block slots.    public bool CanBlock(Vector2Int cell)    {        if (!m_Operators.TryGetValue(cell, out var info)) return false;        return info.count < info.capacity;    }    /// An enemy starts being blocked — increments the counter and stores the reference.    public void OnEnemyBlocked(Vector2Int cell, TDEnemyView enemy)    {        if (m_Operators.TryGetValue(cell, out var info))            m_Operators[cell] = (info.capacity, info.count + 1);        if (!m_BlockedEnemies.TryGetValue(cell, out var list))            m_BlockedEnemies[cell] = list = new List<TDEnemyView>();        if (enemy != null && !list.Contains(enemy))            list.Add(enemy);    }    /// An enemy leaves the cell (killed or returned to pool) — decrements the counter and removes the reference.    public void OnEnemyUnblocked(Vector2Int cell, TDEnemyView enemy)    {        if (m_Operators.TryGetValue(cell, out var info))            m_Operators[cell] = (info.capacity, Mathf.Max(0, info.count - 1));        if (m_BlockedEnemies.TryGetValue(cell, out var list))            list.Remove(enemy);    }    /// Returns a snapshot of all enemies currently blocked at the given cell (never null, may be empty).    public List<TDEnemyView> GetBlockedEnemies(Vector2Int cell)    {        if (m_BlockedEnemies.TryGetValue(cell, out var list))            return new List<TDEnemyView>(list); // snapshot to avoid modifying while iterating        return new List<TDEnemyView>();    }}
+using System.Collections.Generic;
+using UnityEngine;
+
+/// <summary>
+/// Singleton registry for operators placed on path cells.
+///
+/// Responsibilities:
+/// 1. Track valid operator cells (path cells, excluding gate cells)
+/// 2. Track operator positions + block capacity / blocked enemy references
+/// 3. CanBlock(cell) → used by TDEnemyView when stepping onto a cell
+/// 4. GetBlockedEnemies(cell) → used by TDOperatorView when attacking
+/// </summary>
+public class TDOperatorRegistry
+{
+    public static TDOperatorRegistry api;
+
+    // Valid path cells where operators can be placed (gate cells excluded)
+    private readonly HashSet<Vector2Int> m_ValidOperatorCells = new HashSet<Vector2Int>();
+
+    // cell → (blockCapacity, currentBlockedCount)
+    private readonly Dictionary<Vector2Int, (int capacity, int count)> m_Operators
+        = new Dictionary<Vector2Int, (int, int)>();
+
+    // cell → list of enemies currently blocked at that cell
+    private readonly Dictionary<Vector2Int, List<TDEnemyView>> m_BlockedEnemies
+        = new Dictionary<Vector2Int, List<TDEnemyView>>();
+
+    // cell → TDOperatorView standing at that cell (so enemies can call TakeDamage on it)
+    private readonly Dictionary<Vector2Int, TDOperatorView> m_OperatorViews
+        = new Dictionary<Vector2Int, TDOperatorView>();
+
+    // ─── Path cell registration ───────────────────────────────────────────────
+
+    public void RegisterPathCell(Vector2Int cell)
+        => m_ValidOperatorCells.Add(cell);
+
+    public bool IsValidOperatorCell(Vector2Int cell)
+        => m_ValidOperatorCells.Contains(cell);
+
+    public List<Vector2Int> GetValidOperatorCells()
+        => new List<Vector2Int>(m_ValidOperatorCells);
+
+    // ─── Operator management ──────────────────────────────────────────────────
+
+    public void RegisterOperator(Vector2Int cell, int blockCapacity)
+    {
+        m_Operators[cell] = (Mathf.Max(1, blockCapacity), 0);
+        m_BlockedEnemies[cell] = new List<TDEnemyView>();
+        Debug.Log($"[OperatorRegistry] Operator registered at {cell}, blockCapacity={blockCapacity}");
+    }
+
+    /// Called from TDOperatorView.Init() to store the view reference (used so enemies can counter-attack).
+    public void RegisterOperatorView(Vector2Int cell, TDOperatorView view)
+        => m_OperatorViews[cell] = view;
+
+    /// Returns the TDOperatorView at the given cell (null if none is registered).
+    public TDOperatorView GetOperatorView(Vector2Int cell)
+        => m_OperatorViews.TryGetValue(cell, out var v) ? v : null;
+
+    /// Unregisters the operator — automatically force-unblocks all enemies currently held at that cell.
+    public void UnregisterOperator(Vector2Int cell)
+    {
+        if (m_BlockedEnemies.TryGetValue(cell, out var list))
+        {
+            // Snapshot to avoid modifying the list while iterating
+            var snapshot = new List<TDEnemyView>(list);
+            list.Clear();
+            foreach (var enemy in snapshot)
+                enemy?.ForceUnblock();
+        }
+        m_Operators.Remove(cell);
+        m_BlockedEnemies.Remove(cell);
+        m_OperatorViews.Remove(cell);
+    }
+
+    public bool HasOperatorAt(Vector2Int cell)
+        => m_Operators.ContainsKey(cell);
+
+    // ─── Blocking state ───────────────────────────────────────────────────────
+
+    /// True if the cell has a registered operator AND still has available block slots.
+    public bool CanBlock(Vector2Int cell)
+    {
+        if (!m_Operators.TryGetValue(cell, out var info)) return false;
+        return info.count < info.capacity;
+    }
+
+    /// An enemy starts being blocked — increments the counter and stores the reference.
+    public void OnEnemyBlocked(Vector2Int cell, TDEnemyView enemy)
+    {
+        if (m_Operators.TryGetValue(cell, out var info))
+            m_Operators[cell] = (info.capacity, info.count + 1);
+
+        if (!m_BlockedEnemies.TryGetValue(cell, out var list))
+            m_BlockedEnemies[cell] = list = new List<TDEnemyView>();
+        if (enemy != null && !list.Contains(enemy))
+            list.Add(enemy);
+    }
+
+    /// An enemy leaves the cell (killed or returned to pool) — decrements the counter and removes the reference.
+    public void OnEnemyUnblocked(Vector2Int cell, TDEnemyView enemy)
+    {
+        if (m_Operators.TryGetValue(cell, out var info))
+            m_Operators[cell] = (info.capacity, Mathf.Max(0, info.count - 1));
+
+        if (m_BlockedEnemies.TryGetValue(cell, out var list))
+            list.Remove(enemy);
+    }
+
+    /// Returns a snapshot of all enemies currently blocked at the given cell (never null, may be empty).
+    public List<TDEnemyView> GetBlockedEnemies(Vector2Int cell)
+    {
+        if (m_BlockedEnemies.TryGetValue(cell, out var list))
+            return new List<TDEnemyView>(list); // snapshot to avoid modifying while iterating
+        return new List<TDEnemyView>();
+    }
+}

@@ -1,1 +1,41 @@
-﻿using UnityEngine;using UnityEngine.UI;using UnityEngine.UI.ProceduralImage;public class TDHPBarView : MonoBehaviour{    [SerializeField] private ProceduralImage m_Fill;    // Serialized so each prefab (enemy vs operator) can customize the bar height relative to the root    [SerializeField] private float m_YOffset = 2.5f;    private void Awake()    {        if (transform.parent == null) return;        float ps = transform.parent.lossyScale.x;        float s = ps > 0f ? TDConstant.HPBAR_DESIRED_WORLD_WIDTH / (TDConstant.HPBAR_CANVAS_PIXEL_WIDTH * ps) : 0.008f;        transform.localScale = new Vector3(s, s, s);    }    private void LateUpdate()    {        if (transform.parent == null) return;        // Parent (enemy) rotates via LookRotation - must re-apply world rotation every frame to keep the billboard tilt        transform.position = transform.parent.position + new Vector3(0f, m_YOffset, 0f);        transform.rotation = Quaternion.Euler(30f, 0f, 0f);    }    public void Show() => gameObject.SetActive(true);    public void Hide() => gameObject.SetActive(false);    public void UpdateHP(float current, float max)    {        if (m_Fill == null || max <= 0f) return;        m_Fill.fillAmount = Mathf.Clamp01(current / max);    }    public void ResetBar()    {        if (m_Fill != null) m_Fill.fillAmount = 1f;        Hide();    }}
+using UnityEngine;
+using UnityEngine.UI;
+using UnityEngine.UI.ProceduralImage;
+
+public class TDHPBarView : MonoBehaviour
+{
+    [SerializeField] private ProceduralImage m_Fill;
+    // Serialized so each prefab (enemy vs operator) can customize the bar height relative to the root
+    [SerializeField] private float m_YOffset = 2.5f;
+
+    private void Awake()
+    {
+        if (transform.parent == null) return;
+        float ps = transform.parent.lossyScale.x;
+        float s = ps > 0f ? TDConstant.HPBAR_DESIRED_WORLD_WIDTH / (TDConstant.HPBAR_CANVAS_PIXEL_WIDTH * ps) : 0.008f;
+        transform.localScale = new Vector3(s, s, s);
+    }
+
+    private void LateUpdate()
+    {
+        if (transform.parent == null) return;
+        // Parent (enemy) rotates via LookRotation - must re-apply world rotation every frame to keep the billboard tilt
+        transform.position = transform.parent.position + new Vector3(0f, m_YOffset, 0f);
+        transform.rotation = Quaternion.Euler(30f, 0f, 0f);
+    }
+
+    public void Show() => gameObject.SetActive(true);
+    public void Hide() => gameObject.SetActive(false);
+
+    public void UpdateHP(float current, float max)
+    {
+        if (m_Fill == null || max <= 0f) return;
+        m_Fill.fillAmount = Mathf.Clamp01(current / max);
+    }
+
+    public void ResetBar()
+    {
+        if (m_Fill != null) m_Fill.fillAmount = 1f;
+        Hide();
+    }
+}

@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 
 /// Wires gameplay events → TDAudioService.BGM.
 /// Init/Cleanup called from TDControl.InitOtherControl() alongside gameplay controls.

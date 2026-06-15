@@ -1,1 +1,13 @@
-﻿using System.Collections.Generic;using UnityEngine;public interface ITowerRangeDTO{    // Maximum radius for scanning candidates from the Registry — each DTO reports its own value    float DetectionRadius { get; }    bool IsInRange(Vector3 towerPosition, Vector3 enemyPosition, Quaternion towerRotation);    // Returns the list of grid cells that fall within the range pattern — used for area damage    List<Vector2Int> GetCellsInRange(Vector2Int towerCell, Quaternion towerRotation);}
+using System.Collections.Generic;
+using UnityEngine;
+
+public interface ITowerRangeDTO
+{
+    // Maximum radius for scanning candidates from the Registry — each DTO reports its own value
+    float DetectionRadius { get; }
+
+    bool IsInRange(Vector3 towerPosition, Vector3 enemyPosition, Quaternion towerRotation);
+
+    // Returns the list of grid cells that fall within the range pattern — used for area damage
+    List<Vector2Int> GetCellsInRange(Vector2Int towerCell, Quaternion towerRotation);
+}

@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using DG.Tweening;
 using TDEnums;
 using UnityEngine;
@@ -6,7 +6,10 @@ using UnityEngine;
 /// VFX + camera shake system — SFX delegated to TDAudioService.SFX.
 /// Init() is called from TDControl.InitOtherControl().
 public static class TDEffectManager
-{    // Cached main camera (Camera.main does a tag search per call); re-resolved after scene change    private static Camera s_MainCam;    private static Camera MainCam => s_MainCam != null ? s_MainCam : (s_MainCam = Camera.main);
+{
+    // Cached main camera (Camera.main does a tag search per call); re-resolved after scene change
+    private static Camera s_MainCam;
+    private static Camera MainCam => s_MainCam != null ? s_MainCam : (s_MainCam = Camera.main);
     private static readonly Dictionary<GameEventKey, EffectDef> s_Effects = new();
     private static readonly Dictionary<GameObject, Queue<GameObject>> s_Pools = new();
     private static readonly List<Vector3> s_GatePositions = new();

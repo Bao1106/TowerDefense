@@ -676,6 +676,19 @@
     EnemyDied_Boss:             0.85  (highlight moment, to nhất)
 
 
+  ── LINE-ENDING FIX: 95 file lone-CR → CRLF ─────────────────────────────────
+
+  Triệu chứng: 95 file .cs hiển thị thành 1 dòng duy nhất trong editor/git/grep.
+  Nguyên nhân: script "xóa column alignment" (đầu S64) dùng
+    $lines = $original -split "(\r\n|\r|\n)"  (capture group → tách cả separator)
+    rồi mỗi phần tử chạy regex ^(\s*)(.+)$
+  Separator "\r\n" MATCH regex này: trong .NET . khớp \r nhưng KHÔNG khớp \n,
+  $ khớp ngay trước \n cuối → bắt (.+)=\r, BỎ \n.
+  → mọi \r\n rụng \n thành lone-CR (kiểu xuống dòng Mac cổ).
+  Compiler C#/Unity coi lone-CR là newline hợp lệ → KHÔNG báo lỗi → ẩn suốt.
+
+  Fix: normalize toàn bộ 111 file .cs → CRLF (chuẩn C#/VS/Unity Windows,
+  khớp core.autocrlf=true). Quy trình: \r\n→\n, \r→\n, \n→\r\n. Verified 0 lỗi.
 ================================================================================
   TODO — DEVELOPMENT PRIORITY                              [updated 2026-06-08]
 ================================================================================
@@ -855,6 +868,19 @@
     + if (!IsInBounds(cell)) return Vector3.zero
 
 
+  ── LINE-ENDING FIX: 95 file lone-CR → CRLF ─────────────────────────────────
+
+  Triệu chứng: 95 file .cs hiển thị thành 1 dòng duy nhất trong editor/git/grep.
+  Nguyên nhân: script "xóa column alignment" (đầu S64) dùng
+    $lines = $original -split "(\r\n|\r|\n)"  (capture group → tách cả separator)
+    rồi mỗi phần tử chạy regex ^(\s*)(.+)$
+  Separator "\r\n" MATCH regex này: trong .NET . khớp \r nhưng KHÔNG khớp \n,
+  $ khớp ngay trước \n cuối → bắt (.+)=\r, BỎ \n.
+  → mọi \r\n rụng \n thành lone-CR (kiểu xuống dòng Mac cổ).
+  Compiler C#/Unity coi lone-CR là newline hợp lệ → KHÔNG báo lỗi → ẩn suốt.
+
+  Fix: normalize toàn bộ 111 file .cs → CRLF (chuẩn C#/VS/Unity Windows,
+  khớp core.autocrlf=true). Quy trình: \r\n→\n, \r→\n, \n→\r\n. Verified 0 lỗi.
 ================================================================================
   TODO — DEVELOPMENT PRIORITY                              [updated 2026-06-08]
 ================================================================================
@@ -1751,6 +1777,19 @@
   → Xóa instance trên Canvas, scene saved. Migration Find-based chính là
   thứ giúp lộ bug — validate giá trị của approach.
 
+  ── LINE-ENDING FIX: 95 file lone-CR → CRLF ─────────────────────────────────
+
+  Triệu chứng: 95 file .cs hiển thị thành 1 dòng duy nhất trong editor/git/grep.
+  Nguyên nhân: script "xóa column alignment" (đầu S64) dùng
+    $lines = $original -split "(\r\n|\r|\n)"  (capture group → tách cả separator)
+    rồi mỗi phần tử chạy regex ^(\s*)(.+)$
+  Separator "\r\n" MATCH regex này: trong .NET . khớp \r nhưng KHÔNG khớp \n,
+  $ khớp ngay trước \n cuối → bắt (.+)=\r, BỎ \n.
+  → mọi \r\n rụng \n thành lone-CR (kiểu xuống dòng Mac cổ).
+  Compiler C#/Unity coi lone-CR là newline hợp lệ → KHÔNG báo lỗi → ẩn suốt.
+
+  Fix: normalize toàn bộ 111 file .cs → CRLF (chuẩn C#/VS/Unity Windows,
+  khớp core.autocrlf=true). Quy trình: \r\n→\n, \r→\n, \n→\r\n. Verified 0 lỗi.
 ================================================================================
   TODO — DEVELOPMENT PRIORITY                              [updated 2026-06-12]
 ================================================================================

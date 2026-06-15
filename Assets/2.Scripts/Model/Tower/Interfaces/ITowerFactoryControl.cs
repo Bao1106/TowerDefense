@@ -1,1 +1,6 @@
-﻿using UnityEngine;public interface ITowerFactoryControl{    void CreateUnit(GameObject prefab, Vector3 position, Quaternion rotation, TDTowerSlotInfo slotInfo);}
+using UnityEngine;
+
+public interface ITowerFactoryControl
+{
+    void CreateUnit(GameObject prefab, Vector3 position, Quaternion rotation, TDTowerSlotInfo slotInfo);
+}
