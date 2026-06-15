@@ -1,407 +1,54 @@
 using System.Collections.Generic;
-using TDEnums;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
-using Object = UnityEngine.Object;
-using UnityEngine.InputSystem;
-using UnityEngine.InputSystem.EnhancedTouch;
-using Touch = UnityEngine.InputSystem.EnhancedTouch.Touch;
-using TouchPhase = UnityEngine.InputSystem.TouchPhase;
 
+/// <summary>
+/// The deploy slot bar only: builds slot buttons, drives cost/icon/interactability,
+/// and on PointerDown hands off to TDDeployController (which owns the ghost + gesture + diamond).
+/// </summary>
 public class TDSlotHolderMainView : MonoBehaviour
 {
-    // Cached main camera (Camera.main does a tag search per call)
-    private Camera m_MainCam;
-    private Camera MainCam => m_MainCam != null ? m_MainCam : (m_MainCam = Camera.main);
-
-    private GameObject m_TowerHighlightPrefab;
-    private GameObject m_RangeHighlightPrefab;
-    private GameObject m_TowerHolderPrefab; // UI button prefab for each slot
-    private Transform m_TowerHolderContainer; // parent that holds all slot holders
-
-    // Fraction of cellSize used as the direction-selection threshold (35% = 0.7f when cellSize=2)
-    // Must be < 50% so Phase 2 triggers BEFORE GetNearestGridPosition snaps to a new cell
-    // Touch offset: the ghost appears ABOVE the actual touch point so it is not obscured by the finger.
-    // A user's fingertip covers roughly 1 cell → offset ~10% of screen height.
-    // Applied on Android only. Tune this constant as needed.
-    // Minimum time (seconds) that Phase 2 must be held before releasing the finger triggers placement.
-    // Filters micro-lifts: Android touch sensors sometimes report a brief Ended while dragging slowly,
-    // immediately followed by a new Began — the finger appears still touching but placement would fire.
-    // 0.2s is enough to filter micro-lifts without affecting deliberate actions.
-    // Minimum time (seconds) the finger must remain on the same cell before Phase 2 can arm.
-    // Prevents Phase 2 from auto-triggering when dragging quickly over a valid cell (tower zone / path cell).
-    // Arknights style: drag onto a cell → hold for ~0.3s → direction selection appears.
+    private GameObject m_TowerHolderPrefab;
+    private Transform m_TowerHolderContainer;
     private readonly List<TDSlotHolderItemView> m_SlotHolders = new List<TDSlotHolderItemView>();
-    public static bool IsPlacingUnit { get; private set; }
 
-    private int m_CurrentSlotIndex = -1;
-    private GameObject m_CurrentTower;
-    private TowerType m_CurrentTowerType;
-    private OperatorType m_CurrentOperatorType;
-
-    private List<Vector3> m_ValidTowerPositions = new List<Vector3>();
-    private readonly List<GameObject> m_HighlightTiles = new List<GameObject>();
-    private readonly List<GameObject> m_RangeHighlightTiles = new List<GameObject>();
-    private Vector2Int m_LastRangeCell = new Vector2Int(int.MinValue, int.MinValue);
-    private int m_LastRangeRotIndex = -1;
-    private int m_CurrentRotationIndex;
-
-    // Phase 1: drag to a cell (position)
-    // Phase 2: swipe outside the threshold → selects direction
-    // Releasing the finger only places the unit after Phase 2 is reached
-    // Resets to false when the ghost moves to a new cell
-    private bool m_IsDirectionSelected;
-    private bool m_PhaseArmed; // true when the finger has entered the threshold → Phase 2 can trigger
-    private Vector3 m_LastSnappedPos = Vector3.negativeInfinity;
-    private bool m_TowerCreatedThisFrame; // guard: skip HandlePlacementInput on the first frame after the ghost is created
-    private int m_DragFingerId = -1; // Android: touchId of the finger that created the ghost; -1 = not locked
-    private float m_DirectionSelectedTime = -999f; // unscaled time when Phase 2 began (for TDConstant.MIN_PHASE2_DURATION)
-    private float m_CellEnterTime = -999f; // unscaled time when the finger entered the current cell (for TDConstant.MIN_CELL_HOLD_DURATION)
-
-    // Panel contains only the Cancel button — shown while the ghost tower is being held
+    private TDDeployController m_Deploy;
     private GameObject m_PlacementPanel;
 
     private void Start()
     {
-        EnhancedTouchSupport.Enable();
-        RegistryTowerControlEvents();
+        m_Deploy = gameObject.AddComponent<TDDeployController>();
         InitViews();
         InitTowerHolder();
         InitPlacementPanel();
-    }
+        m_Deploy.Init(m_PlacementPanel);
 
-    // ─── Update ──────────────────────────────────────────────────────────────
-
-    private void Update()
-    {
-        if (m_CurrentTower == null) return;
-
-        bool skipInput = m_TowerCreatedThisFrame;
-        if (m_TowerCreatedThisFrame) m_TowerCreatedThisFrame = false;
-
-#if UNITY_ANDROID && !UNITY_EDITOR
-        // Lock the dragging finger to the touchId of the first touch that appeared after the ghost was created.
-        // All other fingers (multi-touch) are ignored → prevents accidental placement from multi-touch.
-        if (m_DragFingerId < 0 && Touch.activeTouches.Count > 0)
-            m_DragFingerId = Touch.activeTouches[0].touchId;
-#endif
-
-        // The ghost always follows the finger — even while over UI (buttons/slots),
-        // so the player can drag from a slot straight onto the map without lifting their finger.
-        UpdateGhostTransform();
-        RefreshRangeHighlights();
-
-        if (skipInput) return;
-
-#if UNITY_ANDROID && !UNITY_EDITOR
-        var dragTouch = FindDragTouch();
-        // TouchPhase.Ended must always be processed — even when the finger lifts over UI (slot button),
-        // to ensure CancelPlacement() is never skipped.
-        bool fingerEnded = dragTouch.HasValue && dragTouch.Value.phase == TouchPhase.Ended;
-        if (!fingerEnded && IsPointerOverUI()) return;
-        if (!dragTouch.HasValue) return; // drag touch lost (rare) — skip
-#else
-        if (IsPointerOverUI()) return;
-#endif
-        HandlePlacementInput();
-    }
-
-    // MOBILE: Phase 1 ghost follows finger → Phase 2 ghost freezes when the finger enters the nearby zone
-    // threshold = 35% cellSize (< snap boundary 50%) → triggers before snap changes cell
-    // direction is held until placement or cancellation
-    // DESKTOP: ghost always follows the mouse; direction updates visually with the mouse (no freeze)
-    // E/Q for manual rotation; LMB to place at any time
-    private void UpdateGhostTransform()
-    {
-        Vector3 fingerWorld = GetFingerWorldPosition();
-        if (fingerWorld == Vector3.negativeInfinity) return;
-
-#if UNITY_ANDROID && !UNITY_EDITOR
-        // INPUT-05: on the Ended frame, only HandlePlacementInput processes it — do not update transform
-        var ghostDragTouch = FindDragTouch();
-        if (!ghostDragTouch.HasValue || ghostDragTouch.Value.phase == TouchPhase.Ended) return;
-
-        // ── Mobile ──────────────────────────────────────────────────────────
-        if (m_IsDirectionSelected)
-        {
-            Vector3 delta = fingerWorld - m_LastSnappedPos;
-            delta.y = 0f;
-
-            // Pulling finger back toward cell center → exits Phase 2 and returns to Phase 1
-            float threshold = TDGridMainModel.api.cellSize * TDConstant.DIRECTION_THRESHOLD_RATIO;
-            if (delta.sqrMagnitude <= threshold * threshold)
-            {
-                m_IsDirectionSelected = false;
-                return;
-            }
-
-            int rotIndex = ComputeRotationIndex(delta);
-            if (rotIndex != m_CurrentRotationIndex)
-            {
-                m_CurrentRotationIndex = rotIndex;
-                m_CurrentTower.transform.rotation =
-                    Quaternion.Euler(0f, TDConstant.CONFIG_TOWER_ROTATIONS[m_CurrentRotationIndex], 0f);
-            }
-            return;
-        }
-
-        Vector3 snappedPosMobile = TDGridMainModel.api.GetNearestGridPosition(fingerWorld);
-        bool cellChanged = snappedPosMobile != m_LastSnappedPos;
-        if (cellChanged)
-        {
-            m_LastSnappedPos = snappedPosMobile;
-            m_IsDirectionSelected = false;
-            m_PhaseArmed = false;
-            m_CellEnterTime = Time.unscaledTime; // record the time the finger entered the new cell
-        }
-        m_CurrentTower.transform.position = new Vector3(m_LastSnappedPos.x, TDConstant.CONFIG_TOWER_PLACE_Y, m_LastSnappedPos.z);
-
-        Vector3 dirMobile = fingerWorld - m_LastSnappedPos;
-        dirMobile.y = 0f;
-        float thresholdMobile = TDGridMainModel.api.cellSize * TDConstant.DIRECTION_THRESHOLD_RATIO;
-        bool cellOk = m_CurrentTowerType == TowerType.Operator
-            ? IsValidOperatorPlacement(m_LastSnappedPos)
-            : TDGridMainModel.api.IsValidPlacement(m_LastSnappedPos);
-
-        bool insideThreshold = dirMobile.sqrMagnitude <= thresholdMobile * thresholdMobile;
-        bool heldLongEnough = Time.unscaledTime - m_CellEnterTime >= TDConstant.MIN_CELL_HOLD_DURATION;
-
-        // Arm only when: inside the threshold + held on the cell long enough (not armed during fast drag)
-        if (!cellChanged && insideThreshold && heldLongEnough)
-            m_PhaseArmed = true;
-
-        // Phase 2 triggers only when: armed + outside threshold + cell is valid
-        if (!cellChanged && m_PhaseArmed && !insideThreshold && cellOk)
-        {
-            if (!m_IsDirectionSelected)
-                m_DirectionSelectedTime = Time.unscaledTime; // start counting TDConstant.MIN_PHASE2_DURATION
-            m_IsDirectionSelected = true;
-            m_CurrentRotationIndex = ComputeRotationIndex(dirMobile);
-            m_CurrentTower.transform.rotation =
-                Quaternion.Euler(0f, TDConstant.CONFIG_TOWER_ROTATIONS[m_CurrentRotationIndex], 0f);
-        }
-#else
-        // ── Desktop / Editor ─────────────────────────────────────────────────
-        // Ghost always follows the mouse — never freezes
-        Vector3 snappedPos = TDGridMainModel.api.GetNearestGridPosition(fingerWorld);
-        if (snappedPos != m_LastSnappedPos)
-            m_LastSnappedPos = snappedPos;
-        m_CurrentTower.transform.position = new Vector3(m_LastSnappedPos.x, TDConstant.CONFIG_TOWER_PLACE_Y, m_LastSnappedPos.z);
-
-        // Direction always follows the mouse — no threshold needed
-        // Whichever side of the cell center the mouse is on, the tower faces that way
-        Vector3 dir = fingerWorld - m_LastSnappedPos;
-        dir.y = 0f;
-        if (dir.sqrMagnitude > 0.01f)
-        {
-            int rotIndex = ComputeRotationIndex(dir);
-            if (rotIndex != m_CurrentRotationIndex)
-            {
-                m_CurrentRotationIndex = rotIndex;
-                m_CurrentTower.transform.rotation =
-                    Quaternion.Euler(0f, TDConstant.CONFIG_TOWER_ROTATIONS[m_CurrentRotationIndex], 0f);
-            }
-        }
-#endif
-    }
-
-    private void HandlePlacementInput()
-    {
-#if UNITY_ANDROID && !UNITY_EDITOR
-        // Mobile (Arknights-style 2-phase):
-        // Phase 1 — drag to a cell: lifting the finger does NOT place (m_IsDirectionSelected = false)
-        // Phase 2 — swipe outside the threshold: m_IsDirectionSelected = true → lifting finger = place
-        // Only accepts Ended from the locked finger (m_DragFingerId) → prevents accidental multi-touch placement.
-        var placeDragTouch = FindDragTouch();
-        if (placeDragTouch.HasValue && placeDragTouch.Value.phase == TouchPhase.Ended)
-        {
-            if (m_IsDirectionSelected &&
-                Time.unscaledTime - m_DirectionSelectedTime >= TDConstant.MIN_PHASE2_DURATION)
-            {
-                // Finger released after holding Phase 2 long enough → place (deliberate action).
-                TDUserInputControl.api.OnMouseButton0Clicked();
-            }
-            else
-            {
-                // Finger lifted during Phase 1, or Ended too quickly after entering Phase 2 (micro-lift).
-                // Micro-lift: Android sensor reports brief Ended then immediately Began again → cancel instead of misplacing.
-                CancelPlacement();
-            }
-        }
-#else
-        // Desktop: LMB click = place, E/Q = manual rotate, RMB = cancel
-        if (Mouse.current.leftButton.wasPressedThisFrame)
-            TDUserInputControl.api.OnMouseButton0Clicked();
-        else if (Keyboard.current.eKey.wasPressedThisFrame)
-            TDUserInputControl.api.OnMouseButtonEClicked();
-        else if (Keyboard.current.qKey.wasPressedThisFrame)
-            TDUserInputControl.api.OnMouseButtonQClicked();
-        else if (Mouse.current.rightButton.wasPressedThisFrame)
-            TDUserInputControl.api.OnMouseButton1Clicked();
-#endif
-    }
-
-    // ─── Input helpers ───────────────────────────────────────────────────────
-
-    // Gets the world position of the finger / mouse by raycasting down onto the ground plane
-    private Vector3 GetFingerWorldPosition()
-    {
-        if (MainCam == null) return Vector3.negativeInfinity;
-
-#if UNITY_ANDROID && !UNITY_EDITOR
-        var posDragTouch = FindDragTouch();
-        if (!posDragTouch.HasValue) return Vector3.negativeInfinity;
-        // Shift the touch point upward so the ghost appears ABOVE the finger (avoids being obscured).
-        // A user's fingertip covers much more area than a mouse cursor → offset is needed to see the ghost.
-        Vector2 touchPos = posDragTouch.Value.screenPosition;
-        touchPos.y += Screen.height * TDConstant.TOUCH_SCREEN_Y_OFFSET_RATIO;
-        Ray ray = MainCam.ScreenPointToRay(touchPos);
-        var plane = new Plane(Vector3.up, Vector3.zero);
-        return plane.Raycast(ray, out float dist) ? ray.GetPoint(dist) : Vector3.negativeInfinity;
-#else
-        Vector3 screenPos = Touch.activeTouches.Count > 0
-            ? (Vector3)Touch.activeTouches[0].screenPosition
-            : (Vector3)Mouse.current.position.ReadValue();
-        Ray ray = MainCam.ScreenPointToRay(screenPos);
-        return Physics.Raycast(ray, out RaycastHit hit) ? hit.point : Vector3.negativeInfinity;
-#endif
-    }
-
-    // delta = fingerWorld - cellCenter (Y=0)
-    // Compares |dx| vs |dz| → determines the dominant axis → maps to a rotation index
-    // index 0 = 0° (+Z, forward)
-    // index 1 = 90° (+X, right)
-    // index 2 = 180° (-Z, backward)
-    // index 3 = 270° (-X, left)
-    private int ComputeRotationIndex(Vector3 delta)
-    {
-        if (Mathf.Abs(delta.x) >= Mathf.Abs(delta.z))
-            return delta.x > 0f ? 1 : 3;
-        else
-            return delta.z > 0f ? 0 : 2;
-    }
-
-    // Finds the touch currently locked to the active drag session based on m_DragFingerId.
-    // If not yet locked (= -1), returns activeTouches[0] as a fallback.
-    // Returns null if no matching touch is found.
-#if UNITY_ANDROID && !UNITY_EDITOR
-    private Touch? FindDragTouch()
-    {
-        if (m_DragFingerId < 0)
-            return Touch.activeTouches.Count > 0 ? Touch.activeTouches[0] : (Touch?)null;
-        foreach (var t in Touch.activeTouches)
-            if (t.touchId == m_DragFingerId) return t;
-        return null;
-    }
-#endif
-
-    // Mobile uses RaycastAll — more reliable than IsPointerOverGameObject(fingerId) on Android
-    private static readonly List<RaycastResult> s_RaycastResults = new List<RaycastResult>();
-    private bool IsPointerOverUI()
-    {
-        if (EventSystem.current == null) return false;
-#if UNITY_ANDROID && !UNITY_EDITOR
-        var uiDragTouch = FindDragTouch();
-        if (uiDragTouch.HasValue)
-        {
-            var eventData = new PointerEventData(EventSystem.current)
-                { position = uiDragTouch.Value.screenPosition };
-            s_RaycastResults.Clear();
-            EventSystem.current.RaycastAll(eventData, s_RaycastResults);
-            return s_RaycastResults.Count > 0;
-        }
-        return false;
-#else
-        return EventSystem.current.IsPointerOverGameObject();
-#endif
-    }
-
-    // ─── Placement Panel ─────────────────────────────────────────────────────
-
-    private void InitPlacementPanel()
-    {
-        var panelT = transform.Find(TDConstant.GAMEPLAY_PLACEMENT_PANEL);
-        if (panelT == null)
-        {
-            Debug.LogWarning("<color=orange>TDTowerMainView: PlacementPanel not found in hierarchy</color>");
-            return;
-        }
-
-        m_PlacementPanel = panelT.gameObject;
-
-        // Only wire the Cancel button — rotate & confirm are handled by the Arknights mechanism + TouchPhase.Ended
-        WireButton(TDConstant.GAMEPLAY_BTN_CANCEL_PLACE, () => TDUserInputControl.api.OnMouseButton1Clicked());
-
-        m_PlacementPanel.SetActive(false);
-    }
-
-    private void WireButton(string path, UnityEngine.Events.UnityAction action)
-    {
-        var btn = transform.Find(path)?.GetComponent<Button>();
-        if (btn != null)
-            btn.onClick.AddListener(action);
-        else
-            Debug.LogWarning($"<color=orange>TDTowerMainView: Button not found at '{path}'</color>");
-    }
-
-    private void ShowPlacementPanel() => m_PlacementPanel?.SetActive(true);
-    private void HidePlacementPanel() => m_PlacementPanel?.SetActive(false);
-
-    // ─── Events ──────────────────────────────────────────────────────────────
-
-    private void RegistryTowerControlEvents()
-    {
-        TDTowerMainControl.api.onGetTowerPrefab += OnCreateTower;
-        TDTowerMainControl.api.onGetCurrentRotationIndex += OnGetCurrentRotationIndex;
-        TDPlaceTowerControl.api.onPlaceTowerSuccess += OnPlaceTowerSuccess;
-        TDUserInputControl.api.onMouseButton0Clicked += OnMouseButton0Clicked;
-        TDUserInputControl.api.onMouseButton1Clicked += OnMouseButton1Clicked;
-        TDUserInputControl.api.onMouseButtonEClicked += OnMouseButtonEClicked;
-        TDUserInputControl.api.onMouseButtonQClicked += OnMouseButtonQClicked;
-        TDEnemyPathMainControl.api.onValidTowerCellsReady += OnValidTowerCellsReady;
         TDGoldControl.api.onGoldChanged += RefreshHolderInteractability;
     }
 
     private void OnDestroy()
     {
-        EnhancedTouchSupport.Disable();
-        TDTowerMainControl.api.onGetTowerPrefab -= OnCreateTower;
-        TDTowerMainControl.api.onGetCurrentRotationIndex -= OnGetCurrentRotationIndex;
-        TDPlaceTowerControl.api.onPlaceTowerSuccess -= OnPlaceTowerSuccess;
-        TDUserInputControl.api.onMouseButton0Clicked -= OnMouseButton0Clicked;
-        TDUserInputControl.api.onMouseButton1Clicked -= OnMouseButton1Clicked;
-        TDUserInputControl.api.onMouseButtonEClicked -= OnMouseButtonEClicked;
-        TDUserInputControl.api.onMouseButtonQClicked -= OnMouseButtonQClicked;
-        TDEnemyPathMainControl.api.onValidTowerCellsReady -= OnValidTowerCellsReady;
-
         if (TDGoldControl.api != null)
             TDGoldControl.api.onGoldChanged -= RefreshHolderInteractability;
     }
 
-    // ─── Tower Holders ───────────────────────────────────────────────────────
+    // ── Slot bar ────────────────────────────────────────────────────────────────
 
     private void InitViews()
     {
         m_TowerHolderPrefab = TDResourceObject.GetResource<GameObject>(TDConstant.PREFAB_SLOT_HOLDER);
-        m_RangeHighlightPrefab = TDResourceObject.GetResource<GameObject>(TDConstant.PREFAB_RANGE_HIGH_LIGHT);
         m_TowerHolderContainer = transform;
     }
-    
+
     private void InitTowerHolder()
     {
         if (m_TowerHolderPrefab == null)
         {
-            Debug.LogError("<color=red>TDTowerMainView: m_TowerHolderPrefab is not assigned!</color>");
-            return;
-        }
-        if (m_TowerHolderContainer == null)
-        {
-            Debug.LogError("<color=red>TDTowerMainView: m_TowerHolderContainer is not assigned!</color>");
+            Debug.LogError("<color=red>TDSlotHolderMainView: m_TowerHolderPrefab is not assigned!</color>");
             return;
         }
 
-        // Build the slot list from config (randomized if > 8)
         TDTowerMainControl.api.BuildSlots();
 
         foreach (var slot in TDTowerMainControl.api.ActiveSlots)
@@ -431,324 +78,35 @@ public class TDSlotHolderMainView : MonoBehaviour
             int index = i;
             var btn = m_SlotHolders[i].towerSelectButton;
 
-            // PointerDown instead of onClick: ghost is created the instant the finger presses,
-            // allowing a continuous drag from the slot button straight onto the map without lifting.
+            // PointerDown (not onClick): the ghost is created the instant the finger presses,
+            // so the player can drag from the slot straight onto the map without lifting.
             var trigger = btn.gameObject.GetComponent<EventTrigger>()
                        ?? btn.gameObject.AddComponent<EventTrigger>();
             var entry = new EventTrigger.Entry { eventID = EventTriggerType.PointerDown };
             entry.callback.AddListener(_ =>
             {
-                m_CurrentSlotIndex = index;
+                m_Deploy.SetSlotIndex(index);
                 TDTowerMainControl.api.OnSelectTowerHolder(index);
             });
             trigger.triggers.Add(entry);
         }
     }
 
-    // ─── Valid Positions & Highlights ────────────────────────────────────────
+    // ── Placement panel (legacy Cancel button — kept as fallback) ────────────────
 
-    private void OnValidTowerCellsReady(List<Vector3> positions)
+    private void InitPlacementPanel()
     {
-        m_ValidTowerPositions = positions;
-    }
-
-    private void OnCreateTower(TDTowerSlotInfo slot)
-    {
-        if (m_CurrentTower != null)
-            Destroy(m_CurrentTower);
-
-        m_CurrentTower = Instantiate(slot.prefab, new Vector3(0f, -999f, 0f), Quaternion.identity);
-        var unit = m_CurrentTower.GetComponent<IPlacedUnit>() as MonoBehaviour;
-        if (unit != null) unit.enabled = false;
-        foreach (var col in m_CurrentTower.GetComponentsInChildren<Collider>())
-            col.enabled = false;
-        IsPlacingUnit = true;
-        m_TowerCreatedThisFrame = true; // skip input this frame to avoid an immediate cancel
-        TDGameEventBus.UnitPickup();
-        m_CurrentTower.transform.localScale = slot.towerType == TowerType.Operator
-            ? new Vector3(1.5f, 1.5f, 1.5f)
-            : new Vector3(1.0f, 1.0f, 1.0f);
-        m_CurrentRotationIndex = 0;
-        m_IsDirectionSelected = false;
-        m_PhaseArmed = false;
-        m_LastSnappedPos = Vector3.negativeInfinity;
-        m_DragFingerId = -1;
-        m_DirectionSelectedTime = -999f;
-        m_CellEnterTime = -999f;
-        m_CurrentTowerType = slot.towerType;
-        m_CurrentOperatorType = slot.operatorType;
-        m_LastRangeCell = new Vector2Int(int.MinValue, int.MinValue);
-        m_LastRangeRotIndex = -1;
-
-        if (slot.towerType == TowerType.Operator)
+        var panelT = transform.Find(TDConstant.GAMEPLAY_PLACEMENT_PANEL);
+        if (panelT == null)
         {
-            var opData = TDFlyweightOperatorDataSettings.api?.GetData(m_CurrentOperatorType);
-            if (opData?.deployZone == DeployZone.TowerZone)
-                ShowHighlights(); // TowerZone operator — highlights tower zone tiles (green)
-            else
-                ShowOperatorHighlights(); // PathCell operator — highlights path cells (blue)
-        }
-        else
-            ShowHighlights();
-
-        ShowPlacementPanel();
-    }
-
-    // ─── Range Highlights ────────────────────────────────────────────────────
-
-    private void RefreshRangeHighlights()
-    {
-        if (m_CurrentTower == null || m_RangeHighlightPrefab == null) return;
-
-        if (m_CurrentTowerType == TowerType.Operator)
-        {
-            RefreshOperatorRangeHighlights();
+            Debug.LogWarning("<color=orange>TDSlotHolderMainView: PlacementPanel not found in hierarchy</color>");
             return;
         }
+        m_PlacementPanel = panelT.gameObject;
 
-        Vector2Int cell = TDGridMainModel.api.WorldToCell(m_CurrentTower.transform.position);
-        int rotIdx = m_CurrentRotationIndex;
+        var cancelBtn = transform.Find(TDConstant.GAMEPLAY_BTN_CANCEL_PLACE)?.GetComponent<Button>();
+        cancelBtn?.onClick.AddListener(() => TDUserInputControl.api.OnMouseButton1Clicked());
 
-        if (cell == m_LastRangeCell && rotIdx == m_LastRangeRotIndex) return;
-        m_LastRangeCell = cell;
-        m_LastRangeRotIndex = rotIdx;
-
-        var data = TDFlyweightTowerDataSettings.api?.GetData(m_CurrentTowerType);
-        if (data?.rangeOffsets == null || data.rangeOffsets.Length == 0)
-        {
-            HideRangeHighlights();
-            return;
-        }
-
-        var rangeDto = new TDOffsetRangeDTO(data.rangeOffsets);
-        List<Vector2Int> cells = rangeDto.GetCellsInRange(cell, m_CurrentTower.transform.rotation);
-
-        ApplyRangeHighlights(cells);
-    }
-
-    private void RefreshOperatorRangeHighlights()
-    {
-        var data = TDFlyweightOperatorDataSettings.api?.GetData(m_CurrentOperatorType);
-        if (data?.rangeOffsets == null || data.rangeOffsets.Length == 0)
-        {
-            HideRangeHighlights();
-            return;
-        }
-
-        Vector2Int cell = TDGridMainModel.api.WorldToCell(m_CurrentTower.transform.position);
-        int rotIdx = m_CurrentRotationIndex;
-
-        if (cell == m_LastRangeCell && rotIdx == m_LastRangeRotIndex) return;
-        m_LastRangeCell = cell;
-        m_LastRangeRotIndex = rotIdx;
-
-        var rangeDto = new TDOffsetRangeDTO(data.rangeOffsets);
-        var cells = rangeDto.GetCellsInRange(cell, m_CurrentTower.transform.rotation);
-
-        ApplyRangeHighlights(cells);
-    }
-
-    private void ApplyRangeHighlights(List<Vector2Int> cells)
-    {
-        while (m_RangeHighlightTiles.Count < cells.Count)
-        {
-            var tile = Object.Instantiate(m_RangeHighlightPrefab);
-            tile.SetActive(false);
-            m_RangeHighlightTiles.Add(tile);
-        }
-
-        for (int i = 0; i < m_RangeHighlightTiles.Count; i++)
-        {
-            if (i < cells.Count)
-            {
-                Vector3 world = TDGridMainModel.api.CellToWorld(cells[i]);
-                m_RangeHighlightTiles[i].transform.position = new Vector3(world.x, TDConstant.CONFIG_RANGE_HIGHLIGHT_Y, world.z);
-                m_RangeHighlightTiles[i].SetActive(true);
-            }
-            else
-            {
-                m_RangeHighlightTiles[i].SetActive(false);
-            }
-        }
-    }
-
-    private void HideRangeHighlights()
-    {
-        foreach (var tile in m_RangeHighlightTiles)
-            if (tile != null) tile.SetActive(false);
-        m_LastRangeCell = new Vector2Int(int.MinValue, int.MinValue);
-        m_LastRangeRotIndex = -1;
-    }
-
-    private void ShowHighlights()
-    {
-        HideHighlights();
-        foreach (Vector3 pos in m_ValidTowerPositions)
-        {
-            if (!TDGridMainModel.api.IsValidPlacement(pos)) continue;
-
-            var adjustedPos = new Vector3(pos.x, 0.06f, pos.z);
-            GameObject tile = m_TowerHighlightPrefab != null
-                ? Instantiate(m_TowerHighlightPrefab, adjustedPos, Quaternion.identity)
-                : CreateHighlightTile(pos);
-
-            m_HighlightTiles.Add(tile);
-        }
-    }
-
-    // ─── Operator Highlights (path cells — blue) ────────────────────────────
-
-    private void ShowOperatorHighlights()
-    {
-        HideHighlights();
-        if (TDOperatorRegistry.api == null) return;
-
-        var cells = TDOperatorRegistry.api.GetValidOperatorCells();
-        foreach (var cell in cells)
-        {
-            // Skip cells that already have an operator
-            if (TDOperatorRegistry.api.HasOperatorAt(cell)) continue;
-
-            Vector3 world = TDGridMainModel.api.CellToWorld(cell);
-            GameObject go = CreateOperatorHighlightTile(world);
-            m_HighlightTiles.Add(go);
-        }
-    }
-
-    private GameObject CreateOperatorHighlightTile(Vector3 worldPos)
-    {
-        var go = GameObject.CreatePrimitive(PrimitiveType.Quad);
-        go.transform.position = new Vector3(worldPos.x, 0.15f, worldPos.z);
-        go.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
-
-        float size = TDGridMainModel.api.cellSize * 0.88f;
-        go.transform.localScale = new Vector3(size, size, 1f);
-
-        Object.Destroy(go.GetComponent<MeshCollider>());
-
-        var rend = go.GetComponent<MeshRenderer>();
-        rend.sharedMaterial = TDStageMaterialCache.OperatorHighlight;
-
-        return go;
-    }
-
-    // Fallback tile (if no prefab is assigned) — green horizontal Quad
-    private GameObject CreateHighlightTile(Vector3 worldPos)
-    {
-        var go = GameObject.CreatePrimitive(PrimitiveType.Quad);
-        go.transform.position = new Vector3(worldPos.x, 0.51f, worldPos.z);
-        go.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
-
-        float size = TDGridMainModel.api.cellSize * 0.88f;
-        go.transform.localScale = new Vector3(size, size, 1f);
-
-        Destroy(go.GetComponent<MeshCollider>());
-
-        var rend = go.GetComponent<MeshRenderer>();
-        rend.sharedMaterial = TDStageMaterialCache.TowerHighlight;
-
-        return go;
-    }
-
-    private void HideHighlights()
-    {
-        foreach (var tile in m_HighlightTiles)
-            Destroy(tile);
-        m_HighlightTiles.Clear();
-    }
-
-    // ─── Input Handlers ──────────────────────────────────────────────────────
-
-    private void OnGetCurrentRotationIndex(int index)
-    {
-        m_CurrentRotationIndex = index;
-    }
-
-    private void OnPlaceTowerSuccess(bool isPlaced)
-    {
-        if (isPlaced)
-        {
-            // Read cost directly from the active slot (no hardcoded TowerType check needed)
-            int cost = (m_CurrentSlotIndex >= 0 && m_CurrentSlotIndex < TDTowerMainControl.api.ActiveSlots.Count)
-                ? TDTowerMainControl.api.ActiveSlots[m_CurrentSlotIndex].cost
-                : 0;
-            TDGoldControl.api.SpendGold(cost);
-            TDGameEventBus.TowerPlaced();
-
-            Destroy(m_CurrentTower);
-            m_CurrentTower = null;
-            IsPlacingUnit = false;
-            m_DragFingerId = -1;
-            TDPlaceTowerControl.api.onPlaceTowerSuccess?.Invoke(false);
-            HideHighlights();
-            HideRangeHighlights();
-            HidePlacementPanel();
-        }
-    }
-
-    // Desktop keyboard: Q = rotate counter-clockwise
-    private void OnMouseButtonQClicked(bool isClicked)
-    {
-        if (isClicked)
-        {
-            TDTowerMainControl.api.RotateTowerCounterClockwise(m_CurrentTower, m_CurrentRotationIndex);
-            TDUserInputControl.api.onMouseButtonQClicked(false);
-        }
-    }
-
-    // Desktop keyboard: E = rotate clockwise
-    private void OnMouseButtonEClicked(bool isClicked)
-    {
-        if (isClicked)
-        {
-            TDTowerMainControl.api.RotateTowerClockwise(m_CurrentTower, m_CurrentRotationIndex);
-            TDUserInputControl.api.onMouseButtonEClicked(false);
-        }
-    }
-
-    // RMB (desktop) or Cancel button (mobile)
-    private void OnMouseButton1Clicked(bool isClicked)
-    {
-        if (isClicked)
-        {
-            CancelPlacement();
-            TDUserInputControl.api.onMouseButton1Clicked(false);
-        }
-    }
-
-    // LMB (desktop) or TouchPhase.Ended (mobile)
-    private void OnMouseButton0Clicked(bool isClicked)
-    {
-        if (isClicked)
-        {
-            TDTowerMainControl.api.OnPlaceTower(m_CurrentTower);
-            TDUserInputControl.api.onMouseButton0Clicked(false);
-        }
-    }
-
-    public void CancelPlacement()
-    {
-        if (m_CurrentTower != null)
-        {
-            Destroy(m_CurrentTower);
-            m_CurrentTower = null;
-        }
-        IsPlacingUnit = false;
-        m_IsDirectionSelected = false;
-        m_LastSnappedPos = Vector3.negativeInfinity;
-        m_DragFingerId = -1;
-        m_DirectionSelectedTime = -999f;
-        m_CellEnterTime = -999f;
-        HideHighlights();
-        HideRangeHighlights();
-        HidePlacementPanel();
-    }
-
-    private bool IsValidOperatorPlacement(Vector3 worldPos)
-    {
-        var data = TDFlyweightOperatorDataSettings.api?.GetData(m_CurrentOperatorType);
-        if (data == null) return false;
-        var behavior = TDControl.CreateOperatorBehavior(data.deployZone);
-        return behavior.CanPlace(worldPos);
+        m_PlacementPanel.SetActive(false);
     }
 }

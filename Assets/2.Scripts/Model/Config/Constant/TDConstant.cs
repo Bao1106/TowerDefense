@@ -74,20 +74,6 @@ public static class TDConstant
     public const string PATH_GAMEOVER_STAT_GOLD = "GameOverPanel/PopupWindow/Middle/Info/Gold Remaining/TxtValue";
     public const string PATH_GAMEOVER_STAT_WAVE = "GameOverPanel/PopupWindow/Middle/Info/WaveReached/TxtValue";
 
-    // Operator action panel — relative to Canvas/SafeArea/Container (used by TDOperatorSelectionView)
-    public const string PATH_OPERATOR_ACTION_PANEL = "OperatorActionPanel";
-    public const string PATH_OPERATOR_BTN_RETREAT = "OperatorActionPanel/BtnRetreat";
-    public const string PATH_OPERATOR_BTN_RETREAT_ICON = "OperatorActionPanel/BtnRetreat/Icon";
-
-    // Panel sizes (multiples of 12)
-    public const int OPERATOR_PANEL_W = 96;
-    public const int OPERATOR_PANEL_H = 108;
-    public const int OPERATOR_BTN_SIZE = 72;
-    public const int OPERATOR_ICON_SIZE = 48;
-    public const int OPERATOR_LABEL_H = 24;
-    // World-space offset above operator for panel anchor point
-    public const float OPERATOR_PANEL_WORLD_Y_OFFSET = 2.4f;
-
     //Config Values
     public static readonly float[] CONFIG_TOWER_ROTATIONS = { 0f, 90f, 180f, 270f };
     // Grid size is derived from GameMapVisualize plane bounds / cellSize — not hardcoded
@@ -144,8 +130,23 @@ public static class TDConstant
     public const string PREFAB_SLOT_HOLDER = "SlotHolder";
     public const string PREFAB_RANGE_HIGH_LIGHT = "RangeHighlight";
     public const string PREFAB_STAGE_CARD = "StagePrefab";
+    public const string PREFAB_DIAMOND_PANEL = "DiamondPanel"; // shared deploy direction-picker / retreat panel
 
-  #endregion
+    #endregion
+
+    #region Diamond Panel (deploy direction-picker + retreat — TDDiamondPanelView)
+
+    // Fraction of cellSize used as the center dead-zone radius. Releasing the direction
+    // drag inside this radius = cancel (no facing chosen). Matches DIRECTION_THRESHOLD_RATIO scale.
+    public const float DIAMOND_DEADZONE_RATIO = 0.35f;
+    // Ground cell reference height (touch math); visuals are full Canvas UI.
+    public const float DIAMOND_GROUND_Y = 0.2f;
+    // World-up offset added to the cell center when projecting to the screen anchor
+    // so the diamond is centered on the operator's chest, not above the head.
+    // Operator/tower mesh roughly 0–2 world units tall → 1.0 = chest height.
+    public const float DIAMOND_CENTER_Y_OFFSET = 1.0f;
+
+    #endregion
     #region Main Menu Scene (TDMainMenuView / TDStageSelectView - relative to own root)
     public const string NAME_MAIN_MENU = "MainMenu";
     public const string PATH_MENU_BACKGROUND = "Background";

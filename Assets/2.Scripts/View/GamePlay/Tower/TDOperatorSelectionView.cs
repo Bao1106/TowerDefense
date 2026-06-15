@@ -1,67 +1,58 @@
 using System.Collections.Generic;
-using DG.Tweening;
 using UnityEngine;
 using UnityEngine.EventSystems;
-using UnityEngine.UI;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.EnhancedTouch;
 using Touch = UnityEngine.InputSystem.EnhancedTouch.Touch;
 using TouchPhase = UnityEngine.InputSystem.TouchPhase;
 
 /// <summary>
-/// Attached to Canvas/SafeArea/Container — at the same level as TDGameplayHUDView.
-/// Detects taps on a placed operator → shows the OperatorActionPanel at the operator's position.
-/// Tapping outside → hides the panel and clears the selection.
+/// Attached to Canvas/SafeArea/Container. Detects taps on a placed operator or tower → shows
+/// the shared diamond panel (TDDiamondPanelView) in Retreat mode at the unit's position.
+/// Tapping outside, or starting a new deploy (TDGameEventBus.OnUnitPickup), clears the selection.
+///
+/// Pha 4 replaced the dedicated OperatorActionPanel chip with the same diamond used by deploy —
+/// one visual language, one positioning path, no overlap edge cases.
 /// </summary>
 public class TDOperatorSelectionView : MonoBehaviour
 {
-    // Cached main camera (Camera.main does a tag search per call)
     private static Camera s_MainCam;
     private static Camera MainCam => s_MainCam != null ? s_MainCam : (s_MainCam = Camera.main);
 
     private TDOperatorView m_SelectedOperator;
     private TDTowerWeaponView m_SelectedTower;
-    private RectTransform m_ActionPanel;
-    private CanvasGroup m_PanelCanvasGroup;
-    private Sequence m_PanelTween;
-    private Vector3 m_PanelBaseScale;
-    private Button m_BtnRetreat;
-    private Canvas m_Canvas;
 
     // Range highlight pool
     private GameObject m_RangeHighlightPrefab;
     private readonly List<GameObject> m_RangeHighlightTiles = new List<GameObject>();
 
-    // Helper: returns true if any unit is currently selected
     private bool HasSelected => m_SelectedOperator != null || m_SelectedTower != null;
 
     private void Start()
     {
         EnhancedTouchSupport.Enable();
-        m_Canvas = GetComponentInParent<Canvas>();
-        m_ActionPanel = transform.Find(TDConstant.PATH_OPERATOR_ACTION_PANEL)?.GetComponent<RectTransform>();
-        m_BtnRetreat = transform.Find(TDConstant.PATH_OPERATOR_BTN_RETREAT)?.GetComponent<Button>();
-
-        if (m_ActionPanel != null)
-        {
-            m_PanelBaseScale = m_ActionPanel.localScale;
-            m_PanelCanvasGroup = m_ActionPanel.GetComponent<CanvasGroup>()
-                              ?? m_ActionPanel.gameObject.AddComponent<CanvasGroup>();
-            m_ActionPanel.gameObject.SetActive(false);
-        }
-
-        m_BtnRetreat?.onClick.AddListener(OnRetreatClicked);
         m_RangeHighlightPrefab = TDResourceObject.GetResource<GameObject>(TDConstant.PREFAB_RANGE_HIGH_LIGHT);
+
+        // Drop the current selection whenever the player picks a new unit to deploy
+        // → the diamond cannot overlap itself in two different modes.
+        TDGameEventBus.OnUnitPickup += Deselect;
+        // Also drop selection when the run ends so the diamond doesn't linger over popups.
+        TDGameEventBus.OnVictory  += Deselect;
+        TDGameEventBus.OnGameOver += Deselect;
+    }
+
+    private void OnDestroy()
+    {
+        EnhancedTouchSupport.Disable();
+        TDGameEventBus.OnUnitPickup -= Deselect;
+        TDGameEventBus.OnVictory  -= Deselect;
+        TDGameEventBus.OnGameOver -= Deselect;
     }
 
     private void Update()
     {
         if (TDGameStateControl.api != null && TDGameStateControl.api.IsGameEnded) return;
-
         HandleTapInput();
-
-        if (HasSelected && m_ActionPanel != null)
-            UpdatePanelPosition();
     }
 
     // ── Input ─────────────────────────────────────────────────────────────────
@@ -86,7 +77,7 @@ public class TDOperatorSelectionView : MonoBehaviour
 #endif
 
         if (!tapped) return;
-        if (TDSlotHolderMainView.IsPlacingUnit) return;
+        if (TDDeployController.IsPlacingUnit) return;
         if (IsPointerOverUI(screenPos)) return;
 
         Ray ray = MainCam.ScreenPointToRay(screenPos);
@@ -109,10 +100,10 @@ public class TDOperatorSelectionView : MonoBehaviour
         if (m_SelectedOperator == op) return;
         DeselectImmediate();
         m_SelectedOperator = op;
-        m_SelectedOperator.SetSelected(true);
-        UpdatePanelPosition();
-        ShowPanel();
+        // The diamond panel IS the selection indicator now — the operator's own gold
+        // SelectionIndicator quad is no longer needed and would visually clash with the diamond.
         ShowOperatorRange(op);
+        TDDiamondPanelView.Instance?.ShowRetreat(op.transform.position, OnRetreatClicked);
     }
 
     private void SelectTower(TDTowerWeaponView tower)
@@ -120,80 +111,35 @@ public class TDOperatorSelectionView : MonoBehaviour
         if (m_SelectedTower == tower) return;
         DeselectImmediate();
         m_SelectedTower = tower;
-        UpdatePanelPosition();
-        ShowPanel();
+        TDDiamondPanelView.Instance?.ShowRetreat(tower.transform.position, OnRetreatClicked);
     }
 
     public void Deselect()
     {
-        if (m_SelectedOperator != null)
-        {
-            m_SelectedOperator.SetSelected(false);
-            m_SelectedOperator = null;
-        }
+        m_SelectedOperator = null;
         m_SelectedTower = null;
-        HidePanel();
+        TDDiamondPanelView.Instance?.Hide();
         HideRangeHighlights();
     }
 
-    // Deselect without animation — used when a new selection will immediately follow
+    // Used when a new selection is about to replace the current one — no diamond hide,
+    // the upcoming ShowRetreat call repositions/re-shows it in one step.
     private void DeselectImmediate()
     {
-        if (m_SelectedOperator != null)
-        {
-            m_SelectedOperator.SetSelected(false);
-            m_SelectedOperator = null;
-        }
+        m_SelectedOperator = null;
         m_SelectedTower = null;
         HideRangeHighlights();
     }
 
-    // ── Panel transitions ─────────────────────────────────────────────────────
+    // ── Retreat ───────────────────────────────────────────────────────────────
 
-    private void ShowPanel()
+    private void OnRetreatClicked()
     {
-        if (m_ActionPanel == null) return;
-        m_PanelTween?.Kill();
-        m_ActionPanel.gameObject.SetActive(true);
-        m_ActionPanel.localScale = Vector3.zero;
-
-        if (m_PanelCanvasGroup != null)
-        {
-            m_PanelCanvasGroup.alpha = 0f;
-            m_PanelCanvasGroup.interactable = false;
-            m_PanelCanvasGroup.blocksRaycasts = false;
-        }
-
-        m_PanelTween = DOTween.Sequence().SetUpdate(true);
-        m_PanelTween.Join(m_ActionPanel.DOScale(m_PanelBaseScale, 0.25f).SetEase(Ease.OutBack));
-        if (m_PanelCanvasGroup != null)
-            m_PanelTween.Join(m_PanelCanvasGroup.DOFade(1f, 0.16f).SetEase(Ease.OutCubic));
-        m_PanelTween.OnComplete(() =>
-        {
-            if (m_PanelCanvasGroup != null)
-            {
-                m_PanelCanvasGroup.interactable = true;
-                m_PanelCanvasGroup.blocksRaycasts = true;
-            }
-        });
-    }
-
-    private void HidePanel()
-    {
-        if (m_ActionPanel == null || !m_ActionPanel.gameObject.activeSelf) return;
-        m_PanelTween?.Kill();
-
-        if (m_PanelCanvasGroup != null)
-        {
-            m_PanelCanvasGroup.interactable = false;
-            m_PanelCanvasGroup.blocksRaycasts = false;
-        }
-
-        m_PanelTween = DOTween.Sequence().SetUpdate(true);
-        m_PanelTween.Join(m_ActionPanel.DOScale(Vector3.zero, 0.16f).SetEase(Ease.InBack));
-        if (m_PanelCanvasGroup != null)
-            m_PanelTween.Join(m_PanelCanvasGroup.DOFade(0f, 0.12f).SetEase(Ease.InCubic));
-        m_PanelTween.OnComplete(() => m_ActionPanel.gameObject.SetActive(false));
+        if (m_SelectedOperator != null)
+            TDOperatorRetreatControl.api?.Retreat(m_SelectedOperator);
+        else if (m_SelectedTower != null)
+            TDTowerRetreatControl.api?.Retreat(m_SelectedTower);
+        Deselect();
     }
 
     // ── Range Highlights ──────────────────────────────────────────────────────
@@ -210,7 +156,6 @@ public class TDOperatorSelectionView : MonoBehaviour
         Vector2Int cell = TDGridMainModel.api.WorldToCell(op.transform.position);
         var cells = rangeDto.GetCellsInRange(cell, op.transform.rotation);
 
-        // Grow the pool on demand
         while (m_RangeHighlightTiles.Count < cells.Count)
         {
             var tile = Instantiate(m_RangeHighlightPrefab);
@@ -226,10 +171,7 @@ public class TDOperatorSelectionView : MonoBehaviour
                 m_RangeHighlightTiles[i].transform.position = new Vector3(world.x, TDConstant.CONFIG_RANGE_HIGHLIGHT_Y, world.z);
                 m_RangeHighlightTiles[i].SetActive(true);
             }
-            else
-            {
-                m_RangeHighlightTiles[i].SetActive(false);
-            }
+            else m_RangeHighlightTiles[i].SetActive(false);
         }
     }
 
@@ -239,77 +181,8 @@ public class TDOperatorSelectionView : MonoBehaviour
             if (tile != null) tile.SetActive(false);
     }
 
-    // ── Panel position ────────────────────────────────────────────────────────
-
-    private void UpdatePanelPosition()
-    {
-        if (!HasSelected || MainCam == null) return;
-
-        Vector3 worldAnchor = m_SelectedOperator != null
-            ? GetIndicatorUpperLeftEdge(m_SelectedOperator)
-            : m_SelectedTower.transform.position + Vector3.up * TDConstant.OPERATOR_PANEL_WORLD_Y_OFFSET;
-
-        Vector2 screenPt = MainCam.WorldToScreenPoint(worldAnchor);
-
-        if (m_Canvas.renderMode == RenderMode.ScreenSpaceOverlay)
-        {
-            m_ActionPanel.position = screenPt;
-        }
-        else
-        {
-            RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                m_Canvas.GetComponent<RectTransform>(), screenPt,
-                m_Canvas.worldCamera, out Vector2 localPt);
-            m_ActionPanel.localPosition = localPt;
-        }
-    }
-
-    // Finds the midpoint of the upper-left edge of the diamond selection indicator in world space.
-    // The diamond has 4 tips (the midpoints of a Quad's edges) → uses transform.right and transform.up.
-    // Projects all 4 tips to screen space → finds the topmost (topIdx) and leftmost (leftIdx) → midpoint = upper-left edge center.
-    private static Vector3 GetIndicatorUpperLeftEdge(TDOperatorView op)
-    {
-        Transform t = op.SelectionIndicatorTransform;
-        if (t == null)
-            return op.transform.position + Vector3.up * TDConstant.OPERATOR_PANEL_WORLD_Y_OFFSET;
-
-        Vector3 center = t.position;
-        float halfS = t.lossyScale.x * 0.5f;
-
-        Vector3[] tips =
-        {
-            center + t.right * halfS,
-            center + t.up * halfS,
-            center - t.right * halfS,
-            center - t.up * halfS,
-        };
-
-        Camera cam = MainCam;
-        int topIdx = 0;
-        int leftIdx = 0;
-        for (int i = 1; i < tips.Length; i++)
-        {
-            if (cam.WorldToScreenPoint(tips[i]).y > cam.WorldToScreenPoint(tips[topIdx]).y) topIdx = i;
-            if (cam.WorldToScreenPoint(tips[i]).x < cam.WorldToScreenPoint(tips[leftIdx]).x) leftIdx = i;
-        }
-
-        return (tips[topIdx] + tips[leftIdx]) * 0.5f;
-    }
-
-    // ── Retreat ───────────────────────────────────────────────────────────────
-
-    private void OnRetreatClicked()
-    {
-        if (m_SelectedOperator != null)
-            TDOperatorRetreatControl.api?.Retreat(m_SelectedOperator);
-        else if (m_SelectedTower != null)
-            TDTowerRetreatControl.api?.Retreat(m_SelectedTower);
-        Deselect();
-    }
-
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    // RaycastAll at screenPos — more reliable than IsPointerOverGameObject(fingerId) on Android
     private static readonly List<RaycastResult> s_RaycastResults = new List<RaycastResult>();
     private bool IsPointerOverUI(Vector2 screenPos)
     {
@@ -318,10 +191,5 @@ public class TDOperatorSelectionView : MonoBehaviour
         s_RaycastResults.Clear();
         EventSystem.current.RaycastAll(eventData, s_RaycastResults);
         return s_RaycastResults.Count > 0;
-    }
-
-    private void OnDestroy()
-    {
-        EnhancedTouchSupport.Disable();
     }
 }

@@ -112,4 +112,14 @@ namespace TDEnums
         Simultaneous, // all groups spawn in parallel each wave
     }
 
+    // Deploy-by-drag (Arknights style) finite-state machine.
+    // Idle → Dragging → DirectionSelect → Committing (or back to Idle on cancel).
+    public enum DeployState
+    {
+        Idle, // nothing being deployed
+        Dragging, // ghost follows finger, snaps to cell (Phase 1)
+        DirectionSelect, // cell locked, diamond shown, picking facing (Phase 2) — finger may be lifted
+        Committing, // placement confirmed, spawning
+    }
+
 }

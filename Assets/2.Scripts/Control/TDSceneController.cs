@@ -55,9 +55,17 @@ public class TDSceneController : MonoBehaviour
 
     // ── Public API ────────────────────────────────────────────────────────────
 
-    public void GoToMainMenu() => GoToMainMenuAsync().Forget("GoToMainMenu");
-    public void RetryGameplay() => RetryGameplayAsync().Forget("RetryGameplay");
-    public void GoToGameplay() => GoToGameplayAsync().Forget("GoToGameplay");
+    public void GoToMainMenu() { EnsureUnpaused(); GoToMainMenuAsync().Forget("GoToMainMenu"); }
+    public void RetryGameplay() { EnsureUnpaused(); RetryGameplayAsync().Forget("RetryGameplay"); }
+    public void GoToGameplay() { EnsureUnpaused(); GoToGameplayAsync().Forget("GoToGameplay"); }
+
+    // Always exit pause before a scene transition: gameplay popups call TDPauseControl.Pause()
+    // on Victory/GameOver → Time.timeScale = 0 freezes any tween/awaiter not flagged SetUpdate(true).
+    private static void EnsureUnpaused()
+    {
+        if (Time.timeScale == 0f) Time.timeScale = 1f;
+        TDPauseControl.api?.Resume();
+    }
 
     // ── Private Async ─────────────────────────────────────────────────────────
 
@@ -100,6 +108,7 @@ public class TDSceneController : MonoBehaviour
         fadeGroup.blocksRaycasts = true;
         fadeGroup.DOFade(target, duration)
                  .SetEase(Ease.InOutSine)
+                 .SetUpdate(true) // ignore Time.timeScale — survives the pause set by Victory/GameOver
                  .OnComplete(() =>
                  {
                      if (target <= 0f) fadeGroup.blocksRaycasts = false;

@@ -1,6 +1,6 @@
 ﻿================================================================================
   TOWER DEFENSE — RECENT SESSIONS CHANGELOG
-  Updated: 2026-06-12
+  Updated: 2026-06-15
 ================================================================================
 
 
@@ -1790,8 +1790,141 @@
 
   Fix: normalize toàn bộ 111 file .cs → CRLF (chuẩn C#/VS/Unity Windows,
   khớp core.autocrlf=true). Quy trình: \r\n→\n, \r→\n, \n→\r\n. Verified 0 lỗi.
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 65 — ARKNIGHTS DEPLOY/RETREAT: DIAMOND PANEL + 2-PHASE GESTURE  [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-15
+  Scope: full re-design tower/operator deployment UX theo Arknights spec
+         (arknights_deploy_drag_spec.md). Cùng thay luôn retreat panel.
+
+  ── A. STATE MACHINE: 1-gesture hidden timer → 2-gesture drop tường minh ────
+
+  Trước S65 (mobile):
+    Một touch duy nhất. Phase 1→2 phân định bằng timer ẩn:
+    MIN_CELL_HOLD_DURATION (0.35s arm) + MIN_PHASE2_DURATION (0.2s lọc micro-lift)
+    + pull-back-to-center logic + m_PhaseArmed flag.
+    Discoverability TỆ: người chơi không biết phải giữ rồi mới vuốt.
+
+  Sau S65 (đúng Arknights):
+    Dragging       — ngón A theo finger, snap cell.
+    ↳ UP cell hợp lệ   → DROP: cell locked, finger nhả hẳn, diamond hiện.
+    ↳ UP cell không hợp lệ → cancel.
+    DirectionSelect — ngón B (touch MỚI) drag/tap → set facing + arrow active.
+    ↳ UP ngoài dead-zone → commit, dùng vector cuối.
+    ↳ UP trong  dead-zone → cancel.
+    Tap-direction rơi ra tự nhiên (tap = drag quãng 0).
+
+  Desktop GIỮ NGUYÊN: mouse-follow + LMB place + E/Q rotate + RMB cancel.
+  Code: XÓA ~70 dòng timer phòng thủ.
+
+  ── B. KIẾN TRÚC: extract controller + dùng chung diamond ────────────────────
+
+  - TDDeployController (MỚI, 380 dòng) — owns state machine + ghost + highlights
+    + diamond. Bê toàn bộ deploy logic khỏi TDSlotHolderMainView.
+  - TDSlotHolderMainView THU GỌN: 754 → 122 dòng. Chỉ còn slot bar
+    (cost/icon/interactable/PointerDown → BeginDeploy).
+  - TDOperatorSelectionView REWRITE: 333 → 195 dòng. Bỏ OperatorActionPanel
+    chip cũ, dùng TDDiamondPanelView.Instance.ShowRetreat/Hide. Cùng visual
+    language với deploy → không thể overlap.
+  - WorldAnchoredUI (util MỚI): WorldToScreenPoint + ScreenPointToLocalPointInRectangle
+    gom từ TDOperatorSelectionView. Dùng bởi diamond view.
+
+  ── C. DIAMOND PANEL: 4 lần re-design liên tiếp ──────────────────────────────
+
+  Iteration 1: world-space SpriteRenderer, code-built children
+    → bug: PPU=1 sprites = 256 world units → khổng lồ.
+  Iteration 2: hybrid (world-space frame/arrows + Canvas UI cancel/retreat button)
+    → bug: ZTest Always shader range đè operator/tower, billboard rắc rối.
+  Iteration 3: prefab thật + sprites + tweak scale 0.004 → 0.007
+    → bug: position upper-left edge có lúc off-screen, click không work natively.
+  Iteration 4 (FINAL): FULL CANVAS UI — 1 prefab Canvas duy nhất
+    - 4 Image rectangles = diamond outline (edges thin rotated)
+    - 4 Image arrow_up sprites (rotated 0/-90/180/90°) = direction picker
+    - 1 Image red glow strip dọc upper-left edge
+    - CancelButton: Image + Outline + Icon + TMP "Cancel" — full UI styling
+    - RetreatButton: tương tự + icon Exit + "Retreat"
+    - Native Unity Button click, không cần raycast hack
+    - Position via WorldAnchoredUI.PositionAt(cellCenter + Up*Y_OFFSET) mỗi LateUpdate
+    - Singleton accessor `TDDiamondPanelView.Instance` để 2 controller share
+
+  Public API: ShowDeploy(cellCenter, onCancel?) / ShowRetreat(worldAnchor, onRetreat)
+              / Hide() / SetActiveDirection(idx) / IsInDeadZone(worldPoint).
+
+  ── D. SIZE TUNING (gameplay scale-dependent) ────────────────────────────────
+
+  Map: ~25×15 cells × cellSize 2 = 50×30 world units. Camera near-top-down.
+  → 1 cell projects to ~80-100 px on phone screen (2640px wide).
+
+  Arknights map ~8×6 → cell ~250-300px on screen. UI sized for THAT scale.
+  Naive "2 cells wide" copy = 500px diamond → quá to cho project này.
+
+  Tuning sau iteration:
+    R (half-extent canvas units): 180 → 90 (diamond span ~250px = ~2.5 cells)
+    Button anchor:    -R*0.85 → -R*0.7 (luôn nằm trong viewport diamond)
+    Button size:      96×110 → 78×90
+    Arrow size:       56 → 40
+    Y_OFFSET:         2.5 → 1.0 (operator chest level, không trên đầu)
+
+  ── E. BUG FIXES dọc đường ───────────────────────────────────────────────────
+
+  1. RETRY/NEXT không load scene (existing bug, không liên quan diamond):
+     Game pause Time.timeScale=0 trên Victory/GameOver → TDSceneController.FadeAsync
+     dùng DOFade KHÔNG có .SetUpdate(true) → tween đứng yên → await kẹt vĩnh viễn.
+     Fix: .SetUpdate(true) + EnsureUnpaused() trước mọi scene transition.
+
+  2. Range highlight đè lên operator/tower:
+     Session trước tôi đổi shader sang ZTest Always để fix "obstacle che range" →
+     regression: giờ range vẽ đè mọi thứ. Revert về URP/Unlit (LEqual depth).
+     Operator/tower mesh ở Y cao hơn range tile Y=0.3 → tự nhiên đè đúng.
+
+  3. SelectionIndicator (khung vàng) overlap diamond:
+     Operator prefab có gold diamond Quad (ZTest Always) hệ selection cũ.
+     SetSelected(true/false) trong SelectionView còn bật cái này → 2 indicator
+     đè lên nhau. Gỡ 2 call SetSelected — diamond panel chính là indicator.
+     SetSelected/SelectionIndicator API giữ lại (legacy, harmless).
+
+  4. OperatorActionPanel chip overlap diamond khi tap operator trước deploy:
+     Pha 4 trước migrate, có 2 hệ thống song song. Subscribe OnUnitPickup →
+     Deselect (workaround). Pha 4 sau đó xóa hẳn OperatorActionPanel khỏi
+     scene → bug class này biến mất.
+
+  5. Diamond persist sau Game Over / Victory popup:
+     Subscribe TDDeployController + TDOperatorSelectionView vào OnVictory/OnGameOver
+     → auto-cancel/deselect khi run kết thúc.
+
+  ── F. CLEANUP toàn series ───────────────────────────────────────────────────
+
+  XÓA:
+  - DiamondCancelButton.prefab, DiamondRetreatButton.prefab (fold vào DiamondPanel)
+  - TDDiamondRetreatHit.cs (collider workaround world-space cũ)
+  - RangeHighlightOnTop.shader (đã revert material về URP/Unlit)
+  - OperatorActionPanel GameObject khỏi DTGamePlay.unity
+  - 8 const obsolete: PATH_OPERATOR_*, OPERATOR_PANEL_*, OPERATOR_BTN_SIZE,
+    OPERATOR_ICON_SIZE, OPERATOR_LABEL_H, OPERATOR_PANEL_WORLD_Y_OFFSET,
+    DIAMOND_HALF_EXTENT_CELLS, DIAMOND_GROUND_Y (giữ), PREFAB_DIAMOND_CANCEL_BTN,
+    PREFAB_DIAMOND_RETREAT_BTN
+
+  Constants MỚI: DIAMOND_DEADZONE_RATIO, DIAMOND_CENTER_Y_OFFSET,
+                 PREFAB_DIAMOND_PANEL.
+  Enum MỚI:      DeployState { Idle, Dragging, DirectionSelect, Committing }.
+
+  ── G. METRICS ───────────────────────────────────────────────────────────────
+
+  Files thay đổi:    8 (4 mới, 3 rewrite, 1 modified)
+  Files xóa:         3 cs + 2 prefab + 1 shader = 6
+  Net line change:   TDSlotHolderMainView -632, TDOperatorSelectionView -138,
+                     TDDeployController +380, TDDiamondPanelView +170 = -220 dòng
+  Prefabs mới:       DiamondPanel.prefab (Canvas UI)
+  Scene saved:       DTGamePlay (remove OperatorActionPanel), DTLoadFirst
+                     (register DiamondPanel index 10)
+
+  Status: gesture work ổn trên Android (verified bằng playtest).
+  Pending: smooth animations cho show/hide diamond + arrow active transitions.
+
 ================================================================================
-  TODO — DEVELOPMENT PRIORITY                              [updated 2026-06-12]
+  TODO — DEVELOPMENT PRIORITY                              [updated 2026-06-15]
 ================================================================================
 
   ── P1 ───────────────────────────────────────────────────────────────────────
