@@ -56,8 +56,9 @@ public class TDSceneController : MonoBehaviour
     // ── Public API ────────────────────────────────────────────────────────────
 
     public void GoToMainMenu() { EnsureUnpaused(); GoToMainMenuAsync().Forget("GoToMainMenu"); }
-    public void RetryGameplay() { EnsureUnpaused(); RetryGameplayAsync().Forget("RetryGameplay"); }
-    public void GoToGameplay() { EnsureUnpaused(); GoToGameplayAsync().Forget("GoToGameplay"); }
+    public void RetryGameplay() { EnsureUnpaused(); RetryGameplayAsync(null).Forget("RetryGameplay"); }
+    public void RetryGameplay(string nextStageId) { EnsureUnpaused(); RetryGameplayAsync(nextStageId).Forget("RetryGameplay"); }
+    public void GoToGameplay(string stageId) { EnsureUnpaused(); GoToGameplayAsync(stageId).Forget("GoToGameplay"); }
 
     // Always exit pause before a scene transition: gameplay popups call TDPauseControl.Pause()
     // on Victory/GameOver → Time.timeScale = 0 freezes any tween/awaiter not flagged SetUpdate(true).
@@ -77,20 +78,22 @@ public class TDSceneController : MonoBehaviour
         await FadeFromBlack();
     }
 
-    private async Task RetryGameplayAsync()
+    private async Task RetryGameplayAsync(string nextStageId)
     {
         await FadeToBlack();
         await WaitForOp(SceneManager.UnloadSceneAsync(TDConstant.SCENE_GAMEPLAY));
         TDControl.api.ReinitControls();
+        if (nextStageId != null) TDGameStateControl.api.SelectStage(nextStageId);
         await WaitForOp(SceneManager.LoadSceneAsync(TDConstant.SCENE_GAMEPLAY, LoadSceneMode.Additive));
         await FadeFromBlack();
     }
 
-    private async Task GoToGameplayAsync()
+    private async Task GoToGameplayAsync(string stageId)
     {
         await FadeToBlack();
         await WaitForOp(SceneManager.UnloadSceneAsync(TDConstant.SCENE_MAIN_MENU));
         TDControl.api.ReinitControls();
+        TDGameStateControl.api.SelectStage(stageId);
         await WaitForOp(SceneManager.LoadSceneAsync(TDConstant.SCENE_GAMEPLAY, LoadSceneMode.Additive));
         await FadeFromBlack();
     }

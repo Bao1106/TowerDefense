@@ -1,6 +1,6 @@
 ﻿================================================================================
   TOWER DEFENSE — RECENT SESSIONS CHANGELOG
-  Updated: 2026-06-15
+  Updated: 2026-06-17
 ================================================================================
 
 
@@ -1923,8 +1923,416 @@
   Status: gesture work ổn trên Android (verified bằng playtest).
   Pending: smooth animations cho show/hide diamond + arrow active transitions.
 
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 66 — DIAMOND POLISH: ANIMATIONS + CHAMFER + LEAK BUG HUNT      [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-16
+  Tiếp theo S65: animations, button visual polish theo Arknights, và 1 bug
+                  rảnh tay nhưng đeo bám nhiều iteration (bottom-left leak).
+
+  ── A. SMOOTH ANIMATIONS (DOTween, SetUpdate(true)) ─────────────────────────
+
+  5 animations thêm vào TDDiamondPanelView:
+  - Show:    root scale 0.6→1 OutBack(1.6) + alpha 0→1 OutCubic, 0.22s
+  - Hide:    root scale 1→0.5 InBack(1.4) + alpha 1→0 InCubic, 0.14s
+  - Drop:    Cancel button slide-in từ ngoài upper-left tip (60px) OutCubic
+  - Retreat: Retreat button slide-in tương tự
+  - Direction change: active arrow DOPunchScale (0.30, 0.22s, 5 vibrato)
+  + Glow strip fade-in cho deploy mode
+
+  Tất cả tween SetUpdate(true) → survive Time.timeScale=0 trên Victory/GameOver.
+
+  ── B. CHAMFER VISUAL: Option B (auto-gen PNG) ──────────────────────────────
+
+  Cancel/Retreat button của Arknights là CHAMFERED RECTANGLE (vát góc bottom-right
+  ~45°) chứ không phải rectangle thường. Chamfer "trỏ" về tip diamond, tạo cảm
+  giác button "móc vào" diamond, không phải floating chip.
+
+  Đánh giá 4 cách: pre-draw PNG / 1-shot Editor script / ProceduralUIImage
+  modifier / Custom MaskableGraphic. CHỌN **Option B**:
+
+  Assets/2.Scripts/Editor/ChamferedSpriteGenerator.cs (~80 dòng, 1 lần chạy):
+  - Procedural generate 128×128 PNG với 2x2 sub-pixel AA trên diagonal edge
+  - Auto-import: UI Sprite, PPU 100, alphaIsTransparency,
+                 9-slice border (L:4, B:18, R:18, T:4) → chamfer corner stay
+                 fixed 18px regardless of button size
+  - Auto-apply: set sprite + Image.type = Sliced lên CancelButton + RetreatButton
+                trong DiamondPanel.prefab
+
+  Menu trigger: Tools/Diamond/Generate Chamfered Rect Sprite (BR)
+  Output: Assets/1.Assets/Resources/Sprites/ChamferedRectBR.png
+
+  Tuning: ChamferSize const 40→18 sau iteration đầu (Arknights cắt ~20-25%,
+  không phải ~50% như draft đầu). Pentagon → "rectangle vạt góc nhẹ".
+
+  Outline component vẫn work native (follow alpha border của sprite) → border
+  trắng continuous quanh 5 cạnh, không seam. Match 100% style Arknights.
+
+  ── C. POSITIONING + BUTTON LAYOUT FIXES ────────────────────────────────────
+
+  - Cancel/Retreat anchoredPosition: (-63, 63) → (-90, 90) = (-R, R)
+    → button bottom-right corner overlap midpoint upper-left edge diamond
+    → "móc vào tip" thay vì floating trong upper-left quadrant
+  - Bottom-right corner tự nhiên nằm trong glow band 18px → visual connection
+    có sẵn không cần thêm element
+
+  ── D. BOTTOM-LEFT GHOST LEAK BUG (3-layer guard fix) ───────────────────────
+
+  Bug: diamond panel intermittent visible ở góc bottom-left màn hình lúc gameplay
+       — chamfered cancel/retreat button leak ở mép trái màn hình.
+
+  Iteration 1 (false fix): nghĩ là "diamond mồ côi" do operator chết khi đang
+    chọn → đề xuất check m_SelectedOperator null trong Update.
+    REJECTED: user clarify "lâu lâu hay hiện", thấy cả ở phút 0:10 (chưa có
+    operator nào chết). Không phải bug này.
+
+  Iteration 2 (false fix): m_Mode default = Mode.Hidden, Hide() early return
+    với "if (m_Mode == Mode.Hidden) return;" → SetActive(false) không bao giờ
+    chạy lần đầu → diamond children visible ở canvas (0,0). Fix bằng
+    "wasShowing" flag + check m_Resolved + SetActive(false) directly nếu chưa
+    resolve.
+    PARTIAL: vẫn có race condition khi tween bị Kill bởi Show race
+    → OnComplete skip → SetActive(false) không fire.
+
+  Iteration 3 (FINAL): 3-LAYER GUARD CHAIN
+    Layer 1 — Awake: gameObject.SetActive(false) NGAY tại Awake.
+      Prefab ship active để designer xem được trong Editor, nhưng runtime
+      luôn start hidden. Closes 100% race "diamond active 1 frame ở (0,0)".
+    Layer 2 — FinishHide: tween OnComplete = check Mode==Hidden + SetActive(false).
+      Normal path khi không có race.
+    Layer 3 — LateUpdate safety: nếu Mode==Hidden + gameObject.activeSelf +
+      CanvasGroup.alpha ≤ 0.01 → SetActive(false). Catch case OnComplete bị
+      skip bởi tween Kill.
+
+  Root cause analysis: m_CenterWorld default = Vector3.zero. Khi diamond
+  active mà chưa từng Show, LateUpdate position theo cam.WorldToScreenPoint(
+  (0, 1, 0)) = góc bottom-left màn hình (world origin của map). Layer 1
+  chặn case này từ gốc — diamond không thể active mà chưa qua Show*.
+
+  ── E. SUPPORTING FIXES (cleanup quanh diamond polish) ──────────────────────
+
+  1. SelectionIndicator quad gold (legacy selection system) còn hiện cùng diamond
+     khi tap operator → 2 indicator chồng nhau. Gỡ 2 call SetSelected(true/false)
+     trong TDOperatorSelectionView. Diamond panel CHÍNH LÀ indicator giờ.
+
+  2. Diamond persist sau Victory/GameOver popup: subscribe TDDeployController +
+     TDOperatorSelectionView vào OnVictory + OnGameOver → auto-cancel/deselect
+     khi run kết thúc.
+
+  3. m_SelectedOperator null check khi operator chết do enemy attack: không cần
+     thêm — diamond Hide khi OnGameOver fire trước rồi. Nếu cần future polish:
+     subscribe OnOperatorDied và check cell match.
+
+  ── F. ANALYSIS: END-OF-STAGE-2 UX (cho demo 2 stages) ──────────────────────
+
+  Hiện tại: Victory popup hiển thị Retry + Next buttons cho mọi stage. Khi
+  thắng Stage_1-2 (stage cuối unlocked), click Next:
+
+    private void OnNextClicked()
+    {
+        string currentId = TDGameStateControl.api.SelectedStageId;
+        TDStageConfig next = TDStageRepository.api?.GetNextStage(currentId);
+        if (next != null) TDGameStateControl.api.SelectStage(next.StageId);
+        PlaySceneFadeOut(TDSceneController.api.RetryGameplay);
+    }
+
+  → GetNextStage(Stage_1-2) = null (Stage_2-1 isLocked=true, không count) hoặc
+    return Stage_2-1 (đang locked, sẽ crash khi load).
+  → Code chạy RetryGameplay() = LOAD LẠI STAGE 1-2.
+  → User click Next nhưng game replay current stage → CONFUSING UX.
+
+  3 lựa chọn (cho demo portfolio):
+
+  Option A. Hide "Next" button trên stage cuối
+    - Đơn giản nhất, code change ~5 dòng
+    - User chỉ thấy Retry → "tự hiểu" đã hết content
+    - KHÔNG có lời nhắn → reviewer có thể nghĩ là missing feature
+
+  Option B. Hiện popup riêng "DEMO COMPLETE"
+    - Khi thắng Stage_1-2 → show DemoCompletePanel thay vì VictoryPanel
+    - Message: "Demo Complete! More stages coming soon."
+    - 1 button "Back to Menu" (clean exit)
+    - Code: thêm panel prefab + 1 branch trong OnVictory
+    - Tốt nhất cho portfolio — show "tôi care về edge cases"
+
+  Option C. Reuse VictoryPanel với conditional Next button
+    - Same VictoryPanel, ẩn Next button + add subtitle "Demo Complete"
+    - Compromise: code thấp hơn B, UX rõ hơn A
+    - Code: ~15 dòng, không cần asset mới
+
+  RECOMMENDATION cho portfolio demo: **Option C** (compromise sweet spot).
+  Effort thấp, UX clear, không cần asset mới.
+
+  ── G. METRICS ──────────────────────────────────────────────────────────────
+
+  Files modified:
+  - TDDiamondPanelView.cs (animations + 3-layer guard) ≈ +120 dòng
+  - TDOperatorSelectionView.cs (remove SetSelected, OnVictory/GameOver hook) ≈ -15
+  - TDDeployController.cs (OnVictory/GameOver hook, ghost SelectionIndicator off) ≈ +20
+  - Assets/2.Scripts/Editor/ChamferedSpriteGenerator.cs (MỚI) ≈ 80 dòng
+  - DiamondPanel.prefab (button position + sprite + 9-slice) (binary)
+  - ChamferedRectBR.png (MỚI, auto-generated)
+
+  Status: animations + chamfer verified bằng playtest. Bottom-left leak fix
+          chưa verify trên device (3-layer guard mới deploy).
+  Pending: End-of-stage-2 UX (Option C đề xuất, chờ user duyệt).
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 67 — END-OF-DEMO POPUP + GOLD SCALE BUG + TUTORIAL          [⚠️ PARTIAL]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-16/17 (2-day session, context cut due to token limit)
+  Status: 60% done — tutorial code complete but has 2 UNVERIFIED BUGS to fix.
+
+  ── A. END-OF-DEMO POPUP (Option C, fully implemented) ─────────────────────
+
+  When player wins Stage_1-2 (last unlocked, next is Stage_2-1 LOCKED), the
+  Victory popup hides "Next" button + appends "DEMO COMPLETE" to stage label.
+
+  Changes:
+  - TDStageRepository.cs:       + GetNextUnlockedStage(currentId)
+                                  returns null if next == null or next.isLocked
+  - TDVictoryPanelView.cs:      Show() signature accepts bool isLastUnlocked = false
+                                  ApplyEndOfContentState(isLast) hides BtnNext
+                                  FillStats appends " · DEMO COMPLETE" to stage label
+  - TDGameplayHUDView.cs:       OnVictory computes isLastUnlocked flag, passes to Show
+                                  OnNextClicked: defensive — if next null somehow,
+                                  go to MainMenu (not silently replay current stage)
+
+  Zero scene change. Code-only. Status: ✅ VERIFIED working in playtest.
+
+  ── B. GOLD VALUE SCALE STUCK BUG (fully fixed) ────────────────────────────
+
+  Bug: In gameplay video, gold value text "18" appears scaled MUCH larger than
+       its icon. Cumulative drift from rapid DOPunchScale + Kill cycles —
+       Kill(default) stops tween mid-bounce, scale stuck at overshoot value.
+
+  Root cause: DOTween.Kill(target) WITHOUT complete:true leaves scale wherever
+              the interpolation was. Rapid retriggers (enemy kills → gold tick
+              → punch → kill → punch → kill) drift transform.localScale away
+              from 1.
+
+  Fix in TDGameplayHUDView.cs: SafePunch(Transform, float strength, int vibrato)
+        helper that does Kill → reset localScale = Vector3.one → punch.
+        Applied to 4 sites: m_LifeText, m_CurrencyText, m_EnemyCountText,
+        m_SpeedButton.
+
+  Status: ✅ implemented. Build test confirmed gold value back to normal size.
+
+  ── C. TUTORIAL SYSTEM — IMPLEMENTED, 2 BUGS UNRESOLVED ────────────────────
+
+  Goal: First-launch onboarding for the Arknights 2-phase deploy gesture.
+        Items #2/#4/#5/#1 from analysis (skipping #3 slot pulse — redundant
+        with #1 hand demo).
+
+  Implementation (all code DONE):
+
+  C.1 New files:
+    Assets/2.Scripts/View/GamePlay/Tutorial/TDFloatingHint.cs
+      - Procedural Canvas UI singleton, lazy create into Canvas/SafeArea/Container
+      - Top-center pill: black 70% alpha bg + white bold TMP text
+      - Fade in 0.25s OutCubic / fade out 0.3s InCubic
+      - SetUpdate(true) on all tweens
+      - Static ShowLimited(prefsKey, maxShows, text, duration) — PlayerPrefs counter
+      - Static Reset(prefsKey) — for testing
+
+    Assets/2.Scripts/View/GamePlay/Tutorial/TDTutorialView.cs
+      - Orchestrator MonoBehaviour, AddComponent'd by TDSlotHolderMainView.Start
+      - PlayerPrefs key namespace: td_tutorial_v1_*
+      - Auto-disable when td_tutorial_v1_done == 1
+      - Subscribes OnUnitPickup / OnDeployDrop / OnTowerPlaced
+      - 5s idle watcher → shows hand sprite loop
+      - Hand sprite loaded via TDResourceObject.GetResource<Sprite>(SPRITE_TUTORIAL_HAND)
+
+  C.2 Event bus changes:
+    TDGameEventBus.cs:        + event OnDeployDrop + raise helper DeployDrop()
+    TDDeployController.Drop(): fires TDGameEventBus.DeployDrop() at end
+
+  C.3 Constants:
+    TDConstant.SPRITE_TUTORIAL_HAND = "Icon_PictoIcon_Hand"
+
+  C.4 Behaviour matrix (per item):
+    #2 OnDeployDrop → ShowLimited(td_tutorial_v1_phase2, 3, "Drag outward to choose facing direction")
+    #4 OnUnitPickup → ShowLimited(td_tutorial_v1_phase1, 3, "Drag the unit onto a highlighted cell")
+    #5 OnTowerPlaced → ShowLimited(td_tutorial_v1_retreat, 2, "Tap a placed unit to retreat")
+                      + sets td_tutorial_v1_done = 1
+    #1 5s idle (first launch only) → hand sprite pulses on slot bar → drifts up
+                                      → fades → loops. Hides on first tap.
+
+  C.5 MANUAL STEP PENDING (CRITICAL — tutorial hand won't show without this):
+    1. Open scene DTLoadFirst
+    2. Select GenerateObject (component TDResourceObject)
+    3. Inspector → Objects field (list) → add new element
+    4. Drag asset to slot:
+       Assets/1.Assets/UnityStore Resources/Layer Lab/2D Icons-PictoIconPack01/
+       Icons/PictoIcon_256/Icon_PictoIcon_Hand.Png
+    5. Save scene
+    Without this: 3 floating hints work, only hand animation silently skipped.
+
+  ── D. UNRESOLVED BUGS (for next conversation) ─────────────────────────────
+
+  BUG #1: Floating hint text wraps VERTICALLY at left edge
+    Symptom: User screenshot shows hint text rendered "T/a/p/a/p/l/a/c/e/d/u"
+             (one char per line) at LEFT EDGE of screen, vertical column.
+    Should be: horizontal pill at top-center of screen "Tap a placed unit to..."
+
+    Root cause hypothesis: Canvas/SafeArea/Container likely has a
+       VerticalLayoutGroup (or similar) that OVERRIDES TDFloatingHint's anchor
+       settings → forces it into the layout flow → narrow column at left.
+
+    Fix candidates (try in order):
+      (a) Add LayoutElement.ignoreLayout = true to TDFloatingHint root in
+          BuildVisuals() — tells parent layout group to skip this child.
+          Code:
+            var le = gameObject.AddComponent<LayoutElement>();
+            le.ignoreLayout = true;
+      (b) If (a) fails: parent the FloatingHint to canvas.transform DIRECTLY
+          (not to SafeArea/Container) — bypass layout group entirely.
+      (c) If (b) breaks safe-area handling: parent to "SafeArea" instead of
+          "SafeArea/Container".
+
+    First diagnostic step: run script-execute with
+      var container = GameObject.Find("Canvas/SafeArea/Container");
+      var vlg = container.GetComponent<VerticalLayoutGroup>();
+      var hlg = container.GetComponent<HorizontalLayoutGroup>();
+      Debug.Log(vlg + " " + hlg);
+    Note: scene MUST be loaded in editor first (OpenScene DTGamePlay).
+
+  BUG #2: Diamond panel jitter ở bottom-left
+    Symptom: User reports — "đôi khi gặp issue khi đang drag 1 tower/operator
+             hoặc khi click vào tower/operator để hiện diamond panel => thì
+             dưới góc bên trái vẫn hiện 1 diamond panel khác nhưng mà jitter"
+    Translation: Sometimes when dragging a tower/operator or tapping one to
+                 show diamond, ANOTHER diamond appears at bottom-left,
+                 jittering (moving).
+
+    Status: Hypothesis unclear. Possibilities:
+      (a) Race condition between Hide tween (mid-fade) and new ShowRetreat —
+          might leave gameObject active with stale m_CenterWorld
+      (b) Two TDDiamondPanelView instances (s_Instance stale from old scene)
+      (c) LateUpdate UpdateScreenPosition() running with default m_CenterWorld
+          (0,0,0) somehow → projects to canvas bottom-left
+
+    3-layer guard (Awake disable + FinishHide + LateUpdate alpha check) was
+    added in S66 and SHOULD prevent this. But user still reports it.
+
+    Diagnostic steps for next session:
+      1. FindObjectsOfType<TDDiamondPanelView>(true) — verify only 1 instance
+      2. Log m_CenterWorld + m_Mode + gameObject.activeSelf each frame to
+         catch the moment of jitter
+      3. Check if Hide() is called WHILE another Show is queued in same frame
+
+  ── E. FILES MODIFIED (S67 inventory) ──────────────────────────────────────
+
+  New:
+    Assets/2.Scripts/View/GamePlay/Tutorial/TDFloatingHint.cs  (~180 lines)
+    Assets/2.Scripts/View/GamePlay/Tutorial/TDTutorialView.cs   (~220 lines)
+
+  Modified:
+    Assets/2.Scripts/Services/TDGameEventBus.cs                (+ OnDeployDrop)
+    Assets/2.Scripts/Control/Tower/PlaceTower/TDDeployController.cs
+                                                                (+ DeployDrop raise)
+    Assets/2.Scripts/View/GamePlay/Tower/TDSlotHolderMainView.cs
+                                                                (+ AddComponent<TDTutorialView>)
+    Assets/2.Scripts/Model/Config/Constant/TDConstant.cs        (+ SPRITE_TUTORIAL_HAND)
+    Assets/2.Scripts/View/GamePlay/TDGameplayHUDView.cs         (SafePunch helper, 4 sites)
+    Assets/2.Scripts/View/GamePlay/TDVictoryPanelView.cs        (isLastUnlocked param)
+    Assets/2.Scripts/Model/Config/TDStageRepository.cs          (+ GetNextUnlockedStage)
+
+  Manual pending:
+    DTLoadFirst.unity: TDResourceObject Objects list ← drag Icon_PictoIcon_Hand sprite
+
+  ── F. HANDOFF NOTES FOR NEXT CONVERSATION ─────────────────────────────────
+
+  Priority order to resume:
+    1. Read THIS section + section D (bug descriptions)
+    2. Verify code state matches inventory (E) — files exist + last modified
+       recently
+    3. Apply fix (a) for BUG #1 (1-line LayoutElement.ignoreLayout add)
+    4. Build APK → playtest hint position
+    5. If hint correctly horizontal at top-center → close BUG #1
+    6. Repro BUG #2: enter gameplay, place operator, tap operator,
+       observe bottom-left for jitter. Use diagnostic step 2 (per-frame log)
+       if can't repro visually.
+    7. If repro: identify which scenario in hypothesis (a/b/c) matches logs
+    8. Apply targeted fix
+
+  Token-saving guidance:
+    - DO NOT re-explain Diamond architecture, gesture flow, or session 65/66
+      context — already in this changelog above
+    - Focus on the 2 specific bugs only
+    - Skip the manual step verification unless hand animation specifically
+      tested
+
+  Code references for fast jump:
+    - Hint position bug: TDFloatingHint.BuildVisuals() — line ~60 (search
+      "m_Rect.sizeDelta")
+    - Diamond ghost guards: TDDiamondPanelView.Awake() / FinishHide() /
+      LateUpdate()
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 68 — VICTORY PANEL FIX + CODE REVIEW + FILE CONSOLIDATION       [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-17
+
+  ── A. VICTORY PANEL NEXT BUTTON — STAGE ID BUG FIX ─────────────────────────
+
+  Bug: After winning DEMO-1, pressing Next loads DEMO-1 again instead of DEMO-2.
+  Root cause: SelectedStageId was being set BEFORE scene reload via
+    TDGameStateControl.api.SelectStage(nextStageId), then ReinitControls()
+    recreated TDGameStateControl with ??= (preserving old instance on retry,
+    but the ordering was fragile).
+
+  Fix (2 parts):
+  1. No hardcoded default — get from config:
+       public string SelectedStageId { get; private set; }
+         = TDStageRepository.api?.DefaultStageId ?? "DEMO-1";
+     (NRE guard with ?? fallback in case Resources loading fails)
+
+  2. SelectStage called AFTER scene reload, not before:
+     - TDSceneController.RetryGameplay(string nextStageId) overload added
+     - RetryGameplayAsync: UnloadScene → ReinitControls → SelectStage → LoadScene
+     - GoToGameplayAsync: same pattern with stageId parameter
+     - TDGameplayHUDView.OnNextClicked: passes nextStageId through lambda
+       to RetryGameplay instead of calling SelectStage directly
+     - TDStageSelectView.OnPlayClicked: calls GoToGameplay(stageId) directly
+
+  Files changed:
+    TDGameStateControl.cs   — config-driven default
+    TDSceneController.cs    — RetryGameplay(nextStageId) + GoToGameplay(stageId)
+    TDGameplayHUDView.cs    — OnNextClicked passes stageId through
+    TDStageSelectView.cs    — OnPlayClicked passes stageId through
+
+  ── B. FULL BRANCH CODE REVIEW ───────────────────────────────────────────────
+
+  Reviewed all 12 C# file changes on feature/upgrade-game-ui-logic-vfx.
+  5 feature groups: Victory panel + stage flow, Diamond panel animation,
+  HUD punch scale fix, Pause cancel deploy, Tutorial + misc.
+
+  Assessment: demo-ready for 4-year Unity developer portfolio (tutorial OK).
+
+  Additional fix found during review:
+  - TDBGMToggleView.cs: Added [FormerlySerializedAs("m_IconNormal")] and
+    [FormerlySerializedAs("m_IconMute")] to prevent Inspector reference loss
+    from field rename (m_IconNormal → iconNormal, m_IconMute → iconMute).
+
+  ── C. ROOT FILE CONSOLIDATION ───────────────────────────────────────────────
+
+  4 root .txt files (7007 lines total) → kept 1, created 1, deleted 3:
+
+  KEPT:    RECENT_SESSIONS_CHANGELOG.txt (this file) — living changelog
+  CREATED: OPTIMIZATION_NOTES.txt — all optimization data with before/after
+           metrics, 3 build size milestones (130→255→116→102 MB),
+           draw call/batch/shadow/RAM/audio/texture data across S57-S64
+  DELETED: GAME_DESIGN_AND_ROADMAP.txt (3814 lines — outdated design doc)
+           UI_UX_REVIEW_BRIEF.txt (500 lines — one-time review doc)
+           MOBILE_INPUT_ISSUES_SUMMARY.txt (381 lines — outdated after S65 rewrite)
+
+
 ================================================================================
-  TODO — DEVELOPMENT PRIORITY                              [updated 2026-06-15]
+  TODO — DEVELOPMENT PRIORITY                              [updated 2026-06-17]
 ================================================================================
 
   ── P1 ───────────────────────────────────────────────────────────────────────

@@ -39,6 +39,7 @@ public class TDOperatorSelectionView : MonoBehaviour
         // Also drop selection when the run ends so the diamond doesn't linger over popups.
         TDGameEventBus.OnVictory  += Deselect;
         TDGameEventBus.OnGameOver += Deselect;
+        if (TDPauseControl.api != null) TDPauseControl.api.onPauseChanged += OnPauseChanged;
     }
 
     private void OnDestroy()
@@ -47,6 +48,12 @@ public class TDOperatorSelectionView : MonoBehaviour
         TDGameEventBus.OnUnitPickup -= Deselect;
         TDGameEventBus.OnVictory  -= Deselect;
         TDGameEventBus.OnGameOver -= Deselect;
+        if (TDPauseControl.api != null) TDPauseControl.api.onPauseChanged -= OnPauseChanged;
+    }
+
+    private void OnPauseChanged(bool paused)
+    {
+        if (paused) Deselect();
     }
 
     private void Update()

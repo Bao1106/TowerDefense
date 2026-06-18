@@ -77,9 +77,11 @@ public class TDVictoryPanelView : MonoBehaviour
         m_BtnNext ?.onClick.AddListener(() => Hide(() => onNext?.Invoke()));
     }
 
-    public void Show(string stageId, int killed, int total, int lives, int gold, int stars = 1)
+    public void Show(string stageId, int killed, int total, int lives, int gold,
+                     int stars = 1, bool isLastUnlocked = false)
     {
-        FillStats(stageId, killed, total, lives, gold);
+        FillStats(stageId, killed, total, lives, gold, isLastUnlocked);
+        ApplyEndOfContentState(isLastUnlocked);
         PrepareStars(stars);
         PlayShowAnim(stars);
     }
@@ -89,10 +91,22 @@ public class TDVictoryPanelView : MonoBehaviour
         PlayHideAnim(onComplete);
     }
 
-    // ── Data fill ──────────────────────────────────────────────────────────────
-    private void FillStats(string stageId, int killed, int total, int lives, int gold)
+    // Toggles the Next button + appends a "DEMO COMPLETE" tag to the stage label when
+    // the player has reached the end of the unlocked content (demo edge case).
+    // Keeps the existing VictoryPanel prefab unchanged — no new scene elements needed.
+    private void ApplyEndOfContentState(bool isLastUnlocked)
     {
-        if (m_StageName != null) m_StageName.text = $"STAGE {stageId}";
+        if (m_BtnNext != null) m_BtnNext.gameObject.SetActive(!isLastUnlocked);
+    }
+
+    // ── Data fill ──────────────────────────────────────────────────────────────
+    private void FillStats(string stageId, int killed, int total, int lives, int gold,
+                           bool isLastUnlocked)
+    {
+        if (m_StageName != null)
+            m_StageName.text = isLastUnlocked
+                ? $"STAGE {stageId}  ·  DEMO COMPLETE"
+                : $"STAGE {stageId}";
         if (m_StatEnemies != null) m_StatEnemies.text = $"{killed} / {total}";
         if (m_StatLives != null) m_StatLives.text = $"{lives} / {TDConstant.CONFIG_PLAYER_STARTING_LIVES}";
         if (m_StatGold != null) m_StatGold.text = gold.ToString();

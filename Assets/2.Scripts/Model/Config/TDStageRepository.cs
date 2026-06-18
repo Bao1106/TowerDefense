@@ -30,4 +30,15 @@ public class TDStageRepository : ScriptableObject
         if (idx < 0 || idx >= m_Stages.Count - 1) return null;
         return m_Stages[idx + 1];
     }
+
+    /// <summary>
+    /// Returns the next stage in the list IF it's playable (not locked).
+    /// Used by Victory popup to decide whether to show the "Next" button.
+    /// Returns null when the current stage is the last unlocked one (end of demo content).
+    /// </summary>
+    public TDStageConfig GetNextUnlockedStage(string currentStageId)
+    {
+        var next = GetNextStage(currentStageId);
+        return (next != null && !next.isLocked) ? next : null;
+    }
 }

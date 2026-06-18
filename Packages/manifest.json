@@ -1,6 +1,5 @@
 {
   "dependencies": {
-    "com.ivanmurzak.unity.mcp": "0.80.0",
     "com.unity.2d.sprite": "1.0.0",
     "com.unity.ide.rider": "3.0.40",
     "com.unity.inputsystem": "1.11.2",
@@ -42,14 +41,5 @@
     "com.unity.modules.wind": "1.0.0",
     "com.unity.modules.xr": "1.0.0"
   },
-  "scopedRegistries": [
-    {
-      "name": "package.openupm.com",
-      "url": "https://package.openupm.com",
-      "scopes": [
-        "com.ivanmurzak",
-        "extensions.unity"
-      ]
-    }
-  ]
+  "scopedRegistries": []
 }

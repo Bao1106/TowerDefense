@@ -29,6 +29,10 @@ public static class TDGameEventBus
     // ── UI interactions ───────────────────────────────────────────────────────
     public static event Action OnUnitPickup;
     public static event Action OnTowerPlaced;
+    // Deploy gesture transitioned from Phase 1 (Dragging) to Phase 2 (DirectionSelect)
+    // — fired the moment the player releases on a valid cell and the diamond direction
+    // picker appears. Tutorial system uses this to show the "drag direction" hint.
+    public static event Action OnDeployDrop;
 
     // ── Gameplay lifecycle ────────────────────────────────────────────────────
     public static event Action OnGameplayStarted;
@@ -73,4 +77,7 @@ public static class TDGameEventBus
 
     public static void TowerPlaced()
         => OnTowerPlaced?.Invoke();
+
+    public static void DeployDrop()
+        => OnDeployDrop?.Invoke();
 }

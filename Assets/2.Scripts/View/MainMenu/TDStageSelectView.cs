@@ -199,8 +199,7 @@ public class TDStageSelectView : MonoBehaviour
     private void OnPlayClicked()
     {
         if (m_SelectedStage == null) return;
-        TDGameStateControl.api.SelectStage(m_SelectedStage.StageId);
-        TDSceneController.api.GoToGameplay();
+        TDSceneController.api.GoToGameplay(m_SelectedStage.StageId);
     }
 
     private void OnBackClicked() => Hide();

@@ -157,12 +157,29 @@ public class TDGameplayHUDView : MonoBehaviour
                 ? Color.red
                 : m_LifeColorNormal;
 
-            DOTween.Kill(m_LifeText.transform);
-            m_LifeText.transform
-                .DOPunchScale(Vector3.one * TDConstant.HUD_PUNCH_LIFE, TDConstant.HUD_PUNCH_DURATION, TDConstant.HUD_PUNCH_VIBRATO, TDConstant.HUD_PUNCH_ELASTICITY)
-                .SetTarget(m_LifeText.transform).SetUpdate(true);
+            SafePunch(m_LifeText.transform, TDConstant.HUD_PUNCH_LIFE, TDConstant.HUD_PUNCH_VIBRATO);
         }
         StartCoroutine(FlashScreen(lives));
+    }
+
+    // Punch the target with a safe reset.
+    // Bug being fixed: DOTween.Kill(target) (default complete=false) leaves the tween
+    // mid-bounce — the transform's localScale stays at whatever overshoot value it
+    // happened to be on. Rapid retriggers (e.g. enemy waves making gold tick fast)
+    // drift the scale away from 1 → text appears huge for the rest of the run.
+    // SafePunch kills the existing tween AND restores localScale to identity before
+    // starting the new punch, so each animation begins from a clean baseline.
+    private static void SafePunch(Transform t, float strength, int vibrato)
+    {
+        if (t == null) return;
+        DOTween.Kill(t);
+        t.localScale = Vector3.one;
+        t.DOPunchScale(Vector3.one * strength,
+                       TDConstant.HUD_PUNCH_DURATION,
+                       vibrato,
+                       TDConstant.HUD_PUNCH_ELASTICITY)
+         .SetTarget(t)
+         .SetUpdate(true);
     }
 
     private void OnGameOver()
@@ -186,20 +203,14 @@ public class TDGameplayHUDView : MonoBehaviour
     {
         if (m_CurrencyText == null) return;
         m_CurrencyText.text = gold.ToString();
-        DOTween.Kill(m_CurrencyText.transform);
-        m_CurrencyText.transform
-            .DOPunchScale(Vector3.one * TDConstant.HUD_PUNCH_GOLD, TDConstant.HUD_PUNCH_DURATION, TDConstant.HUD_PUNCH_VIBRATO, TDConstant.HUD_PUNCH_ELASTICITY)
-            .SetTarget(m_CurrencyText.transform).SetUpdate(true);
+        SafePunch(m_CurrencyText.transform, TDConstant.HUD_PUNCH_GOLD, TDConstant.HUD_PUNCH_VIBRATO);
     }
 
     private void OnEnemyCountChanged(int killed, int total)
     {
         if (m_EnemyCountText == null) return;
         m_EnemyCountText.text = $"{killed}/{total}";
-        DOTween.Kill(m_EnemyCountText.transform);
-        m_EnemyCountText.transform
-            .DOPunchScale(Vector3.one * TDConstant.HUD_PUNCH_ENEMY, TDConstant.HUD_PUNCH_DURATION, 5, TDConstant.HUD_PUNCH_ELASTICITY)
-            .SetTarget(m_EnemyCountText.transform).SetUpdate(true);
+        SafePunch(m_EnemyCountText.transform, TDConstant.HUD_PUNCH_ENEMY, 5);
     }
 
     private void OnVictory()
@@ -214,7 +225,12 @@ public class TDGameplayHUDView : MonoBehaviour
         int stars = CalculateStars(lives);
         string stageId = TDGameStateControl.api?.SelectedStageId ?? "";
 
-        m_VictoryPanel?.Show(stageId, killed, total, lives, gold, stars);
+        // End-of-demo edge case: if no further unlocked stage exists, hide the Next
+        // button and tag the title with "DEMO COMPLETE" so the player isn't asked
+        // to click a Next that would just replay the current stage.
+        bool isLastUnlocked = TDStageRepository.api?.GetNextUnlockedStage(stageId) == null;
+
+        m_VictoryPanel?.Show(stageId, killed, total, lives, gold, stars, isLastUnlocked);
     }
 
     // 3 ⭐ lives ≥ 30 (lost ≤ 10)
@@ -243,12 +259,7 @@ public class TDGameplayHUDView : MonoBehaviour
         if (m_SpeedText != null) m_SpeedText.text = isFast ? "x2" : "x1";
 
         if (m_SpeedButton != null)
-        {
-            DOTween.Kill(m_SpeedButton.transform);
-            m_SpeedButton.transform
-                .DOPunchScale(Vector3.one * TDConstant.HUD_PUNCH_SPEED_BTN, TDConstant.HUD_PUNCH_DURATION, 6, TDConstant.HUD_PUNCH_ELASTICITY)
-                .SetTarget(m_SpeedButton.transform).SetUpdate(true);
-        }
+            SafePunch(m_SpeedButton.transform, TDConstant.HUD_PUNCH_SPEED_BTN, 6);
     }
 
     // ── Button callbacks ──────────────────────────────────────────────────────
@@ -265,9 +276,14 @@ public class TDGameplayHUDView : MonoBehaviour
     private void OnNextClicked()
     {
         string currentId = TDGameStateControl.api.SelectedStageId;
-        TDStageConfig next = TDStageRepository.api?.GetNextStage(currentId);
-        if (next != null) TDGameStateControl.api.SelectStage(next.StageId);
-        PlaySceneFadeOut(TDSceneController.api.RetryGameplay);
+        TDStageConfig next = TDStageRepository.api?.GetNextUnlockedStage(currentId);
+        if (next == null)
+        {
+            PlaySceneFadeOut(TDSceneController.api.GoToMainMenu);
+            return;
+        }
+        string nextId = next.StageId;
+        PlaySceneFadeOut(() => TDSceneController.api.RetryGameplay(nextId));
     }
 
     private void OnSettingClicked()

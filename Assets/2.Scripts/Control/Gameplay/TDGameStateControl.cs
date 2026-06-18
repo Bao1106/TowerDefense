@@ -4,7 +4,7 @@ public class TDGameStateControl
 {
     public static TDGameStateControl api;
 
-    public string SelectedStageId { get; private set; } = "DEMO-1";
+    public string SelectedStageId { get; private set; } = TDStageRepository.api?.DefaultStageId ?? "DEMO-1";
 
     public void SelectStage(string stageId) => SelectedStageId = stageId;
 

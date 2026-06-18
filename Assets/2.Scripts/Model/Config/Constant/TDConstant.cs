@@ -86,7 +86,7 @@ public static class TDConstant
     // Remaining (1 - ratio) = tower zone tiles (towers can be placed here)
     public const float CONFIG_MAZE_OBSTACLE_WALL_RATIO = 0.15f;
     public const int CONFIG_PLAYER_STARTING_LIVES = 20;
-    public const int CONFIG_PLAYER_STARTING_GOLD = 10;
+    public const int CONFIG_PLAYER_STARTING_GOLD = 30;
     public const float CONFIG_GOLD_PASSIVE_RATE = 3f; // seconds per +1 passive gold tick
     public const int CONFIG_LIFE_LOW_THRESHOLD = 5; // <= 5 lives → life text turns red
     public const int CONFIG_ENEMIES_NUMBER = 5;
@@ -131,6 +131,7 @@ public static class TDConstant
     public const string PREFAB_RANGE_HIGH_LIGHT = "RangeHighlight";
     public const string PREFAB_STAGE_CARD = "StagePrefab";
     public const string PREFAB_DIAMOND_PANEL = "DiamondPanel"; // shared deploy direction-picker / retreat panel
+    public const string SPRITE_TUTORIAL_HAND = "Icon_PictoIcon_Hand"; // animated hand cursor for first-launch tutorial
 
     #endregion
 

@@ -24,6 +24,10 @@ public class TDSlotHolderMainView : MonoBehaviour
         InitPlacementPanel();
         m_Deploy.Init(m_PlacementPanel);
 
+        // Tutorial orchestrator — zero scene setup, auto-disables itself once
+        // the player completes their first deploy (PlayerPrefs flag).
+        gameObject.AddComponent<TDTutorialView>();
+
         TDGoldControl.api.onGoldChanged += RefreshHolderInteractability;
     }
 

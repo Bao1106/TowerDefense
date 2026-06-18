@@ -95,6 +95,7 @@ public class TDDeployController : MonoBehaviour
         // would float over the Victory / GameOver popup.
         TDGameEventBus.OnVictory  += CancelOnGameEnd;
         TDGameEventBus.OnGameOver += CancelOnGameEnd;
+        if (TDPauseControl.api != null) TDPauseControl.api.onPauseChanged += OnPauseChanged;
     }
 
     private void OnDestroy()
@@ -110,11 +111,17 @@ public class TDDeployController : MonoBehaviour
         TDEnemyPathMainControl.api.onValidTowerCellsReady -= OnValidTowerCellsReady;
         TDGameEventBus.OnVictory  -= CancelOnGameEnd;
         TDGameEventBus.OnGameOver -= CancelOnGameEnd;
+        if (TDPauseControl.api != null) TDPauseControl.api.onPauseChanged -= OnPauseChanged;
     }
 
     private void CancelOnGameEnd()
     {
         if (m_State != DeployState.Idle) CancelPlacement();
+    }
+
+    private void OnPauseChanged(bool paused)
+    {
+        if (paused && m_State != DeployState.Idle) CancelPlacement();
     }
 
     private void OnValidTowerCellsReady(List<Vector3> positions) => m_ValidTowerPositions = positions;
@@ -180,6 +187,7 @@ public class TDDeployController : MonoBehaviour
         HideHighlights(); // valid-cell tiles off after drop (Arknights)
         m_Diamond?.ShowDeploy(m_DroppedCenter, onCancel: CancelPlacement);
         m_State = DeployState.DirectionSelect;
+        TDGameEventBus.DeployDrop();
     }
 
     // Phase 2: a NEW touch drags/taps to pick facing. Release: outside dead-zone = commit, inside = cancel.

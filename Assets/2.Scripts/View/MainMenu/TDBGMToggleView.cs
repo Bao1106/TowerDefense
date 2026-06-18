@@ -1,10 +1,13 @@
 using DG.Tweening;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 public class TDBGMToggleView : MonoBehaviour
 {
-    [SerializeField] private GameObject m_IconNormal; // child "Icon"
-    [SerializeField] private GameObject m_IconMute; // child "IconMute"
+    [FormerlySerializedAs("m_IconNormal")]
+    [SerializeField] private GameObject iconNormal; // child "Icon"
+    [FormerlySerializedAs("m_IconMute")]
+    [SerializeField] private GameObject iconMute; // child "IconMute"
 
     private void Awake()
     {
@@ -23,11 +26,11 @@ public class TDBGMToggleView : MonoBehaviour
 
     private void ApplyState(bool muted, bool animate)
     {
-        if (m_IconNormal != null) m_IconNormal.SetActive(!muted);
-        if (m_IconMute != null) m_IconMute.SetActive(muted);
+        if (iconNormal != null) iconNormal.SetActive(!muted);
+        if (iconMute != null) iconMute.SetActive(muted);
 
         if (!animate) return;
-        var active = muted ? m_IconMute : m_IconNormal;
+        var active = muted ? iconMute : iconNormal;
         if (active != null)
             active.transform.DOPunchScale(Vector3.one * 0.25f, 0.2f, 1).SetUpdate(true);
     }
