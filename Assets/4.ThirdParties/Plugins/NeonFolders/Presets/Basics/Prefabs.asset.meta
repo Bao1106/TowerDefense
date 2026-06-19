@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: 6f6df9bb3685ea3469e22c66572730b2
+timeCreated: 1538599296
+licenseType: Store
+NativeFormatImporter:
+  mainObjectFileID: 11400000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 129844
+  packageName: Neon Folders
+  packageVersion: 1.0.3
+  assetPath: Assets/Plugins/NeonFolders/Presets/Basics/Prefabs.asset
+  uploadId: 272883

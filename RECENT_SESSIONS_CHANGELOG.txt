@@ -1,0 +1,2372 @@
+﻿================================================================================
+  TOWER DEFENSE — RECENT SESSIONS CHANGELOG
+  Updated: 2026-06-17
+================================================================================
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSIONS 23–45 — ARCHIVED SUMMARY
+════════════════════════════════════════════════════════════════════════════════
+
+  S23  Interface Refactor + Event Bus: IDeployableDTO, IPlacedUnit, TDGameEventBus
+       OperatorType enum, TowerBehaviorModel → Dictionary, unified factory.
+
+  S25  PathTile visual restore: PREFAB_PATH "Plane"→"PathTile", Stone_mobile.mat.
+
+  S26  HP Bar system: TDHPBarView, HPBar_Enemy/Operator prefabs, World Space Canvas.
+
+  S27  Toon Shader + HP Bar depth fix: 5 Toon materials, OutlineFeature,
+       UI_AlwaysOnTop.shader (ZTest Always), HPBar_AlwaysOnTop.mat.
+
+  S28  Enemy attack anim + OperatorKnight weapon: EnemyData stats set, all 4
+       enemy animators fixed (Walk/Attack/GetHit/Die), DragonBoarBoss trigger
+       remapped, Sword on prop_r with Toon_Sword.mat.
+
+  S29  Maze Extraction refactor: TDMazePathGenerator (Recursive Backtracker),
+       wall cells = tower spots, corridor cells = enemy path. Camera 40° rotation.
+       GameMapVisualize (24.5,0,23) scale (4,5,3). Dynamic start/end snap even coord.
+
+  S30  Obstacle system overhaul + HP bar Y-offset: footprint stays in wall cells,
+       ObstacleTile.prefab (Generic_Grass.mat), 6 small obstacle prefabs,
+       ratio 30%→15%. m_YOffset serialized (HPBar_Enemy=2.5, Operator=1.8).
+
+  S31  HP bar fill bug fix: ProceduralImage Fill replace inactive standard Image.
+       HPBar_AlwaysOnTop → HPBar_ProceduralAlwaysOnTop.mat (rounded corners + ZTest Always).
+
+  S32  HP bar position below unit (m_YOffset=-0.3), obstacle gate buffer radius=2,
+       IsValidPlacement guard against path cell leaks.
+
+  S33  Win/Lose Popup v1: GameOverPanel + VictoryPanel với Kenney border frames,
+       stats populate từ live game data, pause on show, Retry → main menu.
+
+  S34  Retry crash fix (TDInitializeModel.Reset), DragonBoarBoss animator duplicate
+       (DragonBoarBossCTRL.controller). 2-phase mobile placement Arknights-style:
+       nhấc ngón = cancel (Phase 1), kéo về center = exit Phase 2.
+       TDOperatorRetreatControl + TDOperatorSelectionView + OperatorActionPanel UI.
+
+  S35  IsValidOperatorPlacement (Android fix), SelectionIndicator diamond Quad,
+       SelectionIndicator.shader (ZTest Always gold), TDTowerRetreatControl,
+       UnoccupyCell(), BoxCollider trigger cho 13 tower prefabs.
+
+  S36  Stage system: TDStageConfig + TDStageRepository, SelectedStageId persist
+       qua reload (??= singleton), Next button load đúng stage tiếp.
+       Stage name trong Win/Lose popup. SO: DEMO-1 (LevelIndex=0), DEMO-2 (LevelIndex=1).
+
+  S37  Map 2 Desert visual: TDMapVisualConfig per stage, PathTile/TowerZone/ObstacleTile
+       Desert prefabs, Generic_Dirt ground, 6 desert obstacles.
+       HP bar stagger (Enemy=-0.3, Operator=-0.6). TDPauseControl.Resume() on scene load.
+
+  S38  Retreat panel auto-display bug fix: TDSlotHolderMainView.IsPlacingUnit static flag,
+       TDOperatorSelectionView guard khi placement mode active.
+
+  S39  Dynamic multi start/end gate system: TDPathGroup DTO, IGateAssignmentStrategy
+       (RoundRobin/Random/PerWave/Simultaneous), TDGatePlacer, 6 MapLayout enum,
+       IPathFinder DI, iterative CarveFrom stack, cross-gate A* blocking.
+       Post-fix: pathsPerGroup luôn = CONFIG_NUM_PATHS, minLength retry.
+
+  S40  Melee operator expansion: Defender (block 3, high HP) + Striker (reach 3 ô, block 1)
+       enum + SO data. OperatorDefender/Striker.controller. CreateOperatorPrefabs.cs editor script.
+
+  S41  3 MC Tiny prefabs (KnightTiny/DefenderTiny/StrikerTiny từ RPGTinyHeroWavePBR MC01/04/07).
+       3 Synty prefabs restored. OperatorType enum 3→6. Melee Operator Config 3→6 entries.
+       Lana Studio Casual RPG VFX imported (141 prefabs, 13 categories).
+
+  S42  5 custom operators (Ace/Ginger/Layla/Moon/Tart) từ CustomOperator pack.
+       DeployZone enum (PathCell/TowerZone). IOperatorBehavior + PathCellOperatorBehavior
+       + TowerZoneOperatorBehavior Strategy Pattern. OperatorType 6→11.
+       TowerZone highlight (green) vs PathCell highlight (blue) phân biệt.
+
+  S43  Weapons gắn vào prop_r/prop_l cho 5 custom operators. 3 animator controllers mới
+       (Ace/Ginger/Moon). TowerZoneOperatorBehavior.TryAttack() OverlapSphere.
+       10 icon PNG 256×256 render + assign vào config [1]–[10].
+
+  S44  BUG: NetworkReachability guard removed (offline gameplay unblocked).
+       BUG: 7 TDGameEventBus events wired (EnemyDied, LifeLost, WaveStarted,
+       EnemySpawned, Victory, GameOver, TowerAttacked).
+       SelectionIndicator.shader border-only (inside transparent).
+       Retreat panel anchor: upper-left diamond edge midpoint (camera-aware).
+       SelectionIndicator child applied to 10 operator prefabs.
+
+  S45  BUG: weapon_r + weapon_l bones added to all 11 prefabs (RPGTinyHero curve
+       mismatch với Synty prop_r/prop_l → weapon đứng yên khi attack).
+       BUG: TDSpeedControl.Initialize() thêm Time.timeScale=1 (speed x2 bug fixed).
+       SelectionIndicator corrected: pos=(0,2,0) rot=(90,0,0) scale=(3,3,1) — 11 prefabs.
+       Full project review: architecture 8/10, visual polish 4/10, audio 0/10.
+
+  ── Trạng thái sau S45 ───────────────────────────────────────────────────────
+  11 operators, 4 enemies, 5 towers, 2 stages (DEMO-1 City, DEMO-2 Desert).
+  Core gameplay loop hoàn chỉnh. TDGameEventBus fully wired. Lana Studio sẵn sàng.
+  Gap: Win/Lose popup cần redesign, VFX chưa implement, Audio chưa có.
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 46 — UI REDESIGN: VICTORY + GAMEOVER POPUPS                  [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-05
+
+  TDConstant.cs paths update theo design thực tế:
+    PATH_GAMEPLAY_GAMEOVER_RETRY_BTN = "GameOverPanel/PopupWindow/Bottom/BtnRetry"
+    PATH_GAMEPLAY_VICTORY_RETRY_BTN  = "VictoryPanel/PopupWindow/Bottom/BtnRetry"
+    PATH_GAMEPLAY_VICTORY_NEXT_BTN   = "VictoryPanel/PopupWindow/Bottom/BtnNext"
+    Victory stats: VictoryPanel/PopupWindow/Header/Stage | Middle/Info/*/TxtValue
+    GameOver stats: GameOverPanel/PopupWindow/Header/Stage | Middle/Info/*/TxtValue
+    PATH_GAMEOVER_STAT_WAVE = "...Middle/Info/WaveReached/TxtValue"
+
+  VictoryPanel structure (user built in Editor):
+    Full-screen overlay (dark blue #071828 @60%)
+    PopupWindow [VLG pad 72/72/48/48, spacing=24]
+      BorderFrame [Image, stretch, ignoreLayout]
+      Header [Stage badge ProceduralImage gold + Title HLG]
+      Middle [Star row (3 stars) + Divider + Info (4 stat rows gold dark)]
+      Bottom [BtnRetry + BtnNext, minW=450 minH=72]
+
+  GameOverPanel structure (built in S46):
+    Full-screen overlay (dark red #0F0505 @60%)
+    PopupWindow [sizeDelta=1152×708, same VLG]
+      BorderFrame [Image, stretch, ignoreLayout]
+      Header [Stage badge ProceduralImage red + Skull icon + "GAME OVER"]
+      Middle [Divider + Info (4 rows: EnemiesDefeated/LivesRemaining/Gold/WaveReached)]
+      Bottom [BtnRetry only, dark red, minW=450 minH=72]
+
+  Icons used:
+    PictoIcon_Skull, PictoIcon_Player, PictoIcon_Battle, PictoIcon_Dollar, PictoIcon_Flag
+    (Assets/1.Assets/UnityStore Resources/Layer Lab/2D Icons-PictoIconPack01/Icons/)
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 47 — POPUP PANEL SCRIPTS + DOTWEEN TRANSITIONS               [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-05
+
+  [NEW] TDVictoryPanelView.cs
+    Awake(): cache all sub-refs, auto-add CanvasGroup to PopupWindow.
+    BindButtons(onRetry, onNext) | Show(stageId, killed, total, lives, gold)
+    PlayShowAnim: SetActive(true) → alpha 0+scale 0.75 → fade 0.25s OutCubic
+                  JOIN scale 1.0 0.38s OutBack → interactable=true
+    PlayHideAnim: scale→0.9 (0.20s InCubic) → alpha→0 (0.15s) → SetActive(false)
+    SetUpdate(true): tweens work khi Time.timeScale=0
+
+  [NEW] TDGameOverPanelView.cs
+    Tương tự VictoryPanelView + m_StatWave.
+    AppendInterval(0.5s) delay trước animation ("thất bại chậm").
+    Scale: 1.15→1.0 với Ease.OutElastic.
+    Path fixes: "Lives Remaining" → "LivesRemaining", "Gold Remaining" → "GoldRemaining"
+
+  [MODIFIED] TDGameplayHUDView.cs
+    15 cached fields → 2 fields (TDGameOverPanelView + TDVictoryPanelView).
+    OnGameOver/OnVictory: delegate 100% sang panel view.
+
+  Components attached to GameOverPanel + VictoryPanel in scene. Scene saved.
+  DOTween: Assets/4.ThirdParties/Plugins/Demigiant/DOTween/
+  DOTween.Kill(gameObject) trước mỗi show để tránh stacked tweens.
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 48 — BUG FIXES: STRATEGY NULL CRASH + OPERATOR RANGE HIGHLIGHT  [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-06
+
+  BUG-1: m_Strategy null → NullReferenceException crash tại wave 1
+    Root cause: async ImplementPath() continuation chạy sau TDControl recreate api
+                → m_Strategy = null → StartWaveLoop() crash.
+    Fix [TDEnemyPathMainControl.cs]:
+      + field default: m_Strategy = new RoundRobinStrategy()
+      + SetStrategy() null-guard: strategy ?? new RoundRobinStrategy()
+      + failsafe trong StartWaveLoop(): m_Strategy ??= new RoundRobinStrategy()
+
+  BUG-2: Operator range highlight không hiện khi tap select đã đặt operator
+    Root cause: TDOperatorSelectionView.SelectOperator() thiếu range highlight logic.
+    Fix [TDOperatorSelectionView.cs]:
+      + m_RangeHighlightPrefab load từ PREFAB_RANGE_HIGH_LIGHT
+      + ShowOperatorRange(op): GetData → rangeOffsets → TDOffsetRangeDTO
+        → GetCellsInRange → pool-based tile spawn tại Y=0.12f
+      + HideRangeHighlights() khi Deselect()
+      + SelectOperator() gọi ShowOperatorRange() cuối method
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 49 — BUG FIXES: LIVES DISPLAY + RANGE Z-ORDER + PAUSE POPUP  [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-06
+
+  BUG-1: Lives Remaining hiển thị "40/40" cứng trong GameOver popup
+    Root cause #1: path "LivesLost/TxtValue" nhưng node tên "LivesRemaining"
+                   → m_StatLives = null → text không update.
+    Root cause #2: semantic sai — cần show lives remaining, không phải lives lost.
+    Fix [TDGameOverPanelView.cs]: path → "LivesRemaining/TxtValue", param livesLost→lives.
+    Fix [TDGameplayHUDView.cs]: truyền lives (remaining), không tính livesLost.
+
+  BUG-2: Operator không có range highlight khi kéo để đặt (placement phase)
+    Root cause: RefreshRangeHighlights() early return khi TowerType.Operator.
+    Fix [TDSlotHolderMainView.cs]:
+      - early return → RefreshOperatorRangeHighlights()
+      + [NEW] RefreshOperatorRangeHighlights(): GetData(m_CurrentOperatorType)
+        → rangeOffsets → TDOffsetRangeDTO → ApplyRangeHighlights()
+      + [EXTRACT] ApplyRangeHighlights(cells): pool-based, dùng chung tower + operator
+
+  BUG-3: Range highlight bị path tile / tower zone đè (z-fighting tại Y=0.12f)
+    Fix [TDConstant.cs]: + CONFIG_RANGE_HIGHLIGHT_Y = 0.3f
+    Fix: TDSlotHolderMainView + TDOperatorSelectionView dùng constant này.
+
+  BUG-4: Pause popup hiện đằng sau GameOver/Victory popup
+    Root cause: OnGameOver/OnVictory gọi Pause() → fire OnPauseChanged → ShowPausePanel.
+    Fix [TDGameplayHUDView.cs]:
+      + m_IsGameEnding flag, set true trước Pause()
+      + OnPauseChanged(): if (m_IsGameEnding) return
+      → Pause vẫn set timeScale=0, chỉ suppress pause UI.
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 51 — OPERATOR TYPE CLASS REFACTOR                             [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-06
+
+  Vấn đề gốc: OperatorType enum trộn lẫn "class archetype" với "identity cá nhân"
+    Cũ: Knight/Defender/Striker/KnightTiny/DefenderTiny/StrikerTiny/Ace/Ginger/Layla/Moon/Tart (11 giá trị)
+    → Không có Ranger/Mage class, Ginger/Moon treat như individual type riêng (sai Arknights design)
+    → AttackType hardcode = Multiple cho mọi operator
+    → DeployZone phải config thủ công (dễ sai)
+
+  [MODIFIED] Assets/2.Scripts/Model/Config/Enum/Enums.cs
+    OperatorType → 5 class archetypes:
+      Knight   (PathCell, block 2, melee balanced)
+      Defender (PathCell, block 3, melee tank)
+      Striker  (PathCell, block 1, melee reach)
+      Ranger   (TowerZone, block 0, ranged physical) ← NEW
+      Mage     (TowerZone, block 0, ranged arts)     ← NEW
+
+  [MODIFIED] Assets/2.Scripts/Model/Config/TDFlyweightOperatorDataSettings.cs
+    + string operatorName — identity display (Ace/Ginger/Layla/Moon/Tart)
+    + AttackType attackType — serializable field, bỏ hardcode Multiple
+    - DeployZone deployZone (serialized field) → computed property:
+        Ranger/Mage → TowerZone, còn lại → PathCell (tự động, không sai được)
+
+  [MODIFIED] Assets/2.Scripts/Control/Tower/OperatorBehavior/PathCellOperatorBehavior.cs
+    TryAttack(): check attackType
+      Single   → damage blocked[0] (1 mục tiêu đầu bị block)
+      Multiple → damage toàn bộ blocked enemies (default, dùng cho Layla 2 kiếm, Tart hammer)
+
+  [MODIFIED] Assets/2.Scripts/Editor/OperatorDataDrawer.cs
+    FIELD_COUNT 7 → 10 (thêm operatorName, operatorType, attackType)
+
+  Config asset migration (Melee Operator Config.asset):
+    [0] operatorName="Knight"  , class=Knight   , attackType=Multiple → PathCell
+    [1] operatorName="Defender", class=Defender  , attackType=Multiple → PathCell
+    [2] operatorName="Striker" , class=Striker   , attackType=Multiple → PathCell
+    [3] operatorName="Ace"     , class=Striker   , attackType=Multiple → PathCell
+    [4] operatorName="Ginger"  , class=Ranger    , attackType=Single   → TowerZone ✅
+    [5] operatorName="Layla"   , class=Striker   , attackType=Multiple → PathCell
+    [6] operatorName="Moon"    , class=Mage      , attackType=Single   → TowerZone ✅
+    [7] operatorName="Tart"    , class=Defender  , attackType=Multiple → PathCell
+
+  Note: KnightTiny/DefenderTiny/StrikerTiny (Tiny prefabs) chưa có trong config asset
+        — sẽ add khi cần, chỉ cần đặt đúng class (Knight/Defender/Striker).
+  Note: DamageType (Physical vs Arts) chưa implement — để sau khi có Armored enemy.
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 53 — VFX 2-PHASE SYSTEM: ATTACK VFX + IMPACT VFX            [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-06
+
+  Design: mỗi ranged attack có 2 VFX riêng biệt:
+    VFX 1 (attackVfx)  — spawn tại operator pos khi fire (muzzle flash / cast glow)
+    VFX 2 (impactVfx)  — spawn tại enemy pos khi hit (triggered bởi animation event)
+  Melee operator: attackVfx + impactVfx cùng pos (instantaneous), không cần anim event.
+
+  ── EventBus ─────────────────────────────────────────────────────────────────
+
+  [MODIFIED] TDGameEventBus.cs
+    + event Action<Vector3, OperatorType> OnOperatorImpacted
+    + static void OperatorImpacted(Vector3, OperatorType)
+
+  ── EffectDef + EffectManager ────────────────────────────────────────────────
+
+  [MODIFIED] TDEffectConfig.cs — EffectDef:
+    + GameObject impactVfxPrefab  // impact VFX tại enemy pos
+    vfxPrefab   → attack VFX tại attacker pos (rename semantic, không đổi field name)
+    vfxPrefab2  → optional second attack VFX (giữ nguyên, e.g. Victory coins)
+
+  [MODIFIED] TDEffectManager.cs
+    + Subscribe/Unsubscribe OnOperatorImpacted
+    + OnOperatorImpacted(pos, type) handler
+    + PlayImpact(key, impactPos): chỉ spawn impactVfxPrefab, không play SFX lại
+
+  ── IOperatorBehavior + implementations ──────────────────────────────────────
+
+  [MODIFIED] IOperatorBehavior.cs
+    + void ExecuteHit(Vector2Int, Vector3, OperatorData) — animation event callback
+
+  [MODIFIED] PathCellOperatorBehavior.cs
+    TryAttack(): thêm fire OperatorImpacted(worldPos, type) cùng lúc với OperatorAttacked
+    + ExecuteHit(): no-op (melee hit là instantaneous)
+
+  [MODIFIED] TowerZoneOperatorBehavior.cs
+    + field TDEnemyView m_PendingTarget
+    TryAttack(): store m_PendingTarget + fire OperatorAttacked — KHÔNG TakeDamage ngay
+    + ExecuteHit(): TakeDamage(m_PendingTarget) + fire OperatorImpacted(enemyPos) + clear
+
+  ── TDOperatorView — Animation Event callback ─────────────────────────────────
+
+  [MODIFIED] TDOperatorView.cs
+    + public void OnAttackHit()  // called by AnimationEvent
+      → m_Behavior.ExecuteHit(m_MyCell, transform.position, data)
+
+  ── TDAttackVFX — Tower impact VFX fix (BUG P1) ──────────────────────────────
+
+  [MODIFIED] TDAttackVFX.cs — OnImpact():
+    + TDGameEventBus.TowerAttacked(transform.position, OwnerType)
+    → TDEffectManager nhận event, spawn impactVfxPrefab tại hit pos
+    (Bug P1 từ S52: OnTowerAttacked chưa bao giờ fire — đã fix)
+
+  ── Animation Events trên FBX clips ──────────────────────────────────────────
+
+  Via ModelImporter (editor script, SaveAndReimport):
+    Attack01_BowAndArrow.fbx → AnimationEvent "OnAttackHit" tại t=0.333s (50% clip)
+    Attack01_MagicWand.fbx   → AnimationEvent "OnAttackHit" tại t=0.267s (50% clip)
+  Ginger speed=1.2 → effective hit tại ~0.278s sau khi anim start.
+
+  ── VFX Prefabs copy vào Resources ───────────────────────────────────────────
+
+  4 prefabs copy từ Lana Studio → Assets/1.Assets/Resources/Prefabs/VFX/:
+    Burst_sharp.prefab         — attack VFX Ranger (muzzle flash physical)
+    Flash_dubble_circle.prefab — attack VFX Mage (magic circle cast)
+    Hit_wind.prefab            — impact VFX Ranger (wind hit tại enemy)
+    Hit_magic.prefab           — impact VFX Mage (magic explosion tại enemy)
+
+  ── Còn cần làm thủ công ────────────────────────────────────────────────────
+
+  Effect Config SO (Resources/Configs/Effect Config.asset) — chưa tồn tại, cần tạo:
+    Create → Game Configs → Effect Config → assign 14 EffectDef entries
+    OperatorAttacked_Ranger: vfxPrefab=Burst_sharp, impactVfxPrefab=Hit_wind
+    OperatorAttacked_Mage:   vfxPrefab=Flash_dubble_circle, impactVfxPrefab=Hit_magic
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 54 — BUG FIX: RANGER ATTACK RANGE (OVERLAPSHPERE → CELL-BASED)  [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-06
+
+  Bug: Ginger (Ranger) attack sai range — bắn được enemy tít xa, nhưng Fast/Tank/Boss
+       đi ngang qua không attack. Visual range ≠ actual attack range.
+
+  Root cause: TowerZoneOperatorBehavior.TryAttack() dùng Physics.OverlapSphere()
+    → hình tròn vô hướng, không quan tâm facing direction
+    → TDOffsetRangeDTO (dùng cho highlight) là directional cell offsets
+    → 2 hệ thống khác nhau hoàn toàn
+
+  Fix v2 (đúng):
+
+  [MODIFIED] IOperatorBehavior.cs
+    TryAttack(cell, worldPos, OperatorData)   — bỏ rotation param
+    ExecuteHit(cell, worldPos, OperatorData)  — bỏ rotation param
+
+  [MODIFIED] TowerZoneOperatorBehavior.cs
+    + field Transform        m_OperatorTransform  (cache trong OnInit)
+    + field TDOffsetRangeDTO m_RangeDTO           (cache trong OnInit — không alloc mỗi frame)
+    OnInit(): m_OperatorTransform = view.transform; m_RangeDTO = new TDOffsetRangeDTO(rangeOffsets)
+    TryAttack(): dùng m_RangeDTO.GetCellsInRange(cell, m_OperatorTransform.rotation)
+                 + scan TDEnemyRegistry.GetAll() — cùng logic với range highlight
+    OnRemove(): m_OperatorTransform = null
+
+  [MODIFIED] PathCellOperatorBehavior.cs — bỏ rotation param (không đổi logic)
+  [MODIFIED] TDOperatorView.cs — bỏ transform.rotation khỏi TryAttack/ExecuteHit calls
+
+  Behavior tự quản lý rotation qua Transform reference → caller không cần biết.
+  Visual range = actual attack range (dùng chung TDOffsetRangeDTO).
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 52 — EFFECT SYSTEM: TDEffectManager + SO Config              [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-06
+
+  Design pattern: Observer (TDGameEventBus) + EffectDef data-driven config
+  Pattern choice: SO thay Resources.Load string → direct prefab refs, no typo,
+                  Unity dependency tracking, cùng pattern các config SO khác.
+
+  ── EventBus fix ─────────────────────────────────────────────────────────────
+
+  [MODIFIED] Assets/2.Scripts/Services/TDGameEventBus.cs
+    + event Action<Vector3, OperatorType> OnOperatorAttacked  ← new, tách khỏi OnTowerAttacked
+    + static void OperatorAttacked(Vector3, OperatorType)
+
+  [MODIFIED] Assets/2.Scripts/Control/Tower/OperatorBehavior/PathCellOperatorBehavior.cs
+    TryAttack(): TowerAttacked(pos, Operator) → OperatorAttacked(pos, data.operatorType)
+
+  [MODIFIED] Assets/2.Scripts/Control/Tower/OperatorBehavior/TowerZoneOperatorBehavior.cs
+    TryAttack(): TowerAttacked(pos, Operator) → OperatorAttacked(pos, data.operatorType)
+
+  ── New files ─────────────────────────────────────────────────────────────────
+
+  [NEW] Assets/2.Scripts/Model/Config/Enum/Enums.cs — GameEventKey enum (14 keys):
+    EnemyDied_Normal/Fast/Tank/Boss
+    OperatorAttacked_Knight/Defender/Striker/Ranger/Mage
+    TowerAttacked | LifeLost | WaveStarted | Victory | GameOver
+
+  [NEW] Assets/2.Scripts/Model/Config/TDEffectConfig.cs
+    EffectDef [Serializable]:
+      key (GameEventKey), vfxPrefab, vfxPrefab2 (optional second VFX)
+      sfxClip, sfxVolume, cameraShake, shakeStrength, shakeDuration
+    TDEffectConfig : ScriptableObject
+      static api → Resources.Load<TDEffectConfig>(TDConstant.CONFIG_EFFECT)
+      List<EffectDef> m_Effects
+
+  [NEW] Assets/2.Scripts/Services/TDEffectManager.cs — static class:
+    Init(): load TDEffectConfig.api → Dictionary<GameEventKey, EffectDef>
+            subscribe TDGameEventBus events + onGroupsReady (gate positions)
+    Cleanup(): unsubscribe all, destroy [Effect Pool] root, clear pools
+    Play(key, pos): SpawnVFX(vfxPrefab) + SpawnVFX(vfxPrefab2) + PlaySFX + DOShakePosition
+    SpawnVFX(): pool per prefab (Queue<GO>), DOVirtual.DelayedCall return
+    PlaySFX(): AudioSource.PlayClipAtPoint (no pool needed)
+    CacheGatePositions(): lưu gate world pos cho WaveStarted
+
+  [MODIFIED] Assets/2.Scripts/Model/Config/Constant/TDConstant.cs
+    + CONFIG_EFFECT = "Configs/Effect Config"
+
+  [MODIFIED] Assets/2.Scripts/Control/TDControl.cs
+    InitOtherControl(): TDVFXManager.Init() → TDEffectManager.Init()
+
+  [DELETED] Assets/2.Scripts/Services/TDVFXManager.cs
+
+  ── VFX Assets cloned ─────────────────────────────────────────────────────────
+
+  Folder mới: Assets/1.Assets/Resources/Prefabs/VFX/ (12 prefabs, GUIDs riêng)
+    Poof_generic, Poof_electric, Poof_water, Flash_generic
+    Burst_rings, Poof_coins, Fire_explosion_earth
+    Slash_stone_once, Hit_light, Hit_dark_magic
+    Area_generic_red, Eff_Muzzle
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 50 — DRAGONBOAR ANIM FIX + SELECTION INDICATOR + RETREAT TRANSITION  [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-06
+
+  ── DragonBoarBossCTRL.controller rebuild ────────────────────────────────────
+
+  Bug: Boss tự play Die animation sau ~11 giây dù chưa bị giết.
+  Root cause: Controller gốc là showcase sequence — states nối nhau bằng exitTime
+    không có condition: Walk(4s)→Run(4s)→HornAttack(1s)→Idle0(2s)→Die→Idle.
+    Không có AnyState→Die transition → code SetTrigger("Die") không có tác dụng.
+
+  Fix: Rebuild toàn bộ DragonBoarBossCTRL.controller — chỉ 4 states cần thiết:
+    Default state: Walk (loop, speed=1.1)
+    AnyState → Walk        (trigger "Walk",   hasExitTime=false, canSelf=false)
+    AnyState → Basic Attack (trigger "Attack", hasExitTime=false, canSelf=false)
+    AnyState → Get Hit     (trigger "GetHit", hasExitTime=false, canSelf=false)
+    AnyState → Die         (trigger "Die",    hasExitTime=false, canSelf=false)
+    Basic Attack → Walk    (exitTime=0.9, duration=0.1)
+    Get Hit → Walk         (exitTime=0.9, duration=0.1)
+    Die → (no exit)
+  Animation clips giữ nguyên (guid không đổi).
+
+  ── SelectionIndicator scale apply batch ─────────────────────────────────────
+
+  OperatorKnight.prefab SelectionIndicator: localPosition=(0,2,0), localEulerAngles=(90,0,0),
+  localScale=(6,6,1). Script batch apply cho 10 prefabs còn lại — 10/10 updated.
+
+  ── Retreat Panel smooth transition ──────────────────────────────────────────
+
+  File: Assets/2.Scripts/View/GamePlay/Tower/TDOperatorSelectionView.cs
+
+  ShowPanel(): SetActive(true) → localScale=0 + alpha=0 → DOScale OutBack 0.25s
+               JOIN DOFade 0→1 OutCubic 0.16s → OnComplete: interactable=true
+  HidePanel(): interactable=false → DOScale InBack 0.16s JOIN DOFade InCubic 0.12s
+               → OnComplete: SetActive(false)
+  DeselectImmediate(): không animate — dùng khi switch selection A→B tránh flicker.
+  SetUpdate(true): tween chạy khi timeScale=0.
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 55 — ANDROID MOBILE INPUT SYSTEM OVERHAUL (PHASE 1)          [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-08
+
+  Context: Test video SVID_20260608_103614_1 + SVID_20260608_113514_1 reveal
+           3 critical mobile input bugs sau khi migrate sang New Input System.
+
+  File: Assets/2.Scripts/View/GamePlay/Tower/TDSlotHolderMainView.cs
+
+  BUG-1: Ghost tạo ra ở vị trí 0,0,0 — user phải nhấc tay → tap lại mới drag được.
+    Root cause: onClick fires on PointerUp → finger đã lifted → ghost tạo nhưng không
+                còn touch nào active → drag không hoạt động.
+    Fix: SetupOnSelectSlot() dùng EventTrigger.PointerDown thay vì onClick.
+         Ghost tạo ngay khi finger down → drag tiếp luôn mà không cần nhấc tay.
+
+  BUG-2: Ghost không follow finger khi ngón tay còn trên slot button.
+    Root cause: Update() gọi IsPointerOverUI() trước UpdateGhostTransform()
+                → khi finger trên UI, exit sớm, ghost đứng yên.
+    Fix: Di chuyển UpdateGhostTransform() + RefreshRangeHighlights() lên TRƯỚC
+         IsPointerOverUI() check. Ghost luôn follow, bất kể UI hay không.
+
+  BUG-3: Cancel bị block khi nhấc tay trên slot button area.
+    Root cause: IsPointerOverUI() return true → HandlePlacementInput() bị skip
+                → TouchPhase.Ended không xử lý → ghost không cancel.
+    Fix: Android: check fingerEnded trước IsPointerOverUI(). Nếu Ended thì
+         vẫn cho HandlePlacementInput() chạy. Cancel/Place luôn được xử lý.
+    Code:
+      bool fingerEnded = dragTouch.HasValue && dragTouch.Value.phase == TouchPhase.Ended;
+      if (!fingerEnded && IsPointerOverUI()) return;
+
+  BUG-4: Ghost hiện DƯỚI ngón tay — bị che khuất, user không thấy.
+    Root cause: Android touch point = bottom-center của fingertip. Camera isometric
+                → finger che toàn bộ ghost.
+    Fix: + const TOUCH_SCREEN_Y_OFFSET_RATIO = 0.10f
+         GetFingerWorldPosition(): touchPos.y += Screen.height * 0.10f trước raycast.
+         Ghost hiện phía trên ngón tay → visible.
+
+  BUG-5: Phase 2 arm trong cùng frame cellChanged → auto-trigger direction ngay.
+    Root cause: m_PhaseArmed = true set ngay cả khi cellChanged = true.
+                Frame sau: ngón tay ra ngoài threshold → Phase 2 trigger tức thì.
+    Fix: Guard: if (!cellChanged && insideThreshold) m_PhaseArmed = true.
+         Phải vào threshold zone ít nhất 1 frame KHÔNG cellChanged mới arm được.
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 56 — ANDROID MOBILE INPUT SYSTEM (PHASE 2) + GOLD RATE       [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-08
+
+  File: Assets/2.Scripts/View/GamePlay/Tower/TDSlotHolderMainView.cs
+
+  BUG-6: Ghost auto-place trong khi user đang drag (finger chưa nhấc).
+    Root cause A (ban đầu nghĩ): multi-touch — ngón tay thứ 2 chạm, activeTouches[0]
+                bị re-order → Ended ngón phụ trigger placement.
+    Root cause B (confirmed sau khi user xác nhận test 1 finger):
+      Android micro-lift: cảm biến capacitive mất tiếp xúc ngắn (~ms) trong lúc drag
+      chậm → TouchPhase.Ended fire → m_IsDirectionSelected=true → placement xảy ra.
+      Sensor lấy lại tín hiệu ngay → TouchPhase.Began → ngón tay "vẫn đang chạm".
+
+    Fix A — Finger ID locking (giữ để handle edge case re-order):
+      + field int m_DragFingerId = -1
+      + helper Touch? FindDragTouch(): tìm touch theo touchId, fallback activeTouches[0]
+      + Update(): capture m_DragFingerId = activeTouches[0].touchId khi = -1
+      + Tất cả touch reads (UpdateGhostTransform, GetFingerWorldPosition,
+        HandlePlacementInput, IsPointerOverUI) dùng FindDragTouch() thay activeTouches[0]
+      + Reset m_DragFingerId = -1 tại OnCreateTower(), CancelPlacement(), OnPlaceTowerSuccess()
+
+    Fix B — Minimum Phase 2 duration (lọc micro-lift):
+      + const MIN_PHASE2_DURATION = 0.20f
+      + field float m_DirectionSelectedTime = -999f
+      + Khi m_IsDirectionSelected set = true lần đầu: ghi m_DirectionSelectedTime = Time.unscaledTime
+      + HandlePlacementInput(): chỉ place nếu Time.unscaledTime - m_DirectionSelectedTime >= 0.20f
+        Nếu Ended < 0.20s sau Phase 2 start → CancelPlacement() thay vì place
+
+  BUG-7: Ghost auto-trigger Phase 2 khi drag qua valid cell (tower zone / path cell).
+    Root cause: Khi drag liên tục qua cell, sequence xảy ra:
+      1. cellChanged → PhaseArmed=false
+      2. Vài frame sau: finger qua center → insideThreshold=true → PhaseArmed=true
+      3. Finger tiếp tục di chuyển → !insideThreshold + cellOk → Phase 2 trigger!
+      Trên path cell: cellOk=false (tower không valid trên path) → không bị.
+      Trên tower zone: cellOk=true → bị. Tương tự operator trên path cell.
+
+    Fix — Minimum cell hold duration:
+      + const MIN_CELL_HOLD_DURATION = 0.35f
+      + field float m_CellEnterTime = -999f
+      + Khi cellChanged: m_CellEnterTime = Time.unscaledTime
+      + Arm condition: if (!cellChanged && insideThreshold
+                           && Time.unscaledTime - m_CellEnterTime >= 0.35f)
+                           m_PhaseArmed = true
+      → Drag qua nhanh (<0.35s trên cell): không arm, Phase 2 không trigger
+      → Dừng ≥0.35s tại center rồi swipe: arm → Phase 2 → direction selection ✅
+
+  CHANGE: CONFIG_GOLD_PASSIVE_RATE 5f → 3f
+    File: Assets/2.Scripts/Model/Config/Constant/TDConstant.cs
+    Gold passive income tăng từ +1 mỗi 5 giây lên +1 mỗi 3 giây.
+
+
+================================================================================
+  PROJECT REVIEW — 2026-06-08
+================================================================================
+
+  Đánh giá sau khi review 104 file .cs, cross-checked với actual code.
+
+  ── Architecture ─────────────────────────────────────────────────────────────
+
+  [TỐTT] MVC separation rõ ràng: Control/View/Model đúng layer.
+  [TỐT] Event bus pattern (TDGameEventBus) — VFX/Audio hoàn toàn decoupled.
+  [TỐT] Flyweight pattern cho operator/bullet data — không alloc OperatorData mỗi frame.
+  [TỐT] Strategy pattern: IGateAssignmentStrategy, IOperatorBehavior — đúng chỗ.
+  [TỐT] Object pooling: enemy + projectile — không GC spike khi spawn.
+  [TỐT] TDOffsetRangeDTO cache trong OnInit() (S54) — hot path sạch.
+
+  [NỢ] 20+ class dùng static .api singleton — khó test, hidden dependencies.
+       Không phải bug nhưng là design debt nếu scale lên.
+  [NỢ] TDEnemyPathMainControl.cs quá lớn (366 lines, 8 responsibilities).
+       Nên tách: WaveSpawner, PoolManager, PathGenerator riêng.
+  [NỢ] Hai event system song song: TDGameEventBus (static events) + Action<T> delegates.
+       Nên chọn 1 pattern duy nhất, hiện tại inconsistent.
+
+  ── Real Bugs (confirmed bằng code) ─────────────────────────────────────────
+
+  [HIGH] TDTowerWeaponView.cs:102 — m_PosSpawnBullet truyền vào AttackTargets()
+         không có null guard. Nếu prefab thiếu child "BulletSpawn" → NullRef crash.
+         Fix: if (m_PosSpawnBullet == null) return; trong Init() hoặc Update().
+
+  [HIGH] TDGridMainModel.cs:105 — CellToWorld(cell) = m_Grid[cell.x, cell.y]
+         không có bounds check. WorldToCell() clamps, nhưng cell từ
+         TDOffsetRangeDTO.GetCellsInRange() có thể ra ngoài grid ở edge cases.
+         Fix: IsInBounds() guard trước khi access, trả Vector3.zero nếu out of bounds.
+
+  [MED] TDOperatorRegistry.cs:114 — GetBlockedEnemies() trả new List<> mỗi lần gọi.
+        Called từ PathCellOperatorBehavior.TryAttack() mỗi frame khi có enemy.
+        Fix: Trả IReadOnlyList<TDEnemyView> trực tiếp (caller không modify).
+        Nếu cần snapshot: chỉ tạo khi list thực sự thay đổi.
+
+  [MED] TDTowerWeaponView.cs:125 — Sort() với lambda (a,b) => ... allocate delegate
+        mỗi SCAN_INTERVAL (0.2s). Với 5+ towers = 25+ allocs/giây.
+        Fix: Cache static Comparison<TDEnemyView> hoặc implement IComparer.
+
+  [LOW] TDAttackVFX.cs:77 — AOE: new HashSet<Vector2Int>(cells) + new List<>(enemies)
+        mỗi lần AOE impact. Acceptable nếu AOE ít nhưng nên pool về sau.
+
+  ── False positives từ review (đã verify là OK) ─────────────────────────────
+
+  TDSpeedControl.cs:25 — toggle logic đúng: IsFast ? SPEED_NORMAL : SPEED_FAST ✅
+  TDAttackVFX.cs — dùng Time.deltaTime: pause-aware vì timeScale=0 khi pause ✅
+  Observer.cs — file không tồn tại trong project ✅
+
+  ── Mobile Input (sau S55+S56) ───────────────────────────────────────────────
+
+  [TỐT] EnhancedTouch + FindDragTouch() — track đúng ngón tay, immune micro-lift.
+  [TỐT] MIN_CELL_HOLD_DURATION = 0.35s — Phase 2 không trigger khi drag nhanh.
+  [TỐT] Finger Y offset 10% — ghost visible trên ngón tay.
+  [TỐT] Ended luôn được xử lý dù trên UI — cancel không bị block.
+  [TODO] TOUCH_SCREEN_Y_OFFSET_RATIO (0.10f) cần tune theo thiết bị thực tế.
+
+  ── Gameplay State ────────────────────────────────────────────────────────────
+
+  8 operators (5 class types: Knight/Defender/Striker/Ranger/Mage)
+  4 enemies (Normal/Fast/Tank/Boss)
+  5 towers
+  2 stages (DEMO-1 City, DEMO-2 Desert)
+  Core loop: hoàn chỉnh ✅ | VFX: wired, cần Effect Config.asset | Audio: 0%
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 58 — PORTFOLIO P0: FRAME RATE CAP + AUDIO MIX TUNE             [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-08
+
+  [MODIFIED] Assets/2.Scripts/View/LoadFirst/TDLoadFirst.cs
+    + Application.targetFrameRate = 60   — tránh unlimited FPS drain battery/heat mobile
+    + Screen.sleepTimeout = SleepTimeout.NeverSleep — màn hình không tắt khi demo
+
+  [MODIFIED] Assets/1.Assets/Resources/Configs/Effect Config.asset — sfxVolume tune:
+    BGM baseline = 0.45. SFX mix theo tần suất + importance:
+    TowerAttacked:              0.55  (nhiều nhất → thấp nhất, tránh muddy)
+    OperatorAttacked_* (×5):    0.60  (thường xuyên, background layer)
+    EnemyDied_Normal:           0.70
+    EnemyDied_Fast:             0.65
+    EnemyDied_Tank:             0.75  (hiếm hơn → punch hơn)
+    WaveStarted:                0.70  (signal quan trọng)
+    EnemyDied_Boss:             0.85  (highlight moment, to nhất)
+
+
+  ── LINE-ENDING FIX: 95 file lone-CR → CRLF ─────────────────────────────────
+
+  Triệu chứng: 95 file .cs hiển thị thành 1 dòng duy nhất trong editor/git/grep.
+  Nguyên nhân: script "xóa column alignment" (đầu S64) dùng
+    $lines = $original -split "(\r\n|\r|\n)"  (capture group → tách cả separator)
+    rồi mỗi phần tử chạy regex ^(\s*)(.+)$
+  Separator "\r\n" MATCH regex này: trong .NET . khớp \r nhưng KHÔNG khớp \n,
+  $ khớp ngay trước \n cuối → bắt (.+)=\r, BỎ \n.
+  → mọi \r\n rụng \n thành lone-CR (kiểu xuống dòng Mac cổ).
+  Compiler C#/Unity coi lone-CR là newline hợp lệ → KHÔNG báo lỗi → ẩn suốt.
+
+  Fix: normalize toàn bộ 111 file .cs → CRLF (chuẩn C#/VS/Unity Windows,
+  khớp core.autocrlf=true). Quy trình: \r\n→\n, \r→\n, \n→\r\n. Verified 0 lỗi.
+================================================================================
+  TODO — DEVELOPMENT PRIORITY                              [updated 2026-06-08]
+================================================================================
+
+  ── ✅ DONE ───────────────────────────────────────────────────────────────────
+
+  ✅ [P1-BUG] TDTowerWeaponView null guard m_PosSpawnBullet          (S57)
+  ✅ [P1-BUG] TDGridMainModel CellToWorld() bounds check             (S57)
+  ✅ [P1]     Effect Config.asset — 11 entries wired + sfxVolume mix (S57/S58)
+  ✅ [P0]     Application.targetFrameRate = 60 + NeverSleep          (S58)
+  ✅ [P2]     Audio system: SFX pool + BGM streaming + TDBGMManager  (S57)
+
+  ── P1 — Portfolio critical ───────────────────────────────────────────────────
+
+  ⬜ [P1] Main Menu screen — game không có entry point, vào thẳng gameplay
+          Cần: tên game + Play button + background đơn giản
+  ⬜ [P1] Dead code cleanup: xóa 10 files không dùng
+          ServiceLocator.cs, Injector.cs, Provider.cs, Observer.cs,
+          Singleton.cs, BootsTrapper.cs, Launcher.cs, ServicesManager.cs,
+          MockServices.cs, TDWebService.cs
+
+  ── P2 ───────────────────────────────────────────────────────────────────────
+
+  ⬜ [P2] Stage Select UI screen — hiện Next/Retry skip qua đây
+  ⬜ [P2] GetBlockedEnemies() — trả IReadOnlyList thay vì new List() mỗi frame
+  ⬜ [P2] TDTowerWeaponView ScanForTargets() — cache Sort Comparison, bỏ lambda alloc
+  ⬜ [P2] 4 SFX chưa có event: sfx_gold_gained / sfx_tower_placed /
+          sfx_victory / sfx_insufficient_gold → thêm GameEventKey + wire
+  ⬜ [P2] Tune TOUCH_SCREEN_Y_OFFSET_RATIO (0.10f) trên thiết bị thực
+
+  ── P3 ───────────────────────────────────────────────────────────────────────
+
+  ⬜ [P3] Loading transition screen (scene load đột ngột)
+  ⬜ [P3] Settings menu: volume sliders (master/BGM/SFX)
+  ✅ [P3] ToonOutlineVolume → đã assign trong DTGamePlay.unity  (confirmed S58)
+  ⬜ [P3] async void StartWaveLoop() → đổi sang async Task + exception handler
+  ⬜ [P3] sfx_gold_gained / sfx_tower_placed kích hoạt từ GoldControl + PlaceTower
+  ⬜ [P3] Enemy: Armored + Flying (khi đó mới cần DamageType)
+  ⬜ [P3] Operator: Medic (heal support)
+
+  ── P4 ───────────────────────────────────────────────────────────────────────
+
+  ⬜ [P4] Tiny variant operators (KnightTiny/DefenderTiny/StrikerTiny)
+  ⬜ [P4] TDEnemyPathMainControl.cs tách WaveSpawner + PoolManager riêng (SRP)
+  ⬜ [P4] Consolidate event system: chọn TDGameEventBus hoặc Action<T>
+  ⬜ [P4] GoldControl.Tick() tách khỏi HUDView.Update() (SRP)
+  ⬜ [P4] IsPlacingUnit reset on scene load
+  ⬜ [P4] A* openSet.OrderBy() → PriorityQueue O(log n)
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 57 — AUDIO SYSTEM: SFX + BGM FULL IMPLEMENTATION               [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-08
+
+  ── SFX: CelerisLab clips copy + Effect Config wire ──────────────────────────
+
+  Source: Assets/1.Assets/UnityStore Resources/CelerisLab/CompleteUISFX/ (505 clips)
+  Dest:   Assets/1.Assets/Resources/Audio/SFX/ (15 clips copy với tên gameplay)
+
+  Mapping:
+    sfx_enemy_died_normal.wav   ← item_acquired_01.wav
+    sfx_enemy_died_fast.wav     ← item_acquired_02.wav
+    sfx_enemy_died_tank.wav     ← item_acquired_long_01.wav
+    sfx_enemy_died_boss.wav     ← achievement_unlocked_01.wav
+    sfx_operator_attack_melee_01/02/03.wav ← metallic_button_01/02/03.wav
+    sfx_operator_attack_ranger.wav  ← wooden_button_01.wav
+    sfx_operator_attack_mage.wav    ← magic_button_01.wav
+    sfx_tower_attack.wav            ← heavy_mechanical_button_01.wav
+    sfx_wave_started.wav            ← dramatic_button_01.wav
+    sfx_gold_gained.wav             ← currency_gained.wav
+    sfx_tower_placed.wav            ← purchase_success_01.wav
+    sfx_victory.wav                 ← mission_success_01.wav
+    sfx_insufficient_gold.wav       ← insufficient_currency_01.wav
+
+  [MODIFIED] Assets/1.Assets/Resources/Configs/Effect Config.asset
+    11/11 entries wired: sfxClip + sfxVolume = 1.0 (sẽ tune xuống khi có BGM)
+    Keys: EnemyDied_Normal/Fast/Tank/Boss + OperatorAttacked_Knight/Defender/
+          Striker/Ranger/Mage + TowerAttacked + WaveStarted
+
+  Note: 4 clips còn lại (sfx_gold_gained, sfx_tower_placed, sfx_victory,
+        sfx_insufficient_gold) sẵn trong SFX/ — dành cho future GameEventKey entries.
+
+  ── BGM: 2 Arknights OST tracks + import optimization ────────────────────────
+
+  Files: Assets/1.Assets/Resources/Audio/
+    [Arknights OST] sjoyasorrow.mp3  (259.7s)
+    [Arknights OST] street.mp3       (263.4s)
+
+  Import optimization (cả 2 track, cả Default + Android platform):
+    LoadType:          DecompressOnLoad → Streaming  ← CRITICAL (91MB → ~256KB RAM)
+    CompressionFormat: Vorbis (giữ nguyên)
+    Quality:           1.0 → 0.7  (giảm disk ~30%, nghe không phân biệt được)
+    SampleRateSetting: PreserveSampleRate → OptimizeSampleRate
+
+  ── TDBGMManager.cs (NEW) ────────────────────────────────────────────────────
+
+  File: Assets/2.Scripts/Services/TDBGMManager.cs
+  Pattern: static class — consistent với TDEffectManager.
+
+  Init() / Cleanup():
+    Subscribe: TDGameEventBus.OnGameplayStarted + OnVictory + OnGameOver
+    Cleanup(): unsubscribe + StopImmediate() + Destroy [BGM] GameObject
+
+  Play(clip, volume):
+    EnsureSource() → tạo GameObject("[BGM]") DontDestroyOnLoad + AudioSource lần đầu
+    Kill fade tween nếu đang chạy
+    source.volume = 0 → Play() → DOFade(targetVolume, 1s).SetUpdate(true)
+
+  Stop(fadeDuration = 1.5s):
+    DOFade(0, 1.5s) → OnComplete: source.Stop()
+
+  OnGameplayStarted():
+    Resources.Load<TDStageRepository>("Configs/Stage Repository")
+    → GetStage(SelectedStageId) → Play(stage.bgmClip, stage.bgmVolume)
+
+  ── TDStageConfig.cs ─────────────────────────────────────────────────────────
+
+  [MODIFIED] Assets/2.Scripts/Model/Config/TDStageConfig.cs
+    + [Header("Audio")] public AudioClip bgmClip
+    + [Range(0,1)] public float bgmVolume = 0.45f
+  → Mỗi stage SO assign BGM clip riêng trong Inspector.
+
+  ── TDGameEventBus.cs ────────────────────────────────────────────────────────
+
+  [MODIFIED] Assets/2.Scripts/Services/TDGameEventBus.cs
+    + static event Action OnGameplayStarted
+    + static void GameplayStarted()
+
+  ── TDGameStateControl.cs ────────────────────────────────────────────────────
+
+  [MODIFIED] Assets/2.Scripts/Control/Gameplay/TDGameStateControl.cs
+    Initialize(): + TDGameEventBus.GameplayStarted() ở cuối
+    → Trigger BGM ngay khi wave system khởi tạo xong (grid ready + paths ready).
+
+  ── TDControl.cs ─────────────────────────────────────────────────────────────
+
+  [MODIFIED] Assets/2.Scripts/Control/TDControl.cs
+    InitOtherControl(): + TDBGMManager.Init() sau TDEffectManager.Init()
+
+  ── TDEffectManager.cs — P1 + P2 Performance Fix ─────────────────────────────
+
+  [MODIFIED] Assets/2.Scripts/Services/TDEffectManager.cs
+
+  P1 — SFX AudioSource Pool (thay AudioSource.PlayClipAtPoint):
+    Vấn đề: PlayClipAtPoint tạo new GameObject + AudioSource mỗi lần gọi
+            → 5-10 alloc/giây khi tower đang bắn → GC spike → micro-stutter mobile.
+    Fix:
+      + const SFX_POOL_SIZE = 8
+      + static AudioSource[] s_SfxPool
+      + InitSfxPool(): tạo 8 AudioSource dưới [Effect Pool] root khi Init()
+                       spatialBlend=0f (2D — camera fixed, spatial không cần)
+      + PlaySFX(): scan s_SfxPool tìm !isPlaying → reuse; pool exhausted → skip
+      GC alloc per SFX = 0
+
+  P2 — Per-key SFX rate limit:
+    Vấn đề: 5 tower bắn cùng frame → 5 AudioSource play clip giống nhau
+            → volume tổng 5×0.7=3.5 → clip/distort → tiếng rè trên speaker mobile.
+    Fix:
+      + const SFX_MIN_INTERVAL = 0.05f
+      + static Dictionary<GameEventKey, float> s_LastSfxTime
+      + PlaySFX(): if (now - lastTime < 0.05f) return
+      Cùng key tối đa 1 lần / 0.05s; các key khác nhau độc lập.
+
+  Signature change: PlaySFX(EffectDef def, Vector3 pos) → PlaySFX(GameEventKey key, EffectDef def)
+  Play() updated để truyền key xuống PlaySFX.
+  Cleanup() thêm: s_LastSfxTime.Clear() + s_SfxPool = new AudioSource[SFX_POOL_SIZE]
+
+  ── Bugs fixed (từ Project Review S56) ───────────────────────────────────────
+
+  [P1-BUG FIXED] TDTowerWeaponView.cs — null guard m_PosSpawnBullet:
+    + m_PosSpawnBullet = transform.Find(...) → nếu null → LogError + return
+    + Update(): if (m_Targets.Count > 0 && m_PosSpawnBullet != null) mới fire
+
+  [P1-BUG FIXED] TDGridMainModel.cs — CellToWorld() bounds check:
+    + if (!IsInBounds(cell)) return Vector3.zero
+
+
+  ── LINE-ENDING FIX: 95 file lone-CR → CRLF ─────────────────────────────────
+
+  Triệu chứng: 95 file .cs hiển thị thành 1 dòng duy nhất trong editor/git/grep.
+  Nguyên nhân: script "xóa column alignment" (đầu S64) dùng
+    $lines = $original -split "(\r\n|\r|\n)"  (capture group → tách cả separator)
+    rồi mỗi phần tử chạy regex ^(\s*)(.+)$
+  Separator "\r\n" MATCH regex này: trong .NET . khớp \r nhưng KHÔNG khớp \n,
+  $ khớp ngay trước \n cuối → bắt (.+)=\r, BỎ \n.
+  → mọi \r\n rụng \n thành lone-CR (kiểu xuống dòng Mac cổ).
+  Compiler C#/Unity coi lone-CR là newline hợp lệ → KHÔNG báo lỗi → ẩn suốt.
+
+  Fix: normalize toàn bộ 111 file .cs → CRLF (chuẩn C#/VS/Unity Windows,
+  khớp core.autocrlf=true). Quy trình: \r\n→\n, \r→\n, \n→\r\n. Verified 0 lỗi.
+================================================================================
+  TODO — DEVELOPMENT PRIORITY                              [updated 2026-06-08]
+================================================================================
+
+  ── P1 — Cần làm ngay ────────────────────────────────────────────────────────
+
+  ✅ [P1] Assign bgmClip vào Stage_1-1.asset + Stage_1-2.asset + Stage_2-1.asset
+          trong Inspector (AudioClip field mới trên TDStageConfig)
+  ⬜ [P1] Tune sfxVolume các entry trong Effect Config.asset sau khi có BGM
+          (hiện = 1.0, nên hạ xuống 0.7–0.8 khi mix cùng BGM 0.45)
+
+  ── P2 ───────────────────────────────────────────────────────────────────────
+
+  ⬜ [P2] GetBlockedEnemies() — trả IReadOnlyList thay vì new List() mỗi frame
+  ⬜ [P2] TDTowerWeaponView ScanForTargets() — cache Sort Comparison, bỏ lambda alloc
+  ⬜ [P2] Stage Select UI screen
+  ⬜ [P2] Tune TOUCH_SCREEN_Y_OFFSET_RATIO (0.10f) trên thiết bị thực
+
+  ── P3 ───────────────────────────────────────────────────────────────────────
+
+  ⬜ [P3] Enemy: Armored (DEF cao, Arts damage bypass) + Flying (bypass obstacle)
+          → Khi đó mới cần DamageType (Physical/Arts) vào OperatorData
+  ⬜ [P3] Operator: Medic (heal support) — Regeneration_health.prefab sẵn sàng
+  ⬜ [P3] ToonOutlineVolume → đặt vào DTGamePlay.unity
+  ⬜ [P3] sfx_gold_gained / sfx_tower_placed / sfx_victory / sfx_insufficient_gold
+          → thêm GameEventKey entries tương ứng + wire vào Effect Config
+
+  ── P4 ───────────────────────────────────────────────────────────────────────
+
+  ⬜ [P4] Tiny variant operators (KnightTiny/DefenderTiny/StrikerTiny) → thêm vào config
+  ⬜ [P4] Dead code cleanup: ServiceLocator, Injector, TDWebService,
+          IPathFinderDTO, CONFIG_MAZE_EXTRA_PASSAGE_RATE
+  ⬜ [P4] TDEnemyPathMainControl.cs tách WaveSpawner + PoolManager riêng (SRP)
+  ⬜ [P4] Consolidate event system: chọn TDGameEventBus hoặc Action<T>, bỏ song song
+  ⬜ [P4] GoldControl.Tick() tách khỏi HUDView.Update() (SRP)
+  ⬜ [P4] IsPlacingUnit reset on scene load
+
+
+================================================================================
+  PROJECT ANALYSIS — 2026-06-08  (Portfolio/Demo readiness)
+================================================================================
+
+  Đánh giá toàn diện sau S58. Góc nhìn Unity dev 4 năm kinh nghiệm.
+
+  ── ĐIỂM SỐ TỔNG ────────────────────────────────────────────────────────────
+
+  Architecture       7.0 / 10
+  Code Quality       6.5 / 10
+  Performance        6.0 / 10
+  Mobile Readiness   5.5 / 10  (sau S58: +0.5 → 6.0 nhờ frame rate cap)
+  Gameplay Systems   8.0 / 10
+  Audio              6.5 / 10  (sau S57/S58: từ 0 lên 6.5)
+  UI/UX              5.0 / 10
+  ─────────────────────────────
+  Trung bình         6.5 / 10
+
+  ── ARCHITECTURE — 7/10 ──────────────────────────────────────────────────────
+
+  [TỐT]
+  - MVC separation: Control/View/Model không cross-layer
+  - TDGameEventBus: VFX/Audio/UI decoupled hoàn toàn khỏi gameplay
+  - Strategy Pattern: IGateAssignmentStrategy (4 impl), IOperatorBehavior (2 impl)
+  - Flyweight: TDFlyweightEnemyDataSettings — data không alloc mỗi frame
+  - Object pooling: Unity ObjectPool<T> cho enemy, Queue<GO> cho VFX, AudioSource[] cho SFX
+  - Data-driven SO: Stage/Tower/Enemy/Operator/Effect config — không hardcode
+  - CancellationToken trong async wave loop — ít dev làm đúng điều này
+  - IPathFinder inject qua constructor (DIP) — TDMazePathGenerator không biết A* impl
+
+  [NỢ KỸ THUẬT]
+  - 20+ static .api singleton — hidden deps, không testable (acceptable indie scale)
+  - 2 event system song song: TDGameEventBus static events VÀ Action<T> delegates
+  - TDEnemyPathMainControl 367 lines: pool + wave planning + path building + spawning (SRP)
+  - TDGameplayMainControl chỉ 10 lines, không làm gì thực sự
+
+  ── CODE QUALITY — 6.5/10 ────────────────────────────────────────────────────
+
+  [TỐT]
+  - async/await + CancellationToken đúng — PauseAwareDelay tự implement
+  - C# expression bodies, pattern matching, switch expression
+  - Null guards đầy đủ sau fixes gần đây
+  - Iterative CarveFrom (Stack) tránh StackOverflow maze gen
+
+  [YẾU]
+  - async void StartWaveLoop() — exception bị nuốt, không await được → nên async Task
+  - Dead code ~10-15% codebase: ServiceLocator, Injector, Provider, Observer, Singleton,
+    BootsTrapper, Launcher, ServicesManager, MockServices, TDWebService — DI framework bỏ dở
+  - ComputeValidTowerCells: new Vector2Int() trong double nested loop
+  - Debug.Log <color=cyan/green> tags trong production — strip trước release
+  - TDConstant.cs 145 lines — nên split theo domain
+
+  ── PERFORMANCE — 6/10 ───────────────────────────────────────────────────────
+
+  [XONG]
+  - Enemy ObjectPool<T>, VFX Queue pool, SFX AudioSource[8] pool         (S57)
+  - SFX per-key rate limit 0.05s — không spam AudioSource               (S57)
+  - BGM Streaming (91MB → 256KB RAM), Vorbis q=0.7                      (S57)
+  - TDOffsetRangeDTO cache trong OnInit()                                (S54)
+  - Flyweight operator/tower/enemy data                                  (S51)
+
+  [CÒN LẠI]
+  - Sort lambda alloc mỗi 0.2s × 5 towers = 25 alloc/s → cache Comparison<T>
+  - GetBlockedEnemies() new List<> mỗi frame khi có enemy → IReadOnlyList
+  - ComputeValidTowerCells: new Vector2Int in double loop
+  - Camera.main repeated lookup trong TDEffectManager (minor)
+  - A* openSet.OrderBy().First() O(n) per iteration → PriorityQueue O(log n)
+
+  ── MOBILE READINESS — 6/10 ──────────────────────────────────────────────────
+
+  [XONG]
+  - targetFrameRate = 60 + NeverSleep                                   (S58)
+  - New Input System + EnhancedTouch + Finger ID locking                (S55/S56)
+  - MIN_CELL_HOLD_DURATION + MIN_PHASE2_DURATION                        (S56)
+  - BGM Streaming, SFX pool                                             (S57)
+
+  [CÒN LẠI]
+  - TOUCH_SCREEN_Y_OFFSET_RATIO (0.10f) cần tune trên thiết bị thực
+  - Không có texture compression audit (ETC2/ASTC cho Android)
+  - Không có memory budget tracking — peak RAM chưa đo
+  - Debug.Log trong production code (nhỏ nhưng có overhead)
+
+  ── ALGORITHMS (summary) ─────────────────────────────────────────────────────
+
+  Recursive Backtracker (iterative Stack) → maze generation O(w×h)
+  A* Manhattan heuristic, 4-dir, List openSet → O(n²) hiện tại
+  Multi-path extraction via interior cell blocking → k paths, k = CONFIG_NUM_PATHS
+  TDOffsetRangeDTO RotateOffset: discrete 2D rotation matrix theo 4 cardinal dirs
+  PathProgress (0→1): enemy ưu tiên theo tiến độ trên path (focus-fire nearest-to-end)
+  DifficultyRatioTable: lookup O(1), Distribute() → Fisher-Yates shuffle wave
+  PauseAwareDelay: poll Time.deltaTime (bị timeScale affect) thay Task.Delay wall-clock
+
+  ── DEAD CODE (nên xóa trước khi push GitHub) ────────────────────────────────
+
+  10 files từ DI framework bỏ dở — compile vào build, confuse reviewer:
+    Assets/2.Scripts/Services/ServiceLocator.cs      — Service Locator pattern
+    Assets/2.Scripts/Services/DependencyInjection/   — Injector.cs, Provider.cs
+    Assets/2.Scripts/Services/Observer.cs            — Reactive Observable<T>
+    Assets/2.Scripts/Services/Utils/Singleton.cs     — MonoBehaviour Singleton base
+    Assets/2.Scripts/Services/BootsTrapper.cs        — SL bootstrap component
+    Assets/2.Scripts/Services/Launcher.cs            — không dùng
+    Assets/2.Scripts/Services/ServicesManager.cs     — không dùng
+    Assets/2.Scripts/Services/MockServices.cs        — không dùng
+    Assets/2.Scripts/Services/TDServices/TDWebService.cs — web API bỏ dở
+
+  ServiceLocator pattern: đúng kỹ thuật (giải quyết hidden dep của static singleton),
+  nhưng không fit với direction pivot sang static .api. Nếu muốn explain trong interview:
+  "Biết pattern, biết trade-off, chọn static vì cost/benefit không hợp lý ở scale này."
+
+  ── CÒN THIẾU CHO PORTFOLIO ──────────────────────────────────────────────────
+
+  CRITICAL (làm ngay):
+  1. Main Menu screen — không có entry point, vào thẳng gameplay
+     → 1 scene: tên game + Play button + background đơn giản
+
+  HIGH (ảnh hưởng experience):
+  2. Stage Select screen — hiện skip qua, 2 stages không thấy được
+  3. 4 SFX chưa fire: sfx_gold_gained / sfx_tower_placed /
+     sfx_victory / sfx_insufficient_gold → thêm GameEventKey + wire từ code
+  4. Dead code cleanup (30 phút, zero risk)
+
+  MEDIUM (polish):
+  5. Loading transition — scene load đột ngột
+  6. Settings: volume sliders (BGM/SFX) — player expectation cơ bản
+  7. async void → async Task cho StartWaveLoop
+
+  LOW (content):
+  8. Thêm stages (DEMO-3, DEMO-4) với difficulty escalation
+  9. Enemy: Armored + Flying (khi đó cần DamageType)
+  10. Operator: Medic (Regeneration_health.prefab đã có)
+
+  ── ĐÁNH GIÁ TỪNG GÓC ───────────────────────────────────────────────────────
+
+  Dev 4 năm sẽ IMPRESSED:
+  - Gameplay core non-trivial: maze gen + A* + multi-gate + Arknights placement
+  - Design patterns đúng chỗ, không overengineered
+  - async/await + CancellationToken đúng
+  - TDGameEventBus decoupling hoàn chỉnh
+  - Object pool ở đúng chỗ (enemy + VFX + SFX)
+  - Audio import settings tối ưu (Streaming BGM)
+
+  Dev 4 năm sẽ FLAG:
+  - async void fire-and-forget risk
+  - Dead code từ DI framework
+  - 2 event systems song song
+  - Không có Main Menu
+  - Sort lambda GC còn
+
+  Kết luận: Solid portfolio project, chưa ship-ready.
+  Core gameplay strength > presentation weakness.
+  Fix P1 (Menu + Dead code) → presentation gap giảm đáng kể.
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 59 — ASSET & DRAW CALL OPTIMIZATION (MOBILE)                  [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-09
+
+  ── Results (Unity Statistics) ───────────────────────────────────────────────
+
+  Batches:          2792 → 887   (-1905, -68%)
+  Saved by batch:      0 → 1079  (Static Batching hoạt động)
+  Shadow casters:    914 → 75    (-839,  -92%)
+  SetPass calls:      78 → 70    (-8)
+  FPS:                49 → 56.7  (+7.7)
+  CPU main:            ? → 18.0ms (bottleneck mới — game logic)
+
+  ── 1. Texture Optimization ──────────────────────────────────────────────────
+
+  CustomOperator textures (5 files — T_Operator*ColorMap.png.meta):
+    maxTextureSize: 2048 → 512 (root)
+    Android block: maxTextureSize: 512, textureFormat: 50 (ASTC_6x6), overridden: 1
+    Files: T_OperatorAce, T_OperatorLayla, T_OperatorTart, T_OperatorGinger, T_OperatorMoon
+
+  GameIcon operator icons (8 files — Operator*.png.meta):
+    maxTextureSize: 2048 → 256 (root)
+    Android block: maxTextureSize: 256, textureFormat: 50, overridden: 1
+    Files: OperatorKnight, OperatorStriker, OperatorDefender, Ace, Ginger, Layla, Moon, Tart
+
+  Third-party textures (17 files):
+    Synty PolygonStarter_01..04, Polygon_Plane_01..04, SimpleSky_01 → root 1024, ASTC_6x6
+    RPGTinyHeroWavePBR: Albedo, Emission, Metallic-Smoothness, AlbedoMaskTint, Mask01 → root 512
+    RPG Monster DUO PBR Polyart: Albedo, Emission, Metallic-Smoothness → root 512
+    FattyPolyTurretFree: Palette256 → root 512 (existing Android block modified)
+
+  ── 2. Audio Optimization ────────────────────────────────────────────────────
+
+  SFX 3D flag (16 files — Resources/Audio/SFX/*.wav.meta):
+    3D: 1 → 3D: 0 trên tất cả SFX clips
+    Lý do: gameplay SFX không cần spatial attenuation
+    Files: sfx_enemy_died_*, sfx_operator_attack_*, sfx_tower_attack, sfx_wave_started,
+           sfx_gold_gained, sfx_tower_placed, sfx_victory, sfx_insufficient_gold, sfx_unit_pickup
+
+  AudioManager.asset:
+    Doppler Factor: 1 → 0 (không có 3D SFX cần Doppler)
+
+  ── 3. Project Settings ──────────────────────────────────────────────────────
+
+  ProjectSettings/ProjectSettings.asset:
+    StripUnusedMeshComponents: 0 → 1 (bỏ UV2, tangent không dùng)
+    AndroidTargetArchitectures: 3 → 2 (ARMv7+ARM64 → ARM64 only)
+    AndroidMinifyRelease: 0 → 1 (R8 code shrinking)
+
+  ProjectSettings/GraphicsSettings.asset:
+    m_LightmapStripping: 0 → 1
+    m_FogStripping: 0 → 1
+
+  ── 4. Prefab Deletion ───────────────────────────────────────────────────────
+
+  Deleted Tiny operator prefabs (không dùng, replaced by CustomOperator):
+    Resources/Prefabs/OperatorKnightTiny.prefab + .meta
+    Resources/Prefabs/OperatorDefenderTiny.prefab + .meta
+    Resources/Prefabs/OperatorStrikerTiny.prefab + .meta
+  KenneyTower prefabs: GIỮ LẠI.
+
+  ── 5. Draw Call Optimization — Static Batching + Shadow ─────────────────────
+
+  Root cause:
+    2792 batches = SM_Gen_Env_Sidewalk_01 (3000+ instances) + Bush/Tree/Grass/Cliff không static
+    914 shadow casters = mọi env object cast shadow → 33% batches là shadow pass
+    m_StaticEditorFlags: 0 trên toàn scene → Static Batching = 0
+
+  Direct SM_Gen prefabs (40 files — m_CastShadows: 1→0, m_StaticEditorFlags: 0→4):
+    Building/SM_Gen_Bld_Beam_01, Pipe_Straight_01, Pipe_Cap_01
+    Base/SM_Bld_Base_Pillar_01
+    Environment/SM_Gen_Env_Ground_Grass_01
+    Environment/SM_Gen_Env_Bush_01..04, Bush_Large_01..04
+    Environment/SM_Gen_Env_Fern_01..03, Flowers_01..08
+    Environment/SM_Gen_Env_Grass_01..07, Grass_Tall_01, Ground_Dirt_04
+    Environment/SM_Gen_Env_Rock_01..02, Tree_01..02
+    Environment/SM_Gen_Env_Background_Mountain_01..03
+
+  Nested PrefabInstance SM_Gen prefabs (15 files — inject m_Modifications[] entries):
+    Building/SM_Gen_Bld_Background_01..11
+    Environment/SM_Gen_Env_Sidewalk_01
+    Environment/SM_Gen_Env_Dirt_Cliff_01..03
+    Technique: thêm propertyPath m_CastShadows (value:0) + m_StaticEditorFlags (value:4)
+               vào m_Modifications array trước m_RemovedComponents:
+    fileIDs consistent toàn bộ nested prefabs:
+      MeshRenderer = -7511558181221131132
+      root GO      = 919132149155446097
+
+  Scene file (Assets/3.Scenes/DTGamePlay.unity):
+    292x m_StaticEditorFlags: 0 → 4 (explicit scene overrides)
+    7x m_CastShadows: 1 → 0 (7 Plane quad objects)
+
+  Tile prefabs (4 files — CastShadows only, runtime-spawned nên không static batch được):
+    PathTile.prefab, ObstacleTile.prefab, PathTile_Desert.prefab, ObstacleTile_Desert.prefab
+    m_CastShadows: 1 → 0
+
+  ── 6. Key Technical Notes ───────────────────────────────────────────────────
+
+  Nested PrefabInstance: SM_Gen_Bld_Background + SM_Gen_Env_Sidewalk wrap source FBX
+    → không có m_StaticEditorFlags trực tiếp → phải inject qua m_Modifications[]
+  Scene override wins: scene explicit values > prefab → phải patch cả hai
+  Bones + BatchingStatic: Transform-only bones nhận StaticEditorFlags: 4 → an toàn,
+    engine skip khi batch vì không có MeshRenderer
+  Static Batch limit: chỉ batch cùng material; runtime-spawned objects không batchable
+  Shadow casters 75 còn lại: tower + enemy runtime → intentional (giữ shadow)
+
+  ── 7. Pending (chưa làm) ────────────────────────────────────────────────────
+
+  [ ] Additional Lights: URP-Balanced.asset → m_AdditionalLightsRenderingMode: 0 (~-200 batch)
+  [ ] GPU Instancing: bật trên tile materials (PathTile/ObstacleTile runtime-spawned)
+  [ ] HP Bar World Space Canvas → Screen Space (~-40 DC)
+  [ ] Shadow Distance: m_ShadowDistance: 50 → 15
+  [ ] Upgrade 10 Built-in materials (fileID:46/200) → URP shaders
+  [ ] managedStrippingLevel → Medium (cần link.xml cho Odin Inspector trước)
+  [ ] AndroidTargetSdkVersion → 34
+  [ ] Dead code cleanup: ServiceLocator, Injector, Provider, Observer, Singleton,
+      BootsTrapper, Launcher, ServicesManager, MockServices, TDWebService
+  [ ] Effect Config.asset: assign UnitPickup + TowerPlaced entries
+  [ ] 4 SFX wiring: sfx_gold_gained, sfx_victory, sfx_insufficient_gold, sfx_unit_pickup
+  [ ] VFX prefabs: cross-check 16 trong Resources vs Effect Config assignments
+  [ ] KenneyAmmo/Bullet0x prefabs: check SO reference trước khi delete
+  [ ] Main Menu scene (P1)
+  [ ] Stage Select UI screen (P2)
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 60 — CODEBASE COMMENT TRANSLATION (Vietnamese → English)        [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-09
+
+  Scanned all 110 .cs files in Assets/2.Scripts.
+  73 files contained Vietnamese comments.
+  69 files modified (57 by agent + 9 manual fixes + 3 overlap).
+  0 Vietnamese comment lines remaining after final pass.
+
+  ── Approach ─────────────────────────────────────────────────────────────────
+
+  Step 1 — Agent (worktree isolated):
+    Read and translated 57 files automatically.
+    Worktree: .claude/worktrees/agent-ac6f7fb803424a194
+    Changes copied back to main project via file diff + cp.
+
+  Step 2 — Manual fix (9 files agent missed):
+    TDMazePathGenerator.cs       lines 121-122  (tránh, trên, lớn, tại, giữa)
+    EffectDefDrawer.cs            lines 6-8, 25  (cho, Khi, Chỉ hiện, luôn hiện)
+    TDTowerBehaviorModel.cs       line 31        (Gọi khi, để, từ)
+    TDTowerSlotInfo.cs            lines 5-6, 12  (Dữ liệu, dùng chung, chỉ meaningful)
+    TDEnemyPathMainView.cs        line 165       (tách từ)
+    TDEnemyPathView.cs            line 35        (duy nhất, clear trước)
+    TDSlotHolderItemView.cs       line 31        (nếu chưa gán, giữ nguyên)
+    TDSlotHolderMainView.cs       line 724       (hoặc)
+    TDTowerFactoryView.cs         lines 4-6      (Subscriber của, giờ, giữ lại)
+
+  ── False positives (grep matched but NOT Vietnamese) ────────────────────────
+
+  The following Unicode characters triggered the grep pattern but are intentional
+  and were left unchanged:
+    ﻿  (U+FEFF) — UTF-8 BOM at line 1 of ~18 files (file encoding marker)
+    →  ←  ↑     — direction arrows in rotation/axis comments
+    ×  –  ≥  ≤  — math operators in range/threshold comments
+    ♥  ⭐        — emoji in string literals and star-rating comments
+    °            — degree symbol in rotation angle comments
+
+  ── Sample translations ──────────────────────────────────────────────────────
+
+  "// tránh StackOverflow trên grid lớn"
+    → "// avoids StackOverflow on large grids"
+
+  "// Room cells tại even (x,y); corridor cells (walls giữa 2 rooms) tại odd coords"
+    → "// Room cells are at even (x,y) coordinates; corridor cells (walls between two rooms) are at odd coordinates"
+
+  "/// Dữ liệu một slot trong thanh chọn unit — dùng chung cho Regular tower lẫn Operator"
+    → "/// Data for a single slot in the unit selection bar — shared by both Regular towers and Operators"
+
+  "// Gọi khi scene reload để force rebuild map từ SO mới"
+    → "// Called on scene reload to force a full rebuild of the data map from the updated ScriptableObject"
+
+  "// LMB (desktop) hoặc TouchPhase.Ended (mobile)"
+    → "// LMB (desktop) or TouchPhase.Ended (mobile)"
+
+  "/// File này giữ lại để không break scene reference; không còn logic thực"
+    → "/// This file is retained to avoid breaking scene references; it no longer contains active logic"
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 61 — MAIN MENU: SCENE ARCHITECTURE + UI + ANIMATIONS            [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-10
+
+  ── Scene Architecture ───────────────────────────────────────────────────────
+
+  [NEW] Assets/2.Scripts/Control/TDSceneController.cs
+    Persistent MonoBehaviour trong DTLoadFirst. Owns MenuCamera + FadeOverlay.
+    GoToMainMenu() / RetryGameplay() / GoToGameplay() — async Task với fade.
+    OnSceneLoaded/Unloaded toggle MenuCamera.enabled (AudioListener luôn active).
+
+  [NEW] Assets/3.Scenes/DTMainMenu.unity
+    Scene mới, buildIndex=3. Canvas (Screen Space - Camera) + EventSystem.
+    TDMainMenuView assign worldCamera = TDSceneController.api.MenuCamera tại Awake().
+
+  [MODIFIED] Assets/2.Scripts/Control/TDControl.cs
+    LoadGameplayScene() → LoadMainMenuScene() — load SCENE_MAIN_MENU thay SCENE_GAMEPLAY.
+    + ReinitControls() → gọi InitOtherControl().
+
+  [MODIFIED] Assets/2.Scripts/Model/Config/Constant/TDConstant.cs
+    + SCENE_MAIN_MENU = "DTMainMenu"
+
+  [MODIFIED] Assets/2.Scripts/Init/InitView.cs
+    Bỏ DisableCamera() + SCENE_GAMEPLAY switch. OnSceneLoaded chỉ xử lý DTLoadFirst.
+
+  [MODIFIED] Assets/2.Scripts/View/GamePlay/TDGameplayHUDView.cs
+    OnBackClicked / OnRetryClicked / OnNextClicked → delegate sang TDSceneController.api.
+
+  ── Main Menu UI — Golden + Black Palette ────────────────────────────────────
+
+  Arknights-inspired palette:
+    Camera bg        #0A0A0B (deep black, clearFlags=SolidColor)
+    Panel bg         #111113
+    Button bg        #191812 (warm dark)
+    Button border    #4A3F28 (dark gold)
+    Button text      #D4B870 (mid gold)
+    Icon tint        #C49830 (amber gold)
+    Title gradient   #F2E4C4 (top) → #C49830 (bottom) — TMP VertexGradient
+    Tagline          #7A6B4A (warm muted gold)
+    Divider          #3A3220
+    Version/BGM      #3A3220 / #574B2E
+
+  Hierarchy sau rename:
+    Canvas/Container/Middle/RightPanel/
+      GroupPlay    → BtnPlay    (Border + TxtLabel + Icon)
+      GroupSettings → BtnSettings
+      GroupExit    → BtnExit
+    RotationY = 20° trên GroupPlay/GroupSettings/GroupExit.
+
+  Icons (PictoIconPack01, tint #C49830):
+    GroupPlay     → Icon_PictoIcon_Control_Play
+    GroupSettings → Icon_PictoIcon_Setting_1
+    GroupExit     → Icon_PictoIcon_Exit
+
+  ── TDMainMenuView.cs — Intro Animation ──────────────────────────────────────
+
+  [MODIFIED] Assets/2.Scripts/View/MainMenu/TDMainMenuView.cs
+    Serialized fields: m_BgGroup, m_LeftPanel, m_RightPanel, m_BottomGroup.
+    PlayIntro() via DOTween.Sequence (Start + Canvas.ForceUpdateCanvases):
+      t=0.0s  BG fade in            (0.35s)
+      t=0.1s  LeftPanel  slide ←280px + fade  (0.45s OutQuart)
+      t=0.22s RightPanel slide +220px + fade  (0.45s OutQuart)
+      t=0.30s buttons stagger fade  (0.08s delay each)
+      t=0.6s  Bottom bar fade in    (0.30s)
+    Fix: animate panel cả khối, không dùng position trên LayoutGroup children.
+
+  ── TDButtonFeedback.cs — Press Feedback ─────────────────────────────────────
+
+  [NEW] Assets/2.Scripts/View/MainMenu/TDButtonFeedback.cs
+    IPointerDownHandler / IPointerUpHandler / IPointerExitHandler.
+    OnPointerDown: m_ScaleTarget (GroupXxx) DOScale → 0.94 (0.1s OutQuad)
+                   m_Border DOColor → #C49830 (0.08s)
+    Release:       DOScale → 1.0 (0.18s OutQuart)
+                   DOColor → #4A3F28 (0.2s)
+    Assigned lên BtnPlay/BtnSettings/BtnExit — m_ScaleTarget = GroupPlay/etc.
+
+  ── Scene Transition Fade ─────────────────────────────────────────────────────
+
+  [MODIFIED] Assets/2.Scripts/Control/TDSceneController.cs
+    + [SerializeField] CanvasGroup fadeGroup
+    FadeToBlack() 0.25s → scene ops → FadeFromBlack() 0.4s (InOutSine)
+    TaskCompletionSource-based async: caller await trực tiếp.
+    blocksRaycasts=true suốt transition, false khi alpha=0.
+
+  DTLoadFirst — FadeOverlay GameObject (tạo qua script + saved):
+    Canvas sortingOrder=999, Screen Space Overlay
+    BlackPanel Image stretch full screen, color black
+    CanvasGroup alpha=0, blocksRaycasts=false — assigned vào fadeGroup
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 62 — AUDIO ARCHITECTURE MIGRATION: SOLID 3-LAYER SYSTEM        [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-11
+
+  Motivation: TDBGMManager vi phạm SRP (event wiring + audio playing cùng 1 class).
+  SFX pool trong TDEffectManager bị destroy mỗi lần ReinitControls() → alloc lại.
+  Main Menu không có BGM. Mute state không persist qua app restart.
+
+  ── Architecture: 3 Layer ────────────────────────────────────────────────────
+
+  Layer 1 — Audio Layer (pure, scene-agnostic, DontDestroyOnLoad):
+    [NEW] TDAudioPrefs.cs     — PlayerPrefs-backed BGM/SFX mute state.
+                                static events OnBgmMuteChanged / OnSfxMuteChanged.
+    [NEW] TDBGMPlayer.cs      — AudioSource "[BGM]" DontDestroyOnLoad, DOFade in/out.
+                                Play() FADE_IN=1s, Stop() FADE_OUT=1.5s, ApplyMute() 0.3s.
+    [NEW] TDSFXPlayer.cs      — Pool 8 AudioSources "[SFX Pool]" DontDestroyOnLoad.
+                                Rate limiter: cùng clip tối đa 1 lần / 0.05s.
+    [NEW] TDAudioService.cs   — Facade. BGM + SFX properties. Init() once in TDControl.
+                                TDAudioPrefs.OnBgmMuteChanged += BGMPlayer.ApplyMute wired here.
+
+  Layer 2 — Context Layer (scene event wiring):
+    [NEW] TDGameplayAudioContext.cs  — Subscribe TDGameEventBus OnGameplayStarted/Victory/
+                                       GameOver → drive gameplay BGM.
+    [NEW] TDMainMenuAudioContext.cs  — Activate(clip): TDAudioService.BGM.PlayIfDifferent().
+                                       Called by TDSceneController on DTMainMenu load.
+
+  Layer 3 — VFX Layer:
+    [MODIFIED] TDEffectManager.cs   — Removed SFX pool (~60 lines). Play() và PlaySfxOnly()
+                                       now call TDAudioService.SFX.Play() directly.
+
+  ── UI Layer ─────────────────────────────────────────────────────────────────
+
+  [NEW] TDBGMToggleView.cs (Assets/2.Scripts/View/MainMenu/)
+    MonoBehaviour on BGMToggle. Serialized: m_IconNormal (Icon), m_IconMute (IconMute).
+    Awake(): subscribe OnBgmMuteChanged + ApplyState(IsBgmMuted, animate:false).
+    OnClick(): TDAudioPrefs.ToggleBgm().
+    ApplyState(muted): SetActive swap + DOPunchScale(0.25f, 0.2s) khi animate=true.
+
+  [MODIFIED] TDButtonFeedback.cs
+    + [SerializeField] AudioClip m_ClickSfx
+    OnPointerDown(): TDAudioService.SFX.Play(m_ClickSfx)
+    Fixed double SetEase bug: .SetEase(OutBack).SetEase(OutQuart) → chỉ OutQuart.
+
+  ── Flow mới ─────────────────────────────────────────────────────────────────
+
+  App start  → TDAudioService.Init() once → BGMPlayer + SFXPlayer (DontDestroyOnLoad)
+  MainMenu   → TDSceneController.OnSceneLoaded → TDMainMenuAudioContext.Activate(clip)
+                → BGMPlayer.PlayIfDifferent → DOFade in 1s
+  BGMToggle  → TDAudioPrefs.ToggleBgm() → PlayerPrefs save
+                → OnBgmMuteChanged fires both BGMPlayer.ApplyMute + TDBGMToggleView.OnMuteChanged
+  BtnClick   → TDButtonFeedback.OnPointerDown → TDAudioService.SFX.Play(button_click_01.wav)
+  Gameplay   → TDGameStateControl.Initialize → GameplayStarted event
+                → TDGameplayAudioContext → BGMPlayer.Play(stage.bgmClip)
+  GameSFX    → TDGameEventBus → TDEffectManager → TDAudioService.SFX.Play(def.sfxClip)
+  End        → OnVictory/OnGameOver → TDGameplayAudioContext → BGMPlayer.Stop (fade 1.5s)
+  BackMenu   → TDSceneController → BGMPlayer.PlayIfDifferent (cùng clip → skip)
+
+  ── Modified files ───────────────────────────────────────────────────────────
+
+  TDControl.cs        — TDAudioService.Init() trước InitOtherControl(); thay TDBGMManager
+                        → TDGameplayAudioContext.Init()
+  TDSceneController.cs — + [SerializeField] AudioClip mainMenuBgm
+                          OnSceneLoaded(DTMainMenu): TDMainMenuAudioContext.Activate(mainMenuBgm)
+
+  ── Scene setup (via MCP) ─────────────────────────────────────────────────────
+
+  DTMainMenu.unity:
+    BGMToggle: TDBGMToggleView component added. m_IconNormal→Icon (64074),
+               m_IconMute→IconMute (64332). Button.onClick → TDBGMToggleView.OnClick.
+    BtnPlay/BtnSettings/BtnExit: TDButtonFeedback.m_ClickSfx = button_click_01.wav (3 buttons).
+
+  DTLoadFirst.unity:
+    TDSceneController.mainMenuBgm = [Arknights OST] sjoyasorrow.mp3
+
+  ── Deleted ───────────────────────────────────────────────────────────────────
+
+  [DELETED] Assets/2.Scripts/Services/TDBGMManager.cs
+    Replaced by TDBGMPlayer (audio) + TDGameplayAudioContext (event wiring).
+
+  ── SOLID mapping ────────────────────────────────────────────────────────────
+
+  SRP: TDBGMPlayer chỉ play/stop/fade. TDGameplayAudioContext chỉ wire events.
+       TDBGMToggleView chỉ handle UI. TDAudioPrefs chỉ persist state.
+  OCP: thêm scene mới chỉ cần thêm AudioContext, không đụng Audio Layer.
+  DIP: TDEffectManager và Context layer gọi qua TDAudioService facade, không biết impl.
+
+  ── Pending test ─────────────────────────────────────────────────────────────
+
+  Cần test trong Play mode:
+  [ ] Main Menu BGM phát khi load (sjoyasorrow.mp3, fade in 1s)
+  [ ] BGMToggle mute/unmute + icon swap + punch scale
+  [ ] Button click SFX (BtnPlay/BtnSettings/BtnExit)
+  [ ] Gameplay BGM switch khi gameplay start (stage.bgmClip)
+  [ ] BGM stop khi Victory/GameOver (fade out 1.5s)
+  [ ] Mute state persist qua app restart (PlayerPrefs)
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 63 — STAGE SELECT UI: FULL IMPLEMENTATION + MAINMENU FLOW        [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-11
+
+  ── TDStageSelectView.cs (complete rewrite) ──────────────────────────────────
+
+  Scene hierarchy mapped:
+    StageSelect (CanvasGroup show/hide)
+      Middle/LeftPanel: ThemeBackground (Image), TxtStageNum, TxtStageTitle,
+                        TxtStageName, TxtDescription
+      Middle/RightPanel/StageScroll/Viewport/Content  ← m_CardContainer
+      Bottom: BtnPlay (+ CanvasGroup), BtnBack
+
+  Key design:
+  - Show(): m_MainMenuView.Hide() → BuildCards() → SelectCard(first) → DOFade in
+  - Hide(): DOFade out → m_MainMenuView.Show()   (BtnBack)
+  - BuildCards(): TDResourceObject.GetResource<GameObject>(PREFAB_STAGE_CARD)
+                  → Instantiate into m_CardContainer
+  - ThemeBackground crossfade: DOFade 0 → change sprite → DOFade 1
+  - SetBtnPlayState(enabled): CanvasGroup.DOFade (0.35↔1.0) + DOPunchScale on enable
+  - Awake(): alpha=0, interactable=false, blocksRaycasts=false (starts hidden)
+
+  ── TDStageCardView.cs (complete rewrite) ────────────────────────────────────
+
+  Prefab structure (StagePrefab):
+    Root: ProceduralImage (gold border) + Button + TDStageCardView
+      Outline        — dark fill (ProceduralImage)
+      TxtStageNum    — "01"
+      StageInfo/TxtStageTitle  — DisplayName
+      StageInfo/TxtStageName   — StageId
+      Selected       — badge (SetActive on select)
+      IconLock       — lock icon
+
+  SetSelected(bool, animate): root Graphic DOFade alpha (1.0 selected / 0.15 unselected)
+  m_RootGraphic = GetComponent<Graphic>() — handles ProceduralImage (not Image)
+
+  ── TDConstant.cs ────────────────────────────────────────────────────────────
+
+  + PREFAB_STAGE_CARD = "StagePrefab"
+
+  ── Stage Assets ─────────────────────────────────────────────────────────────
+
+  Stage_1-1.asset: DisplayName → "City Siege"
+                   stageDescription: "Urban combat zone. Defend the city gates across 5 waves."
+  Stage_1-2.asset: DisplayName → "Desert Storm"
+                   stageDescription: "Scorching desert warfare. Repel 6 waves of relentless assault across open sand."
+
+  ── TDMainMenuView.cs ────────────────────────────────────────────────────────
+
+  + CanvasGroup m_CanvasGroup (auto-fetched in Awake)
+  + Show(): DOFade 1f + blocksRaycasts=true + interactable=true
+  + Hide(): DOFade 0f + blocksRaycasts=false + interactable=false
+
+  PlayIntro() bug fix:
+    Root cause: Canvas layout not computed before Start() → anchoredPosition wrong
+                → panels offset from wrong origin → broken layout on first frame
+    Fix:
+      Awake(): set all alphas=0 (no frame-0 flash)
+      Start(): LayoutRebuilder.ForceRebuildLayoutImmediate(transform as RectTransform)
+               BEFORE PlayIntro() reads anchoredPosition
+
+  ── MainMenu ↔ StageSelect flow wired (DTMainMenu.unity) ─────────────────────
+
+  TDStageSelectView.m_MainMenuView → MainMenu (TDMainMenuView)
+  MainMenu BtnPlay onClick → TDStageSelectView.Show()
+  StageSelect BtnBack onClick → TDStageSelectView.Hide() → MainMenu.Show()
+
+  ── StagePrefab setup ────────────────────────────────────────────────────────
+
+  Button + TDStageCardView added to StagePrefab root via MCP.
+  All fields wired: m_TxtNumber, m_TxtTitle, m_TxtSubInfo, m_SelectedGroup, m_LockIcon, m_Button.
+  StagePrefab already registered in TDResourceObject at index [11] (no change needed).
+
+  ── DTMainMenu.unity scene wiring ────────────────────────────────────────────
+
+  StageSelect GO:
+    + CanvasGroup added (for TDStageSelectView show/hide)
+    + TDStageSelectView added, all SerializedFields wired via MCP script:
+      m_TxtStageNum, m_TxtStageTitle, m_TxtStageName, m_TxtDescription,
+      m_ThemeBackground, m_CardContainer (Content), m_BtnPlay, m_BtnPlayGroup,
+      m_BtnBack, m_StageRepository, m_MainMenuView
+
+  MainMenu GO:
+    + CanvasGroup added (for TDMainMenuView.Show/Hide)
+    + TDMainMenuView added (was not in scene previously)
+    Fields wired: m_Canvas, m_BgGroup (Background), m_LeftPanel, m_RightPanel, m_BottomGroup (Bottom)
+
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 64 — CONFIG LOAD STANDARDIZATION + BUILD SIZE OPTIMIZATION      [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-12
+
+  ── Locked stage card polish ─────────────────────────────────────────────────
+
+  TDStageCardView.cs: LOCKED_ALPHA 0.4 → 0.25 (locked card mờ hơn, giống design)
+
+  ── Code style: column alignment removal (116 files) ─────────────────────────
+
+  Toàn bộ Assets/2.Scripts/**/*.cs: collapse mọi chuỗi 2+ spaces giữa dòng
+  thành 1 space (giữ nguyên indentation đầu dòng). Lý do: IDE column alignment
+  gây diff noise + không nhất quán. PowerShell batch script, 116 files changed.
+
+  ── Config load standardization — Cơ chế 1 (TDResourceObject + static api) ───
+
+  Chuẩn hóa TẤT CẢ 6 config class về cùng 1 pattern:
+    private static T m_api;
+    public static T api => m_api ??= TDResourceObject.GetResource<T>(TDConstant.CONFIG_X);
+
+  1. TDFlyweightEnemyDataSettings   — CONFIG_ENEMY      (api added)
+  2. TDFlyweightOperatorDataSettings — CONFIG_OPERATOR  (đã có từ trước)
+  3. TDFlyweightTowerDataSettings   — CONFIG_TOWER      (api added — trước đây
+     là ngoại lệ: cache trong TDFlyweightBulletFactoryModel.Setting)
+  4. TDLevelConfigSettings          — CONFIG_LEVEL      (api added)
+  5. TDEffectConfig                 — CONFIG_EFFECT     (Resources.Load → api)
+  6. TDStageRepository              — CONFIG_STAGE_REPO (api added)
+
+  Callers migrated:
+  - TDFlyweightBulletFactoryModel: XÓA m_Setting + property Setting;
+    nội bộ dùng TDFlyweightTowerDataSettings.api?.GetAmmoPrefab(type)
+  - TDTowerMainControl:   BulletFactoryModel.api?.Setting → TDFlyweightTowerDataSettings.api
+  - TDSlotHolderMainView: BulletFactoryModel.api.Setting.GetData → TDFlyweightTowerDataSettings.api?.GetData
+  - TDTowerBehaviorModel: BulletFactoryModel.api?.Setting? → TDFlyweightTowerDataSettings.api?
+  - TDGameplayAudioContext: Resources.Load<TDStageRepository> → TDStageRepository.api
+  - TDGameplayHUDView:  XÓA [SerializeField] m_StageRepository → TDStageRepository.api
+  - TDGameplayMainView: XÓA [SerializeField] m_StageRepository → TDStageRepository.api
+  - TDStageSelectView:  m_StageRepository SerializeField → TDStageRepository.api
+  - TDEnemyPathMainView: flyweightEnemyDataSettings/m_LevelConfigSettings → api
+
+  ⚠ MANUAL STEP (bắt buộc, chưa làm): kéo 4 asset vào list Objects của
+    TDResourceObject (GenerateObject, scene DTLoadFirst):
+    Enemy Data Config, Level Config, Stage Repository, Effect Config
+    (Tower Bullet Config + Melee Operator Config đã có sẵn trong list)
+
+  ── TDResourceObject.cs hardening ────────────────────────────────────────────
+
+  - Null-guard Instance (trước: NRE nếu gọi trước Awake / test thẳng scene khác)
+  - Bỏ 2 dòng Debug.Log spam mỗi lần lookup
+  - Skip phần tử null trong list (slot trống Inspector không còn NRE)
+  - LogError khi không tìm thấy resource (trước: silent return null)
+  - File được format lại multi-line chuẩn (trước: single-line)
+
+  ── BUILD SIZE OPTIMIZATION (APK 255 MB → mục tiêu ~100-120 MB) ──────────────
+
+  Chẩn đoán (build report 2026Jun12-105200):
+  - APK cũ 130 MB → APK "optimize" 255 MB (TĂNG 125 MB!)
+  - Thủ phạm #1: SHADERS 169.5 MB (24.3% build) — variant explosion:
+      Lit.shader 52.9MB, PolygonShader 37.7MB, Generic_Standard 22.5MB,
+      Generic_Basic 22.4MB, SimpleLit 18.3MB, Sidekick 12.3MB
+  - Thủ phạm #2: Android build gánh CẢ HAI graphics API (Vulkan + GLES3)
+      → mỗi shader variant compile 2 lần = x2 dung lượng shader
+  - Textures 92.3MB (3 file Synty Generic_* 4096px = 10.7MB/file)
+  - URP strip flags đã bật sẵn (StripUnusedVariants etc. — không phải vấn đề)
+
+  Đã áp dụng (qua MCP script-execute):
+  1. Graphics API Android: Vulkan + GLES3 → CHỈ GLES3 (auto API = false)
+       → ước tính giảm ~50% của 169.5MB shader
+  2. ManagedStrippingLevel Android: Minimal → Low (IL2CPP)
+  3. URP-Balanced.asset (RP đang dùng, default + quality level 0):
+       AdditionalLights: PerPixel → PerVertex (point lights vẫn hoạt động)
+       SoftShadows: ON → OFF
+       HDR: ON → OFF
+  4. Texture Android override ASTC 6x6, maxSize 4096 → 2048:
+       Generic_01_A.png, Generic_Emissive_01_A.png, Generic_Normals_01.png
+       → ~10.7MB/file → ước tính <1MB/file
+  5. BGM sjoyasorrow.mp3: Vorbis quality 0.7 → 0.4 (Streaming giữ nguyên)
+
+  ✅ KẾT QUẢ VERIFIED: rebuild APK = 116 MB (255 → 116, giảm 54%;
+     thấp hơn cả bản gốc 130 MB trước khi thêm Sidekick/Synty/OST)
+
+  ── ROUND 2: full asset + scene audit (ước tính cắt thêm ~50 MB) ─────────────
+
+  Audit findings (script-execute scan toàn bộ AssetDatabase + scene deps):
+  - Sidekick Resources/Meshes 69.1 MB FORCE-INCLUDED (folder tên "Resources")
+    → chính là lý do Meshes = 64.2 MB trong build. Game chỉ dùng characters
+    bake sẵn (Characters/Starter/*.asset — ngoài Resources). Resources.Load
+    mesh chỉ có trong _Demos + Editor tool → an toàn để move.
+  - street.mp3 (10 MB) + void.mp3 (6.7 MB) còn Vorbis q=0.7
+  - Resources/Fonts 8.6 MB: 4 OpenSans SDF variants force-included
+  - DragonBoar PBR source textures to (12-18 MB/file) NHƯNG maxSize=512
+    → trong build chỉ ~200 KB/file, không phải vấn đề
+  - SyntyLensDirt (34.9 MB), icons_slices.psd (30 MB): không scene nào
+    reference → không vào build, chỉ tốn disk
+  - 355/2360 models bật Read/Write (nhân đôi RAM mesh runtime — TODO riêng)
+  - Scene deps sạch: DTMainMenu 36 MB, DTGamePlay 128 MB (texture đã cap 512)
+
+  Đã áp dụng (AssetDatabase.MoveAsset — giữ GUID, refs trực tiếp không gãy):
+  1. SidekickCharacters/Resources → SidekickCharacters/MeshLibrary
+     (69 MB thoát force-include; Sidekick editor tool sẽ không tìm thấy parts
+      — chấp nhận được, game không ảnh hưởng)
+  2. street.mp3 + void.mp3: Vorbis q=0.4 (đồng bộ với sjoyasorrow)
+  3. Resources/Fonts → 1.Assets/Fonts (thoát force-include; verified
+     DTMainMenu vẫn reference OpenSans-Bold SDF qua GUID)
+
+  ✅ KẾT QUẢ VERIFIED ROUND 2: rebuild APK = 102 MB (116 → 102)
+     Tổng hành trình: 255 MB → 116 MB (round 1) → 102 MB (round 2)
+     = giảm 60% so với bản lỗi, thấp hơn bản gốc 130 MB ~22%
+
+  ── CONST CONSOLIDATION: 56 consts → TDConstant.cs ───────────────────────────
+
+  Audit: 62 consts nằm ngoài TDConstant trong 24 files.
+  Move tất cả vào TDConstant (region "Class Constants"), TRỪ:
+  - Editor drawers (OperatorDataDrawer, TowerDataDrawer, EffectDefDrawer) — Editor-only
+  - Dead code (ServiceLocator, Injector, TDServiceKey) — sẽ xóa cùng P1 cleanup
+
+  Rename để tránh trùng tên (prefix theo domain):
+  - TDSceneController: FADE_*_DUR → SCENE_FADE_*_DUR
+  - TDBGMPlayer: FADE_IN/OUT, MUTE_FADE → BGM_*
+  - TDSFXPlayer: POOL_SIZE, MIN_INTERVAL → SFX_*
+  - TDAudioPrefs: KEY_BGM/SFX → AUDIO_KEY_*
+  - TDGameplayHUDView: PUNCH_*, PAUSE_FADE_*, SCENE_FADE_* → HUD_*
+  - TDHPBarView: → HPBAR_*
+  - TDEnemyView: TRIGGER_* → ANIM_TRIGGER_*
+  - TDAttackVFX: MOVE_SPEED, ARRIVE_THRESHOLD → VFX_*
+  - TDTowerWeaponView: SCAN_INTERVAL → TOWER_SCAN_INTERVAL
+  - TDStageCardView: LOCKED_ALPHA → STAGE_CARD_LOCKED_ALPHA
+  - TDMazePathGenerator: MAX_ATTEMPTS → MAZE_MAX_ATTEMPTS
+  - TDTowerMainControl: MAX_SLOTS → CONFIG_MAX_SLOTS
+  - TDEnemyPathMainControl: gateBuffer (local) → CONFIG_GATE_BUFFER
+
+  DEDUP: SHOW/HIDE_BG/POPUP_DURATION trùng giá trị giữa TDVictoryPanelView và
+  TDGameOverPanelView → merge thành POPUP_* chung (4 consts); chỉ SCALE_FROM
+  tách riêng (VICTORY=0.75 / GAMEOVER=1.15).
+
+  Verified: compile clean (isCompiling=False, compileFailed=False).
+
+  ── MIGRATE SerializeField → transform.Find: menu views ──────────────────────
+
+  Audit toàn codebase: 2 pattern song song — gameplay UI dùng Find+TDConstant
+  (HUDView 17, VictoryPanel 9, GameOverPanel 8), menu UI dùng SerializeField.
+
+  Quyết định phân loại (nguyên tắc cho codebase):
+  - Scene UI view tìm CON CỦA CHÍNH NÓ      → transform.Find(TDConstant.PATH_*)
+  - Prefab refs nội bộ (StageCardView, HPBar) → giữ SerializeField
+  - Asset refs (prefabs/configs)              → TDResourceObject api / SerializeField
+  - Tuning values                             → SerializeField hoặc TDConstant
+
+  Migrated (15 SerializeFields → private + ResolveReferences() trong Awake):
+  - TDStageSelectView (10 fields): PATH_STAGESEL_* (8 paths mới trong TDConstant)
+    m_MainMenuView resolve qua sibling: transform.parent.Find(NAME_MAIN_MENU)
+  - TDMainMenuView (5 fields): PATH_MENU_* (4 paths), m_Canvas → GetComponentInParent
+  + 13 constants mới: NAME_MAIN_MENU, PATH_MENU_* (4), PATH_STAGESEL_* (8)
+
+  Verified: compile clean + 14/14 paths resolve OK với scene hierarchy thật.
+  Lợi ích: hết phụ thuộc scene wiring (nguồn bug session 63), nhất quán toàn codebase.
+
+  ── DEVICE BUG FIX: locked stage card bị cắt trên máy 20:9 ───────────────────
+
+  Repro: Xiaomi 12 (2400x1080, 20:9) — card 03 (???/COMING SOON) bị viewport
+  cắt giữa chừng; Editor 16:9 không thấy vì viewport cao hơn.
+  Root cause: CanvasScaler match=0.5 → máy 20:9 effective canvas height nhỏ hơn
+  → StageScroll viewport 547 (16:9) co còn ~432 (20:9). Card cao ~150 →
+  3 cards + spacing = ~510 > 432 → card cuối tràn khỏi mask.
+  Fix (StagePrefab.prefab):
+  - + LayoutElement preferredHeight=118 → 12 + 3x118 + 2x24 = 414 <= 432
+    (3 cards luôn vừa viewport trên mọi aspect ratio phổ biến)
+  - Typo badge: "SLECTED" → "SELECTED" (TxtLabel)
+
+  Nếu cần giảm thêm:
+    - Dọn bản copy SidekickCharacters trùng (Assets/Synty/ vs
+      Assets/1.Assets/UnityStore Resources/Synty/)
+    - URP-Toon.asset (Toon Shaders Pro/Demo) còn full feature — check material
+      nào dùng Toon.shader có kéo variant không
+    - Quality levels 1-5 đang null RP (fallback default) — có thể xóa bớt
+    - Models Read/Write disable batch (355 models — RAM optimization)
+    - Mesh compression cho OperatorTart.asset (12.4 MB) + operator meshes
+
+  ── RUNTIME PERF PASS: Camera.main + Update() audit + Read/Write models ──────
+
+  1. Camera.main cached (9 chỗ, 3 files):
+     - TDOperatorSelectionView: static s_MainCam (có method static dùng), 4 chỗ
+     - TDSlotHolderMainView: instance m_MainCam, 3 chỗ
+     - TDEffectManager (static class): static s_MainCam, 2 chỗ
+     Pattern: prop => cam != null ? cam : (cam = Camera.main)
+     → null-check Unity tự re-resolve sau scene change/camera destroy
+
+  2. Audit 8 Update()/LateUpdate() methods:
+     ✅ Sạch: TDGameplayHUDView (gold tick), TDSlotHolderMainView (early-out),
+        TDOperatorSelectionView (sau fix cam), TDAttackVFX, TDEnemyView
+     🔴 FIXED TDOperatorView.Update(): GetData(type) = List.Find chạy MỖI FRAME
+        mỗi operator → cache m_Data 1 lần tại Init (cả OnAttackHit cũng dùng cache)
+     ⚪ TDHPBarView: thử move rotation ra OnEnable → PHÁT HIỆN SAI và revert:
+        HP bar là con của enemy đang xoay (LookRotation) → set world rotation
+        mỗi frame là CHỦ ĐÍCH (billboard chống xoay theo cha). Thêm comment giải thích.
+     ⚪ TDTowerWeaponView: còn lambda Sort alloc trong ScanForTargets (TODO P2)
+
+  3. Read/Write models: TẮT 355/2360 models
+     Nguồn gốc: publisher asset store bake sẵn isReadable=true trong .meta khi
+     export package (Synty 157+74, RPGMonster 77, FreeDragons 28, FattyTurret 17,
+     khác 2) — không phải team bật. Game không đọc mesh data runtime
+     (không có code động vào mesh.vertices/triangles) → mỗi mesh load là
+     tốn x2 RAM (bản CPU + bản GPU) vô ích.
+     Batch script: ModelImporter.isReadable=false + SaveAndReimport toàn bộ.
+     Nếu sau này cần (non-convex MeshCollider bake runtime, mesh combine):
+     Unity sẽ báo lỗi rõ ràng → bật lại đúng model đó.
+
+  4. Manual step ĐÃ XONG: 4 config (Enemy Data, Level, Stage Repository, Effect)
+     đã được kéo vào TDResourceObject list (DTLoadFirst) ✅
+
+  ── DEAD CODE CLEANUP (P1 — tồn đọng lâu nhất): 11 files DELETED ─────────────
+
+  Verify trước khi xóa: grep references (chỉ còn comment/commented-out code)
+  + quét GUID trong scenes/prefabs → phát hiện Injector còn GẮN trên
+  GameplayMainView (DTGamePlay) → gỡ component trước, save scene.
+
+  Deleted: ServiceLocator, Injector, Provider, Observer, Singleton,
+           BootsTrapper, Launcher, ServicesManager, MockServices,
+           TDWebService, TDServiceKey
+  + 2 folder rỗng (DependencyInjection, TDServices)
+  + 26 dòng commented-out code trong TDControl.cs (OnApiMiniAppReady block)
+  + 2 stale using Services.DependencyInjection; (TDEnemyPathView,
+    TDSlotHolderMainView — gây compile error, đã gỡ)
+
+  Verified: compile clean sau cleanup.
+
+  ── SCENE BUG FIX: duplicate TDMainMenuView trên Canvas ──────────────────────
+
+  Sau migrate Find-based, Play mode báo "[TDMainMenuView] ResolveReferences
+  failed". Điều tra: scene có 2 TDMainMenuView — 1 trên MainMenu (đúng) và
+  1 trên Canvas (rác từ đợt wire MCP session 63). Bản SerializeField cũ
+  im lặng che giấu component rác này (fields null, không ai gọi).
+  → Xóa instance trên Canvas, scene saved. Migration Find-based chính là
+  thứ giúp lộ bug — validate giá trị của approach.
+
+  ── LINE-ENDING FIX: 95 file lone-CR → CRLF ─────────────────────────────────
+
+  Triệu chứng: 95 file .cs hiển thị thành 1 dòng duy nhất trong editor/git/grep.
+  Nguyên nhân: script "xóa column alignment" (đầu S64) dùng
+    $lines = $original -split "(\r\n|\r|\n)"  (capture group → tách cả separator)
+    rồi mỗi phần tử chạy regex ^(\s*)(.+)$
+  Separator "\r\n" MATCH regex này: trong .NET . khớp \r nhưng KHÔNG khớp \n,
+  $ khớp ngay trước \n cuối → bắt (.+)=\r, BỎ \n.
+  → mọi \r\n rụng \n thành lone-CR (kiểu xuống dòng Mac cổ).
+  Compiler C#/Unity coi lone-CR là newline hợp lệ → KHÔNG báo lỗi → ẩn suốt.
+
+  Fix: normalize toàn bộ 111 file .cs → CRLF (chuẩn C#/VS/Unity Windows,
+  khớp core.autocrlf=true). Quy trình: \r\n→\n, \r→\n, \n→\r\n. Verified 0 lỗi.
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 65 — ARKNIGHTS DEPLOY/RETREAT: DIAMOND PANEL + 2-PHASE GESTURE  [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-15
+  Scope: full re-design tower/operator deployment UX theo Arknights spec
+         (arknights_deploy_drag_spec.md). Cùng thay luôn retreat panel.
+
+  ── A. STATE MACHINE: 1-gesture hidden timer → 2-gesture drop tường minh ────
+
+  Trước S65 (mobile):
+    Một touch duy nhất. Phase 1→2 phân định bằng timer ẩn:
+    MIN_CELL_HOLD_DURATION (0.35s arm) + MIN_PHASE2_DURATION (0.2s lọc micro-lift)
+    + pull-back-to-center logic + m_PhaseArmed flag.
+    Discoverability TỆ: người chơi không biết phải giữ rồi mới vuốt.
+
+  Sau S65 (đúng Arknights):
+    Dragging       — ngón A theo finger, snap cell.
+    ↳ UP cell hợp lệ   → DROP: cell locked, finger nhả hẳn, diamond hiện.
+    ↳ UP cell không hợp lệ → cancel.
+    DirectionSelect — ngón B (touch MỚI) drag/tap → set facing + arrow active.
+    ↳ UP ngoài dead-zone → commit, dùng vector cuối.
+    ↳ UP trong  dead-zone → cancel.
+    Tap-direction rơi ra tự nhiên (tap = drag quãng 0).
+
+  Desktop GIỮ NGUYÊN: mouse-follow + LMB place + E/Q rotate + RMB cancel.
+  Code: XÓA ~70 dòng timer phòng thủ.
+
+  ── B. KIẾN TRÚC: extract controller + dùng chung diamond ────────────────────
+
+  - TDDeployController (MỚI, 380 dòng) — owns state machine + ghost + highlights
+    + diamond. Bê toàn bộ deploy logic khỏi TDSlotHolderMainView.
+  - TDSlotHolderMainView THU GỌN: 754 → 122 dòng. Chỉ còn slot bar
+    (cost/icon/interactable/PointerDown → BeginDeploy).
+  - TDOperatorSelectionView REWRITE: 333 → 195 dòng. Bỏ OperatorActionPanel
+    chip cũ, dùng TDDiamondPanelView.Instance.ShowRetreat/Hide. Cùng visual
+    language với deploy → không thể overlap.
+  - WorldAnchoredUI (util MỚI): WorldToScreenPoint + ScreenPointToLocalPointInRectangle
+    gom từ TDOperatorSelectionView. Dùng bởi diamond view.
+
+  ── C. DIAMOND PANEL: 4 lần re-design liên tiếp ──────────────────────────────
+
+  Iteration 1: world-space SpriteRenderer, code-built children
+    → bug: PPU=1 sprites = 256 world units → khổng lồ.
+  Iteration 2: hybrid (world-space frame/arrows + Canvas UI cancel/retreat button)
+    → bug: ZTest Always shader range đè operator/tower, billboard rắc rối.
+  Iteration 3: prefab thật + sprites + tweak scale 0.004 → 0.007
+    → bug: position upper-left edge có lúc off-screen, click không work natively.
+  Iteration 4 (FINAL): FULL CANVAS UI — 1 prefab Canvas duy nhất
+    - 4 Image rectangles = diamond outline (edges thin rotated)
+    - 4 Image arrow_up sprites (rotated 0/-90/180/90°) = direction picker
+    - 1 Image red glow strip dọc upper-left edge
+    - CancelButton: Image + Outline + Icon + TMP "Cancel" — full UI styling
+    - RetreatButton: tương tự + icon Exit + "Retreat"
+    - Native Unity Button click, không cần raycast hack
+    - Position via WorldAnchoredUI.PositionAt(cellCenter + Up*Y_OFFSET) mỗi LateUpdate
+    - Singleton accessor `TDDiamondPanelView.Instance` để 2 controller share
+
+  Public API: ShowDeploy(cellCenter, onCancel?) / ShowRetreat(worldAnchor, onRetreat)
+              / Hide() / SetActiveDirection(idx) / IsInDeadZone(worldPoint).
+
+  ── D. SIZE TUNING (gameplay scale-dependent) ────────────────────────────────
+
+  Map: ~25×15 cells × cellSize 2 = 50×30 world units. Camera near-top-down.
+  → 1 cell projects to ~80-100 px on phone screen (2640px wide).
+
+  Arknights map ~8×6 → cell ~250-300px on screen. UI sized for THAT scale.
+  Naive "2 cells wide" copy = 500px diamond → quá to cho project này.
+
+  Tuning sau iteration:
+    R (half-extent canvas units): 180 → 90 (diamond span ~250px = ~2.5 cells)
+    Button anchor:    -R*0.85 → -R*0.7 (luôn nằm trong viewport diamond)
+    Button size:      96×110 → 78×90
+    Arrow size:       56 → 40
+    Y_OFFSET:         2.5 → 1.0 (operator chest level, không trên đầu)
+
+  ── E. BUG FIXES dọc đường ───────────────────────────────────────────────────
+
+  1. RETRY/NEXT không load scene (existing bug, không liên quan diamond):
+     Game pause Time.timeScale=0 trên Victory/GameOver → TDSceneController.FadeAsync
+     dùng DOFade KHÔNG có .SetUpdate(true) → tween đứng yên → await kẹt vĩnh viễn.
+     Fix: .SetUpdate(true) + EnsureUnpaused() trước mọi scene transition.
+
+  2. Range highlight đè lên operator/tower:
+     Session trước tôi đổi shader sang ZTest Always để fix "obstacle che range" →
+     regression: giờ range vẽ đè mọi thứ. Revert về URP/Unlit (LEqual depth).
+     Operator/tower mesh ở Y cao hơn range tile Y=0.3 → tự nhiên đè đúng.
+
+  3. SelectionIndicator (khung vàng) overlap diamond:
+     Operator prefab có gold diamond Quad (ZTest Always) hệ selection cũ.
+     SetSelected(true/false) trong SelectionView còn bật cái này → 2 indicator
+     đè lên nhau. Gỡ 2 call SetSelected — diamond panel chính là indicator.
+     SetSelected/SelectionIndicator API giữ lại (legacy, harmless).
+
+  4. OperatorActionPanel chip overlap diamond khi tap operator trước deploy:
+     Pha 4 trước migrate, có 2 hệ thống song song. Subscribe OnUnitPickup →
+     Deselect (workaround). Pha 4 sau đó xóa hẳn OperatorActionPanel khỏi
+     scene → bug class này biến mất.
+
+  5. Diamond persist sau Game Over / Victory popup:
+     Subscribe TDDeployController + TDOperatorSelectionView vào OnVictory/OnGameOver
+     → auto-cancel/deselect khi run kết thúc.
+
+  ── F. CLEANUP toàn series ───────────────────────────────────────────────────
+
+  XÓA:
+  - DiamondCancelButton.prefab, DiamondRetreatButton.prefab (fold vào DiamondPanel)
+  - TDDiamondRetreatHit.cs (collider workaround world-space cũ)
+  - RangeHighlightOnTop.shader (đã revert material về URP/Unlit)
+  - OperatorActionPanel GameObject khỏi DTGamePlay.unity
+  - 8 const obsolete: PATH_OPERATOR_*, OPERATOR_PANEL_*, OPERATOR_BTN_SIZE,
+    OPERATOR_ICON_SIZE, OPERATOR_LABEL_H, OPERATOR_PANEL_WORLD_Y_OFFSET,
+    DIAMOND_HALF_EXTENT_CELLS, DIAMOND_GROUND_Y (giữ), PREFAB_DIAMOND_CANCEL_BTN,
+    PREFAB_DIAMOND_RETREAT_BTN
+
+  Constants MỚI: DIAMOND_DEADZONE_RATIO, DIAMOND_CENTER_Y_OFFSET,
+                 PREFAB_DIAMOND_PANEL.
+  Enum MỚI:      DeployState { Idle, Dragging, DirectionSelect, Committing }.
+
+  ── G. METRICS ───────────────────────────────────────────────────────────────
+
+  Files thay đổi:    8 (4 mới, 3 rewrite, 1 modified)
+  Files xóa:         3 cs + 2 prefab + 1 shader = 6
+  Net line change:   TDSlotHolderMainView -632, TDOperatorSelectionView -138,
+                     TDDeployController +380, TDDiamondPanelView +170 = -220 dòng
+  Prefabs mới:       DiamondPanel.prefab (Canvas UI)
+  Scene saved:       DTGamePlay (remove OperatorActionPanel), DTLoadFirst
+                     (register DiamondPanel index 10)
+
+  Status: gesture work ổn trên Android (verified bằng playtest).
+  Pending: smooth animations cho show/hide diamond + arrow active transitions.
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 66 — DIAMOND POLISH: ANIMATIONS + CHAMFER + LEAK BUG HUNT      [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-16
+  Tiếp theo S65: animations, button visual polish theo Arknights, và 1 bug
+                  rảnh tay nhưng đeo bám nhiều iteration (bottom-left leak).
+
+  ── A. SMOOTH ANIMATIONS (DOTween, SetUpdate(true)) ─────────────────────────
+
+  5 animations thêm vào TDDiamondPanelView:
+  - Show:    root scale 0.6→1 OutBack(1.6) + alpha 0→1 OutCubic, 0.22s
+  - Hide:    root scale 1→0.5 InBack(1.4) + alpha 1→0 InCubic, 0.14s
+  - Drop:    Cancel button slide-in từ ngoài upper-left tip (60px) OutCubic
+  - Retreat: Retreat button slide-in tương tự
+  - Direction change: active arrow DOPunchScale (0.30, 0.22s, 5 vibrato)
+  + Glow strip fade-in cho deploy mode
+
+  Tất cả tween SetUpdate(true) → survive Time.timeScale=0 trên Victory/GameOver.
+
+  ── B. CHAMFER VISUAL: Option B (auto-gen PNG) ──────────────────────────────
+
+  Cancel/Retreat button của Arknights là CHAMFERED RECTANGLE (vát góc bottom-right
+  ~45°) chứ không phải rectangle thường. Chamfer "trỏ" về tip diamond, tạo cảm
+  giác button "móc vào" diamond, không phải floating chip.
+
+  Đánh giá 4 cách: pre-draw PNG / 1-shot Editor script / ProceduralUIImage
+  modifier / Custom MaskableGraphic. CHỌN **Option B**:
+
+  Assets/2.Scripts/Editor/ChamferedSpriteGenerator.cs (~80 dòng, 1 lần chạy):
+  - Procedural generate 128×128 PNG với 2x2 sub-pixel AA trên diagonal edge
+  - Auto-import: UI Sprite, PPU 100, alphaIsTransparency,
+                 9-slice border (L:4, B:18, R:18, T:4) → chamfer corner stay
+                 fixed 18px regardless of button size
+  - Auto-apply: set sprite + Image.type = Sliced lên CancelButton + RetreatButton
+                trong DiamondPanel.prefab
+
+  Menu trigger: Tools/Diamond/Generate Chamfered Rect Sprite (BR)
+  Output: Assets/1.Assets/Resources/Sprites/ChamferedRectBR.png
+
+  Tuning: ChamferSize const 40→18 sau iteration đầu (Arknights cắt ~20-25%,
+  không phải ~50% như draft đầu). Pentagon → "rectangle vạt góc nhẹ".
+
+  Outline component vẫn work native (follow alpha border của sprite) → border
+  trắng continuous quanh 5 cạnh, không seam. Match 100% style Arknights.
+
+  ── C. POSITIONING + BUTTON LAYOUT FIXES ────────────────────────────────────
+
+  - Cancel/Retreat anchoredPosition: (-63, 63) → (-90, 90) = (-R, R)
+    → button bottom-right corner overlap midpoint upper-left edge diamond
+    → "móc vào tip" thay vì floating trong upper-left quadrant
+  - Bottom-right corner tự nhiên nằm trong glow band 18px → visual connection
+    có sẵn không cần thêm element
+
+  ── D. BOTTOM-LEFT GHOST LEAK BUG (3-layer guard fix) ───────────────────────
+
+  Bug: diamond panel intermittent visible ở góc bottom-left màn hình lúc gameplay
+       — chamfered cancel/retreat button leak ở mép trái màn hình.
+
+  Iteration 1 (false fix): nghĩ là "diamond mồ côi" do operator chết khi đang
+    chọn → đề xuất check m_SelectedOperator null trong Update.
+    REJECTED: user clarify "lâu lâu hay hiện", thấy cả ở phút 0:10 (chưa có
+    operator nào chết). Không phải bug này.
+
+  Iteration 2 (false fix): m_Mode default = Mode.Hidden, Hide() early return
+    với "if (m_Mode == Mode.Hidden) return;" → SetActive(false) không bao giờ
+    chạy lần đầu → diamond children visible ở canvas (0,0). Fix bằng
+    "wasShowing" flag + check m_Resolved + SetActive(false) directly nếu chưa
+    resolve.
+    PARTIAL: vẫn có race condition khi tween bị Kill bởi Show race
+    → OnComplete skip → SetActive(false) không fire.
+
+  Iteration 3 (FINAL): 3-LAYER GUARD CHAIN
+    Layer 1 — Awake: gameObject.SetActive(false) NGAY tại Awake.
+      Prefab ship active để designer xem được trong Editor, nhưng runtime
+      luôn start hidden. Closes 100% race "diamond active 1 frame ở (0,0)".
+    Layer 2 — FinishHide: tween OnComplete = check Mode==Hidden + SetActive(false).
+      Normal path khi không có race.
+    Layer 3 — LateUpdate safety: nếu Mode==Hidden + gameObject.activeSelf +
+      CanvasGroup.alpha ≤ 0.01 → SetActive(false). Catch case OnComplete bị
+      skip bởi tween Kill.
+
+  Root cause analysis: m_CenterWorld default = Vector3.zero. Khi diamond
+  active mà chưa từng Show, LateUpdate position theo cam.WorldToScreenPoint(
+  (0, 1, 0)) = góc bottom-left màn hình (world origin của map). Layer 1
+  chặn case này từ gốc — diamond không thể active mà chưa qua Show*.
+
+  ── E. SUPPORTING FIXES (cleanup quanh diamond polish) ──────────────────────
+
+  1. SelectionIndicator quad gold (legacy selection system) còn hiện cùng diamond
+     khi tap operator → 2 indicator chồng nhau. Gỡ 2 call SetSelected(true/false)
+     trong TDOperatorSelectionView. Diamond panel CHÍNH LÀ indicator giờ.
+
+  2. Diamond persist sau Victory/GameOver popup: subscribe TDDeployController +
+     TDOperatorSelectionView vào OnVictory + OnGameOver → auto-cancel/deselect
+     khi run kết thúc.
+
+  3. m_SelectedOperator null check khi operator chết do enemy attack: không cần
+     thêm — diamond Hide khi OnGameOver fire trước rồi. Nếu cần future polish:
+     subscribe OnOperatorDied và check cell match.
+
+  ── F. ANALYSIS: END-OF-STAGE-2 UX (cho demo 2 stages) ──────────────────────
+
+  Hiện tại: Victory popup hiển thị Retry + Next buttons cho mọi stage. Khi
+  thắng Stage_1-2 (stage cuối unlocked), click Next:
+
+    private void OnNextClicked()
+    {
+        string currentId = TDGameStateControl.api.SelectedStageId;
+        TDStageConfig next = TDStageRepository.api?.GetNextStage(currentId);
+        if (next != null) TDGameStateControl.api.SelectStage(next.StageId);
+        PlaySceneFadeOut(TDSceneController.api.RetryGameplay);
+    }
+
+  → GetNextStage(Stage_1-2) = null (Stage_2-1 isLocked=true, không count) hoặc
+    return Stage_2-1 (đang locked, sẽ crash khi load).
+  → Code chạy RetryGameplay() = LOAD LẠI STAGE 1-2.
+  → User click Next nhưng game replay current stage → CONFUSING UX.
+
+  3 lựa chọn (cho demo portfolio):
+
+  Option A. Hide "Next" button trên stage cuối
+    - Đơn giản nhất, code change ~5 dòng
+    - User chỉ thấy Retry → "tự hiểu" đã hết content
+    - KHÔNG có lời nhắn → reviewer có thể nghĩ là missing feature
+
+  Option B. Hiện popup riêng "DEMO COMPLETE"
+    - Khi thắng Stage_1-2 → show DemoCompletePanel thay vì VictoryPanel
+    - Message: "Demo Complete! More stages coming soon."
+    - 1 button "Back to Menu" (clean exit)
+    - Code: thêm panel prefab + 1 branch trong OnVictory
+    - Tốt nhất cho portfolio — show "tôi care về edge cases"
+
+  Option C. Reuse VictoryPanel với conditional Next button
+    - Same VictoryPanel, ẩn Next button + add subtitle "Demo Complete"
+    - Compromise: code thấp hơn B, UX rõ hơn A
+    - Code: ~15 dòng, không cần asset mới
+
+  RECOMMENDATION cho portfolio demo: **Option C** (compromise sweet spot).
+  Effort thấp, UX clear, không cần asset mới.
+
+  ── G. METRICS ──────────────────────────────────────────────────────────────
+
+  Files modified:
+  - TDDiamondPanelView.cs (animations + 3-layer guard) ≈ +120 dòng
+  - TDOperatorSelectionView.cs (remove SetSelected, OnVictory/GameOver hook) ≈ -15
+  - TDDeployController.cs (OnVictory/GameOver hook, ghost SelectionIndicator off) ≈ +20
+  - Assets/2.Scripts/Editor/ChamferedSpriteGenerator.cs (MỚI) ≈ 80 dòng
+  - DiamondPanel.prefab (button position + sprite + 9-slice) (binary)
+  - ChamferedRectBR.png (MỚI, auto-generated)
+
+  Status: animations + chamfer verified bằng playtest. Bottom-left leak fix
+          chưa verify trên device (3-layer guard mới deploy).
+  Pending: End-of-stage-2 UX (Option C đề xuất, chờ user duyệt).
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 67 — END-OF-DEMO POPUP + GOLD SCALE BUG + TUTORIAL          [⚠️ PARTIAL]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-16/17 (2-day session, context cut due to token limit)
+  Status: 60% done — tutorial code complete but has 2 UNVERIFIED BUGS to fix.
+
+  ── A. END-OF-DEMO POPUP (Option C, fully implemented) ─────────────────────
+
+  When player wins Stage_1-2 (last unlocked, next is Stage_2-1 LOCKED), the
+  Victory popup hides "Next" button + appends "DEMO COMPLETE" to stage label.
+
+  Changes:
+  - TDStageRepository.cs:       + GetNextUnlockedStage(currentId)
+                                  returns null if next == null or next.isLocked
+  - TDVictoryPanelView.cs:      Show() signature accepts bool isLastUnlocked = false
+                                  ApplyEndOfContentState(isLast) hides BtnNext
+                                  FillStats appends " · DEMO COMPLETE" to stage label
+  - TDGameplayHUDView.cs:       OnVictory computes isLastUnlocked flag, passes to Show
+                                  OnNextClicked: defensive — if next null somehow,
+                                  go to MainMenu (not silently replay current stage)
+
+  Zero scene change. Code-only. Status: ✅ VERIFIED working in playtest.
+
+  ── B. GOLD VALUE SCALE STUCK BUG (fully fixed) ────────────────────────────
+
+  Bug: In gameplay video, gold value text "18" appears scaled MUCH larger than
+       its icon. Cumulative drift from rapid DOPunchScale + Kill cycles —
+       Kill(default) stops tween mid-bounce, scale stuck at overshoot value.
+
+  Root cause: DOTween.Kill(target) WITHOUT complete:true leaves scale wherever
+              the interpolation was. Rapid retriggers (enemy kills → gold tick
+              → punch → kill → punch → kill) drift transform.localScale away
+              from 1.
+
+  Fix in TDGameplayHUDView.cs: SafePunch(Transform, float strength, int vibrato)
+        helper that does Kill → reset localScale = Vector3.one → punch.
+        Applied to 4 sites: m_LifeText, m_CurrencyText, m_EnemyCountText,
+        m_SpeedButton.
+
+  Status: ✅ implemented. Build test confirmed gold value back to normal size.
+
+  ── C. TUTORIAL SYSTEM — IMPLEMENTED, 2 BUGS UNRESOLVED ────────────────────
+
+  Goal: First-launch onboarding for the Arknights 2-phase deploy gesture.
+        Items #2/#4/#5/#1 from analysis (skipping #3 slot pulse — redundant
+        with #1 hand demo).
+
+  Implementation (all code DONE):
+
+  C.1 New files:
+    Assets/2.Scripts/View/GamePlay/Tutorial/TDFloatingHint.cs
+      - Procedural Canvas UI singleton, lazy create into Canvas/SafeArea/Container
+      - Top-center pill: black 70% alpha bg + white bold TMP text
+      - Fade in 0.25s OutCubic / fade out 0.3s InCubic
+      - SetUpdate(true) on all tweens
+      - Static ShowLimited(prefsKey, maxShows, text, duration) — PlayerPrefs counter
+      - Static Reset(prefsKey) — for testing
+
+    Assets/2.Scripts/View/GamePlay/Tutorial/TDTutorialView.cs
+      - Orchestrator MonoBehaviour, AddComponent'd by TDSlotHolderMainView.Start
+      - PlayerPrefs key namespace: td_tutorial_v1_*
+      - Auto-disable when td_tutorial_v1_done == 1
+      - Subscribes OnUnitPickup / OnDeployDrop / OnTowerPlaced
+      - 5s idle watcher → shows hand sprite loop
+      - Hand sprite loaded via TDResourceObject.GetResource<Sprite>(SPRITE_TUTORIAL_HAND)
+
+  C.2 Event bus changes:
+    TDGameEventBus.cs:        + event OnDeployDrop + raise helper DeployDrop()
+    TDDeployController.Drop(): fires TDGameEventBus.DeployDrop() at end
+
+  C.3 Constants:
+    TDConstant.SPRITE_TUTORIAL_HAND = "Icon_PictoIcon_Hand"
+
+  C.4 Behaviour matrix (per item):
+    #2 OnDeployDrop → ShowLimited(td_tutorial_v1_phase2, 3, "Drag outward to choose facing direction")
+    #4 OnUnitPickup → ShowLimited(td_tutorial_v1_phase1, 3, "Drag the unit onto a highlighted cell")
+    #5 OnTowerPlaced → ShowLimited(td_tutorial_v1_retreat, 2, "Tap a placed unit to retreat")
+                      + sets td_tutorial_v1_done = 1
+    #1 5s idle (first launch only) → hand sprite pulses on slot bar → drifts up
+                                      → fades → loops. Hides on first tap.
+
+  C.5 MANUAL STEP PENDING (CRITICAL — tutorial hand won't show without this):
+    1. Open scene DTLoadFirst
+    2. Select GenerateObject (component TDResourceObject)
+    3. Inspector → Objects field (list) → add new element
+    4. Drag asset to slot:
+       Assets/1.Assets/UnityStore Resources/Layer Lab/2D Icons-PictoIconPack01/
+       Icons/PictoIcon_256/Icon_PictoIcon_Hand.Png
+    5. Save scene
+    Without this: 3 floating hints work, only hand animation silently skipped.
+
+  ── D. UNRESOLVED BUGS (for next conversation) ─────────────────────────────
+
+  BUG #1: Floating hint text wraps VERTICALLY at left edge
+    Symptom: User screenshot shows hint text rendered "T/a/p/a/p/l/a/c/e/d/u"
+             (one char per line) at LEFT EDGE of screen, vertical column.
+    Should be: horizontal pill at top-center of screen "Tap a placed unit to..."
+
+    Root cause hypothesis: Canvas/SafeArea/Container likely has a
+       VerticalLayoutGroup (or similar) that OVERRIDES TDFloatingHint's anchor
+       settings → forces it into the layout flow → narrow column at left.
+
+    Fix candidates (try in order):
+      (a) Add LayoutElement.ignoreLayout = true to TDFloatingHint root in
+          BuildVisuals() — tells parent layout group to skip this child.
+          Code:
+            var le = gameObject.AddComponent<LayoutElement>();
+            le.ignoreLayout = true;
+      (b) If (a) fails: parent the FloatingHint to canvas.transform DIRECTLY
+          (not to SafeArea/Container) — bypass layout group entirely.
+      (c) If (b) breaks safe-area handling: parent to "SafeArea" instead of
+          "SafeArea/Container".
+
+    First diagnostic step: run script-execute with
+      var container = GameObject.Find("Canvas/SafeArea/Container");
+      var vlg = container.GetComponent<VerticalLayoutGroup>();
+      var hlg = container.GetComponent<HorizontalLayoutGroup>();
+      Debug.Log(vlg + " " + hlg);
+    Note: scene MUST be loaded in editor first (OpenScene DTGamePlay).
+
+  BUG #2: Diamond panel jitter ở bottom-left
+    Symptom: User reports — "đôi khi gặp issue khi đang drag 1 tower/operator
+             hoặc khi click vào tower/operator để hiện diamond panel => thì
+             dưới góc bên trái vẫn hiện 1 diamond panel khác nhưng mà jitter"
+    Translation: Sometimes when dragging a tower/operator or tapping one to
+                 show diamond, ANOTHER diamond appears at bottom-left,
+                 jittering (moving).
+
+    Status: Hypothesis unclear. Possibilities:
+      (a) Race condition between Hide tween (mid-fade) and new ShowRetreat —
+          might leave gameObject active with stale m_CenterWorld
+      (b) Two TDDiamondPanelView instances (s_Instance stale from old scene)
+      (c) LateUpdate UpdateScreenPosition() running with default m_CenterWorld
+          (0,0,0) somehow → projects to canvas bottom-left
+
+    3-layer guard (Awake disable + FinishHide + LateUpdate alpha check) was
+    added in S66 and SHOULD prevent this. But user still reports it.
+
+    Diagnostic steps for next session:
+      1. FindObjectsOfType<TDDiamondPanelView>(true) — verify only 1 instance
+      2. Log m_CenterWorld + m_Mode + gameObject.activeSelf each frame to
+         catch the moment of jitter
+      3. Check if Hide() is called WHILE another Show is queued in same frame
+
+  ── E. FILES MODIFIED (S67 inventory) ──────────────────────────────────────
+
+  New:
+    Assets/2.Scripts/View/GamePlay/Tutorial/TDFloatingHint.cs  (~180 lines)
+    Assets/2.Scripts/View/GamePlay/Tutorial/TDTutorialView.cs   (~220 lines)
+
+  Modified:
+    Assets/2.Scripts/Services/TDGameEventBus.cs                (+ OnDeployDrop)
+    Assets/2.Scripts/Control/Tower/PlaceTower/TDDeployController.cs
+                                                                (+ DeployDrop raise)
+    Assets/2.Scripts/View/GamePlay/Tower/TDSlotHolderMainView.cs
+                                                                (+ AddComponent<TDTutorialView>)
+    Assets/2.Scripts/Model/Config/Constant/TDConstant.cs        (+ SPRITE_TUTORIAL_HAND)
+    Assets/2.Scripts/View/GamePlay/TDGameplayHUDView.cs         (SafePunch helper, 4 sites)
+    Assets/2.Scripts/View/GamePlay/TDVictoryPanelView.cs        (isLastUnlocked param)
+    Assets/2.Scripts/Model/Config/TDStageRepository.cs          (+ GetNextUnlockedStage)
+
+  Manual pending:
+    DTLoadFirst.unity: TDResourceObject Objects list ← drag Icon_PictoIcon_Hand sprite
+
+  ── F. HANDOFF NOTES FOR NEXT CONVERSATION ─────────────────────────────────
+
+  Priority order to resume:
+    1. Read THIS section + section D (bug descriptions)
+    2. Verify code state matches inventory (E) — files exist + last modified
+       recently
+    3. Apply fix (a) for BUG #1 (1-line LayoutElement.ignoreLayout add)
+    4. Build APK → playtest hint position
+    5. If hint correctly horizontal at top-center → close BUG #1
+    6. Repro BUG #2: enter gameplay, place operator, tap operator,
+       observe bottom-left for jitter. Use diagnostic step 2 (per-frame log)
+       if can't repro visually.
+    7. If repro: identify which scenario in hypothesis (a/b/c) matches logs
+    8. Apply targeted fix
+
+  Token-saving guidance:
+    - DO NOT re-explain Diamond architecture, gesture flow, or session 65/66
+      context — already in this changelog above
+    - Focus on the 2 specific bugs only
+    - Skip the manual step verification unless hand animation specifically
+      tested
+
+  Code references for fast jump:
+    - Hint position bug: TDFloatingHint.BuildVisuals() — line ~60 (search
+      "m_Rect.sizeDelta")
+    - Diamond ghost guards: TDDiamondPanelView.Awake() / FinishHide() /
+      LateUpdate()
+
+════════════════════════════════════════════════════════════════════════════════
+  SESSION 68 — VICTORY PANEL FIX + CODE REVIEW + FILE CONSOLIDATION       [✅ DONE]
+════════════════════════════════════════════════════════════════════════════════
+
+  Date: 2026-06-17
+
+  ── A. VICTORY PANEL NEXT BUTTON — STAGE ID BUG FIX ─────────────────────────
+
+  Bug: After winning DEMO-1, pressing Next loads DEMO-1 again instead of DEMO-2.
+  Root cause: SelectedStageId was being set BEFORE scene reload via
+    TDGameStateControl.api.SelectStage(nextStageId), then ReinitControls()
+    recreated TDGameStateControl with ??= (preserving old instance on retry,
+    but the ordering was fragile).
+
+  Fix (2 parts):
+  1. No hardcoded default — get from config:
+       public string SelectedStageId { get; private set; }
+         = TDStageRepository.api?.DefaultStageId ?? "DEMO-1";
+     (NRE guard with ?? fallback in case Resources loading fails)
+
+  2. SelectStage called AFTER scene reload, not before:
+     - TDSceneController.RetryGameplay(string nextStageId) overload added
+     - RetryGameplayAsync: UnloadScene → ReinitControls → SelectStage → LoadScene
+     - GoToGameplayAsync: same pattern with stageId parameter
+     - TDGameplayHUDView.OnNextClicked: passes nextStageId through lambda
+       to RetryGameplay instead of calling SelectStage directly
+     - TDStageSelectView.OnPlayClicked: calls GoToGameplay(stageId) directly
+
+  Files changed:
+    TDGameStateControl.cs   — config-driven default
+    TDSceneController.cs    — RetryGameplay(nextStageId) + GoToGameplay(stageId)
+    TDGameplayHUDView.cs    — OnNextClicked passes stageId through
+    TDStageSelectView.cs    — OnPlayClicked passes stageId through
+
+  ── B. FULL BRANCH CODE REVIEW ───────────────────────────────────────────────
+
+  Reviewed all 12 C# file changes on feature/upgrade-game-ui-logic-vfx.
+  5 feature groups: Victory panel + stage flow, Diamond panel animation,
+  HUD punch scale fix, Pause cancel deploy, Tutorial + misc.
+
+  Assessment: demo-ready for 4-year Unity developer portfolio (tutorial OK).
+
+  Additional fix found during review:
+  - TDBGMToggleView.cs: Added [FormerlySerializedAs("m_IconNormal")] and
+    [FormerlySerializedAs("m_IconMute")] to prevent Inspector reference loss
+    from field rename (m_IconNormal → iconNormal, m_IconMute → iconMute).
+
+  ── C. ROOT FILE CONSOLIDATION ───────────────────────────────────────────────
+
+  4 root .txt files (7007 lines total) → kept 1, created 1, deleted 3:
+
+  KEPT:    RECENT_SESSIONS_CHANGELOG.txt (this file) — living changelog
+  CREATED: OPTIMIZATION_NOTES.txt — all optimization data with before/after
+           metrics, 3 build size milestones (130→255→116→102 MB),
+           draw call/batch/shadow/RAM/audio/texture data across S57-S64
+  DELETED: GAME_DESIGN_AND_ROADMAP.txt (3814 lines — outdated design doc)
+           UI_UX_REVIEW_BRIEF.txt (500 lines — one-time review doc)
+           MOBILE_INPUT_ISSUES_SUMMARY.txt (381 lines — outdated after S65 rewrite)
+
+
+================================================================================
+  TODO — DEVELOPMENT PRIORITY                              [updated 2026-06-17]
+================================================================================
+
+  ── P1 ───────────────────────────────────────────────────────────────────────
+
+  ✅ [P1] Dead code cleanup: 11 files DELETED                            (S64)
+
+  ── P2 ───────────────────────────────────────────────────────────────────────
+
+  ✅ [P2] Stage Select UI screen                                           (S63)
+  ⬜ [P2] GetBlockedEnemies() — trả IReadOnlyList thay vì new List() mỗi frame
+  ⬜ [P2] TDTowerWeaponView ScanForTargets() — cache Sort Comparison, bỏ lambda alloc
+  ⬜ [P2] Tune TOUCH_SCREEN_Y_OFFSET_RATIO (0.10f) trên thiết bị thực
+
+  ── P3 ───────────────────────────────────────────────────────────────────────
+
+  ⬜ [P3] SFX wiring: sfx_gold_gained, sfx_victory, sfx_insufficient_gold, sfx_unit_pickup
+          → thêm GameEventKey entries + wire vào Effect Config
+  ⬜ [P3] SFXToggle UI — TDAudioPrefs.ToggleSfx() đã có, cần thêm TDSFXToggleView + button
+  ⬜ [P3] Settings menu: volume sliders (BGM/SFX) thay mute toggle
+  ⬜ [P3] Button idle animation — subtle pulse on PLAY button (loop DOTween)
+  ⬜ [P3] Effect Config.asset: assign UnitPickup + TowerPlaced entries
+  ⬜ [P3] Additional Lights OFF, GPU Instancing tiles, HP Bar Screen Space, Shadow Distance 50→15
+  ⬜ [P3] async void StartWaveLoop() → async Task + exception handler
+
+  ── P4 ───────────────────────────────────────────────────────────────────────
+
+  ⬜ [P4] Tiny variant operators (KnightTiny/DefenderTiny/StrikerTiny) → thêm vào config
+  ⬜ [P4] TDEnemyPathMainControl.cs tách WaveSpawner + PoolManager riêng (SRP)
+  ⬜ [P4] Consolidate event system: chọn TDGameEventBus hoặc Action<T>
+  ⬜ [P4] GoldControl.Tick() tách khỏi HUDView.Update() (SRP)
+  ⬜ [P4] IsPlacingUnit reset on scene load
+  ⬜ [P4] A* openSet.OrderBy() → PriorityQueue O(log n)
+
+
+================================================================================
+  END OF CHANGELOG
+================================================================================

@@ -1,0 +1,292 @@
+using System.Collections.Generic;
+using System.Threading;
+using UnityEngine;
+using Object = UnityEngine.Object;
+
+public class TDEnemyPathMainView : MonoBehaviour
+{
+    [SerializeField] private GameObject[] m_ObstaclePrefabs;
+    [SerializeField] private GameObject m_ObstacleTilePrefab;
+    [SerializeField] private GameObject m_GateStartPrefab;
+    [SerializeField] private GameObject m_GateEndPrefab;
+    
+    
+    [SerializeField] private GameObject m_TowerZonePrefab;
+    private int m_LevelIndex;
+    private TDMapVisualConfig m_VisualConfig;
+    private TDStageConfig m_ActiveStage;
+
+    public void SetLevelIndex(int levelIndex) => m_LevelIndex = levelIndex;
+
+    public void ApplyVisual(TDMapVisualConfig config)
+    {
+        if (config == null) return;
+        m_VisualConfig = config;
+        if (config.TowerZonePrefab != null) m_TowerZonePrefab = config.TowerZonePrefab;
+        if (config.ObstacleTilePrefab != null) m_ObstacleTilePrefab = config.ObstacleTilePrefab;
+        if (config.ObstaclePrefabs?.Length > 0) m_ObstaclePrefabs = config.ObstaclePrefabs;
+    }
+
+    public void ApplyStageConfig(TDStageConfig stage) => m_ActiveStage = stage;
+
+    // Groups and gate views — indices correspond to each other
+    private List<TDPathGroup> m_PathGroups = new List<TDPathGroup>();
+    private List<TDGateView> m_GateStartViews = new List<TDGateView>();
+
+    private CancellationTokenSource m_WaveCts;
+    private readonly List<GameObject> m_TowerZoneTiles = new List<GameObject>();
+    private IGridDTO m_GridDTO;
+    private TDEnemyPathView m_EnemyPathView;
+
+    public void Initialize(IGridDTO initGridDTO)
+    {
+        m_GridDTO = initGridDTO;
+        m_EnemyPathView = GameObject.Find(TDConstant.GAMEPLAY_ENEMY_PATH_VIEW)
+                                    .GetComponent<TDEnemyPathView>();
+
+        TDEnemyPathMainControl.api.InitEnemyPools(TDFlyweightEnemyDataSettings.api, transform);
+        ImplementPath();
+    }
+
+    private async void ImplementPath()
+    {
+        await TDInitializeModel.api.createGridCompletion.Task;
+
+        m_EnemyPathView.RegistryValues();
+        m_EnemyPathView.OverridePathTilePrefab(m_VisualConfig?.PathTilePrefab);
+        RegistryEvents();
+
+        // Build path groups from the stage config
+        var stage = m_ActiveStage;
+        var groups = TDEnemyPathMainControl.api.BuildPathGroups(stage, m_GridDTO);
+        m_PathGroups = groups;
+
+        TDEnemyPathMainControl.api.InitEnemyPath(m_GridDTO, groups);
+        SpawnGates(groups);
+        TDEnemyPathMainControl.api.GenerateAllPaths(m_GridDTO, groups);
+    }
+
+    // Spawn 1 start gate + 1 end gate per group, rotate theo border
+    private void SpawnGates(List<TDPathGroup> groups)
+    {
+        m_GateStartViews.Clear();
+        Vector3[,] grid = TDGridMainModel.api.GetGrid();
+
+        foreach (var group in groups)
+        {
+            if (m_GateStartPrefab != null)
+            {
+                Vector3 pos = grid[group.StartCell.x, group.StartCell.y];
+                Quaternion rotation = TDGatePlacer.FacingRotation(group.StartBorder);
+                var go = Object.Instantiate(m_GateStartPrefab, pos, rotation, transform);
+                m_GateStartViews.Add(go.GetComponent<TDGateView>());
+                TDGridMainModel.api.SetOccupiedCell(pos);
+            }
+            else
+            {
+                m_GateStartViews.Add(null);
+                Debug.LogWarning("<color=orange>TDEnemyPathMainView: m_GateStartPrefab not assigned</color>");
+            }
+
+            if (m_GateEndPrefab != null)
+            {
+                Vector3 pos = grid[group.EndCell.x, group.EndCell.y];
+                // End gate faces inward from the opposite border
+                Quaternion rotation = TDGatePlacer.FacingRotation(OppositeOf(group.StartBorder));
+                Object.Instantiate(m_GateEndPrefab, pos, rotation, transform);
+                TDGridMainModel.api.SetOccupiedCell(pos);
+            }
+            else
+            {
+                Debug.LogWarning("<color=orange>TDEnemyPathMainView: m_GateEndPrefab not assigned</color>");
+            }
+        }
+    }
+
+    private void RegistryEvents()
+    {
+        TDEnemyPathMainControl.api.onGroupsReady += OnGroupsReady;
+        TDEnemyPathMainControl.api.onWaveGroupStart += OnWaveGroupStart;
+        TDEnemyPathMainControl.api.onValidTowerCellsReady += OnValidTowerCellsReady;
+    }
+
+    private void OnDestroy()
+    {
+        m_WaveCts?.Cancel();
+        m_WaveCts?.Dispose();
+
+        TDEnemyPathMainControl.api.onGroupsReady -= OnGroupsReady;
+        TDEnemyPathMainControl.api.onWaveGroupStart -= OnWaveGroupStart;
+        TDEnemyPathMainControl.api.onValidTowerCellsReady -= OnValidTowerCellsReady;
+    }
+
+    private void OnWaveGroupStart(int waveIdx, int groupIdx)
+    {
+        if (groupIdx >= 0 && groupIdx < m_GateStartViews.Count)
+            m_GateStartViews[groupIdx]?.PlaySpawnEffect();
+    }
+
+    private void OnGroupsReady(List<TDPathGroup> groups)
+    {
+        if (groups == null || groups.Count == 0) return;
+
+        // Visualize all corridors from every group
+        var allCorridors = new List<List<IGridCellDTO>>();
+        foreach (var g in groups)
+            allCorridors.AddRange(g.Corridors);
+
+        m_EnemyPathView.VisualizeAllPaths(allCorridors);
+
+        TDEnemyPathMainControl.api.ComputeValidTowerCells(m_GridDTO, groups);
+
+        LevelConfig config = TDLevelConfigSettings.api?.GetLevel(m_LevelIndex);
+        if (config == null) return;
+
+        // BUG-02 fix: use the actual enemy count from the generated wave plans
+        var wavePlans = TDEnemyPathMainControl.api.BuildWavePlans(config);
+        int actualCount = TDEnemyPathMainControl.api.GetActualEnemyCount(wavePlans);
+        TDGameStateControl.api?.Initialize(actualCount);
+
+        m_WaveCts = new CancellationTokenSource();
+        TDEnemyPathMainControl.api.StartWaveLoop(groups, wavePlans, config, m_WaveCts.Token)
+            .Forget("StartWaveLoop");
+    }
+
+    private void OnValidTowerCellsReady(List<Vector3> validPositions)
+    {
+        BuildGridZones(validPositions);
+    }
+
+    // ── Grid Zone Spawning (SRP: extracted from God Method) ──────────────────
+
+    private void BuildGridZones(List<Vector3> validPositions)
+    {
+        if (m_TowerZonePrefab == null)
+        {
+            Debug.LogWarning("[TDEnemyPathMainView] m_TowerZonePrefab not assigned — skipped");
+            return;
+        }
+
+        bool hasObstacles = m_ObstaclePrefabs != null && m_ObstaclePrefabs.Length > 0;
+        int[] footprintRadii = hasObstacles ? ComputeFootprintRadii() : null;
+
+        // Double-check: remove any path cells that slipped through
+        var filtered = new List<Vector3>(validPositions.Count);
+        int pathLeakCount = 0;
+        foreach (var pos in validPositions)
+        {
+            var cell = TDGridMainModel.api.WorldToCell(pos);
+            if (m_GridDTO.GetCell(cell.x, cell.y).isWalkable) { pathLeakCount++; continue; }
+            filtered.Add(pos);
+        }
+        if (pathLeakCount > 0)
+            Debug.LogWarning($"<color=orange>[PathView] {pathLeakCount} path cells leaked — filtered</color>");
+
+        // Shuffle to randomize obstacle placement
+        for (int i = filtered.Count - 1; i > 0; i--)
+        {
+            int j = Random.Range(0, i + 1);
+            (filtered[i], filtered[j]) = (filtered[j], filtered[i]);
+        }
+
+        int obstacleCount = Mathf.RoundToInt(filtered.Count * TDConstant.CONFIG_MAZE_OBSTACLE_WALL_RATIO);
+
+        var validWallCells = new HashSet<Vector2Int>();
+        foreach (var pos in validPositions)
+            validWallCells.Add(TDGridMainModel.api.WorldToCell(pos));
+
+        GameObject tilePrefabForObstacle = m_ObstacleTilePrefab != null ? m_ObstacleTilePrefab : m_TowerZonePrefab;
+
+        // Phase 1: place obstacles
+        var blockedCells = new HashSet<Vector2Int>();
+        var obstacleCells = new HashSet<Vector2Int>();
+
+        for (int i = 0; i < obstacleCount && hasObstacles; i++)
+        {
+            Vector3 center = new Vector3(filtered[i].x, 0f, filtered[i].z);
+            if (!TDGridMainModel.api.IsValidPlacement(center)) continue;
+
+            Vector2Int centerCell = TDGridMainModel.api.WorldToCell(center);
+            var nbNorth = new Vector2Int(centerCell.x, centerCell.y + 1);
+            var nbSouth = new Vector2Int(centerCell.x, centerCell.y - 1);
+            bool hasNorthWall = TDGridMainModel.api.IsInBounds(nbNorth)
+                                && !m_GridDTO.GetCell(nbNorth.x, nbNorth.y).isWalkable;
+            bool hasSouthWall = TDGridMainModel.api.IsInBounds(nbSouth)
+                                && !m_GridDTO.GetCell(nbSouth.x, nbSouth.y).isWalkable;
+            bool hasVerticalWall = hasNorthWall && hasSouthWall;
+
+            int maxPIdx = hasVerticalWall ? m_ObstaclePrefabs.Length : Mathf.Min(2, m_ObstaclePrefabs.Length);
+            int pIdx = Random.Range(0, maxPIdx);
+            int radius = footprintRadii != null ? footprintRadii[pIdx] : 0;
+
+            Object.Instantiate(m_ObstaclePrefabs[pIdx], center, Quaternion.Euler(0f, Random.Range(0f, 360f), 0f), transform);
+
+            for (int dx = -radius; dx <= radius; dx++)
+                for (int dz = -radius; dz <= radius; dz++)
+                {
+                    var cell = new Vector2Int(centerCell.x + dx, centerCell.y + dz);
+                    if (!TDGridMainModel.api.IsInBounds(cell)) continue;
+                    if (!validWallCells.Contains(cell)) continue;
+                    blockedCells.Add(cell);
+                    obstacleCells.Add(cell);
+                    TDGridMainModel.api.SetOccupiedCell(TDGridMainModel.api.CellToWorld(cell));
+                }
+        }
+
+        // Phase 1.5: obstacle tiles
+        foreach (var cell in obstacleCells)
+        {
+            Vector3 w = TDGridMainModel.api.CellToWorld(cell);
+            Object.Instantiate(tilePrefabForObstacle, new Vector3(w.x, 0f, w.z), Quaternion.identity, transform);
+        }
+
+        // Phase 2: tower zone tiles
+        foreach (var pos in filtered)
+        {
+            var cell = TDGridMainModel.api.WorldToCell(pos);
+            if (blockedCells.Contains(cell)) continue;
+            var tile = Object.Instantiate(m_TowerZonePrefab, new Vector3(pos.x, 0f, pos.z), Quaternion.identity, transform);
+            m_TowerZoneTiles.Add(tile);
+        }
+
+        Debug.Log($"[TDEnemyPathMainView] {m_TowerZoneTiles.Count} tower tiles | {obstacleCount} obstacles");
+    }
+
+    private int[] ComputeFootprintRadii()
+    {
+        float cellSize = TDConstant.CONFIG_GRID_CELL_SIZE;
+        int[] radii = new int[m_ObstaclePrefabs.Length];
+
+        for (int i = 0; i < m_ObstaclePrefabs.Length; i++)
+        {
+            if (m_ObstaclePrefabs[i] == null) continue;
+            var inst = Object.Instantiate(m_ObstaclePrefabs[i]);
+            inst.SetActive(false);
+            Bounds b = new Bounds();
+            bool first = true;
+            foreach (var r in inst.GetComponentsInChildren<Renderer>(true))
+            {
+                if (first) { b = r.bounds; first = false; }
+                else b.Encapsulate(r.bounds);
+            }
+            Object.Destroy(inst);
+            if (!first)
+            {
+                float halfMax = Mathf.Max(b.size.x, b.size.z) * 0.5f;
+                radii[i] = Mathf.Max(0, Mathf.CeilToInt(halfMax / cellSize - 0.5f));
+            }
+        }
+
+        Debug.Log($"[EnemyPathMainView] FootprintRadii: [{string.Join(", ", radii)}]");
+        return radii;
+    }
+
+    private static TDEnums.BorderSide OppositeOf(TDEnums.BorderSide border) => border switch
+    {
+        TDEnums.BorderSide.Left => TDEnums.BorderSide.Right,
+        TDEnums.BorderSide.Right => TDEnums.BorderSide.Left,
+        TDEnums.BorderSide.Top => TDEnums.BorderSide.Bottom,
+        TDEnums.BorderSide.Bottom => TDEnums.BorderSide.Top,
+        _ => TDEnums.BorderSide.Right,
+    };
+}

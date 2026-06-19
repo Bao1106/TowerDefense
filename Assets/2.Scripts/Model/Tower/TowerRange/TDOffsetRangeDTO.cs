@@ -1,0 +1,73 @@
+using System.Collections.Generic;
+using UnityEngine;
+
+// Range defined as a list of relative cell offsets from the tower's position.
+// Offsets are defined when the tower is facing +X (Y=90°).
+// Automatically rotated to all 4 cardinal directions as the tower rotates.
+public class TDOffsetRangeDTO : TDRangeDTO
+{
+    private readonly Vector2Int[] m_Offsets;
+    private readonly float m_DetectionRadius;
+
+    public TDOffsetRangeDTO(Vector2Int[] offsets)
+    {
+        m_Offsets = offsets ?? System.Array.Empty<Vector2Int>();
+        float maxDist = 0f;
+        foreach (var o in m_Offsets)
+            maxDist = Mathf.Max(maxDist, o.magnitude);
+        m_DetectionRadius = maxDist * TDConstant.CONFIG_GRID_CELL_SIZE;
+    }
+
+    public override float DetectionRadius => m_DetectionRadius;
+
+    // O(numOffsets) — no allocations, suitable for per-frame tick scanning
+    public override bool IsInRange(Vector3 towerPosition, Vector3 enemyPosition, Quaternion towerRotation)
+    {
+        var grid = TDGridMainModel.api;
+        var towerCell = grid.WorldToCell(towerPosition);
+        var enemyCell = grid.WorldToCell(enemyPosition);
+        foreach (var offset in m_Offsets)
+        {
+            if (towerCell + RotateOffset(offset, towerRotation) == enemyCell)
+                return true;
+        }
+        return false;
+    }
+
+    // Overrides base — derives cells directly from offsets, no bounding-box scan needed
+    public override List<Vector2Int> GetCellsInRange(Vector2Int towerCell, Quaternion towerRotation)
+    {
+        var grid = TDGridMainModel.api;
+        var cells = new List<Vector2Int>(m_Offsets.Length);
+        foreach (var offset in m_Offsets)
+        {
+            var cell = towerCell + RotateOffset(offset, towerRotation);
+            if (grid.IsInBounds(cell))
+                cells.Add(cell);
+        }
+        return cells;
+    }
+
+    // Rotates an offset from local space (facing +X) into grid space based on the tower's rotation.
+    // Offset convention: x = forward, y = right-of-facing
+    // Y= 0° (facing +Z): (dx,dy) → ( dy, dx)
+    // Y= 90° (facing +X): (dx,dy) → ( dx, dy) ← definition space
+    // Y=180° (facing -Z): (dx,dy) → (-dy, -dx)
+    // Y=270° (facing -X): (dx,dy) → (-dx, -dy)
+    private static Vector2Int RotateOffset(Vector2Int offset, Quaternion rotation)
+    {
+        int dx = offset.x;
+        int dy = offset.y;
+        int angle = Mathf.RoundToInt(rotation.eulerAngles.y) % 360;
+        if (angle < 0) angle += 360;
+
+        return angle switch
+        {
+            0 => new Vector2Int( dy, dx),
+            90 => new Vector2Int( dx, dy),
+            180 => new Vector2Int(-dy, -dx),
+            270 => new Vector2Int(-dx, -dy),
+            _ => new Vector2Int( dx, dy)
+        };
+    }
+}

@@ -1,0 +1,86 @@
+using System.Collections.Generic;
+using TDEnums;
+using UnityEngine;
+
+// Replaces TDBulletsView — handles all attack types (Single/Multiple/AOE).
+// Homing: tracks the target every frame; if the target dies → flies to the last known position.
+// AOE: on arrival → calls GetCellsInRange → deals damage to all enemies in those cells.
+public class TDAttackVFX : MonoBehaviour
+{
+    public TowerType OwnerType { get; set; }
+
+    private TDEnemyView m_Target;
+    private Vector3 m_TargetPos;
+    private float m_Damage;
+    private AttackType m_AttackType;
+    private ITowerRangeDTO m_RangeDTO;
+    private Quaternion m_TowerRotation;
+    private bool m_HasImpacted;
+
+    public void Init(TDEnemyView target, float damage, AttackType attackType, ITowerRangeDTO rangeDTO, Quaternion towerRotation)
+    {
+        m_Target = target;
+        m_TargetPos = target.transform.position;
+        m_Damage = damage;
+        m_AttackType = attackType;
+        m_RangeDTO = rangeDTO;
+        m_TowerRotation = towerRotation;
+        m_HasImpacted = false;
+    }
+
+    private void Update()
+    {
+        if (m_HasImpacted) return;
+
+        // Track target if still alive → homing behavior; if dead → keep last known position
+        if (m_Target != null)
+            m_TargetPos = m_Target.transform.position;
+
+        transform.position = Vector3.MoveTowards(
+            transform.position, m_TargetPos, TDConstant.VFX_MOVE_SPEED * Time.deltaTime);
+
+        Vector3 dir = m_TargetPos - transform.position;
+        if (dir.sqrMagnitude > 0.001f)
+            transform.rotation = Quaternion.LookRotation(dir);
+
+        if (Vector3.Distance(transform.position, m_TargetPos) < TDConstant.VFX_ARRIVE_THRESHOLD)
+            OnImpact();
+    }
+
+    private void OnImpact()
+    {
+        m_HasImpacted = true;
+
+        switch (m_AttackType)
+        {
+            case AttackType.Single:
+            case AttackType.Multiple:
+                m_Target?.TakeDamage(m_Damage);
+                break;
+
+            case AttackType.AOE:
+                ApplyAOEDamage();
+                break;
+        }
+
+        TDGameEventBus.TowerAttacked(transform.position, OwnerType);
+        TDFlyweightBulletFactoryModel.ReturnToPool(this);
+    }
+
+    private void ApplyAOEDamage()
+    {
+        var hitCell = TDGridMainModel.api.WorldToCell(transform.position);
+        var cells = m_RangeDTO.GetCellsInRange(hitCell, m_TowerRotation);
+        var cellSet = new HashSet<Vector2Int>(cells);
+
+        // Copy the list to prevent invalidation when TakeDamage → Unregister modifies the original
+        var enemies = new List<TDEnemyView>(TDEnemyRegistry.api.GetAll());
+        foreach (var enemy in enemies)
+        {
+            if (enemy == null) continue;
+            var enemyCell = TDGridMainModel.api.WorldToCell(enemy.transform.position);
+            if (cellSet.Contains(enemyCell))
+                enemy.TakeDamage(m_Damage);
+        }
+    }
+}

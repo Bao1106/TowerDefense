@@ -1,0 +1,79 @@
+using System;
+using System.Linq;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+
+public class TDControl
+{
+    private static TDControl m_api;
+    public static TDControl api
+    {
+        get
+        {
+            return m_api ??= new TDControl();
+        }
+    }
+    
+    public void Init()
+    {
+        Debug.Log("Init mini app main control");
+        TDAudioService.Init();
+        InitOtherControl();
+
+        LoadMainMenuScene();
+        //AppBridge.Instance.CallOnMiniAPIReady(OnApiMiniAppReady);
+    }
+
+    public void ReinitControls() => InitOtherControl();
+
+    private void InitOtherControl()
+    {
+        //Init main control
+        TDPauseControl.api = new TDPauseControl();
+        TDPlayerLifeControl.api = new TDPlayerLifeControl();
+        TDGoldControl.api = new TDGoldControl();
+        TDGameStateControl.api ??= new TDGameStateControl();
+        TDSpeedControl.api = new TDSpeedControl();
+        TDGameplayMainControl.api = new TDGameplayMainControl();
+        TDEnemyPathMainControl.api = new TDEnemyPathMainControl();
+        TDTowerMainControl.api = new TDTowerMainControl();
+        TDaStarPathControl.api = new TDaStarPathControl();
+        TDMazePathGenerator.api = new TDMazePathGenerator(TDaStarPathControl.api);
+        
+        //Init sub control
+        TDOperatorRegistry.api = new TDOperatorRegistry();
+        TDEnemyRegistry.api = new TDEnemyRegistry();
+        TDEnemyPathControl.api = new TDEnemyPathControl();
+        TDEnemyControl.api = new TDEnemyControl();
+        TDPlaceTowerControl.api = new TDPlaceTowerControl();
+        TDTowerFactoryControl.api = new TDTowerFactoryControl();
+        TDTowerBehaviorMainControl.api = new TDTowerBehaviorMainControl();
+        TDTowerBehaviorSubControl.api = new TDTowerBehaviorSubControl();
+        TDUserInputControl.api = new TDUserInputControl();
+        TDOperatorRetreatControl.api = new TDOperatorRetreatControl();
+        TDTowerRetreatControl.api = new TDTowerRetreatControl();
+
+        TDEffectManager.Init();
+        TDGameplayAudioContext.Init();
+    }
+    
+    public static IOperatorBehavior CreateOperatorBehavior(TDEnums.DeployZone zone) => zone switch
+    {
+        TDEnums.DeployZone.TowerZone => new TowerZoneOperatorBehavior(),
+        _ => new PathCellOperatorBehavior(),
+    };
+
+    public static IGateAssignmentStrategy CreateStrategy(TDEnums.GateAssignmentMode mode) => mode switch
+    {
+        TDEnums.GateAssignmentMode.RoundRobin => new RoundRobinStrategy(),
+        TDEnums.GateAssignmentMode.Random => new RandomStrategy(),
+        TDEnums.GateAssignmentMode.PerWave => new PerWaveStrategy(),
+        TDEnums.GateAssignmentMode.Simultaneous => new SimultaneousStrategy(),
+        _ => new RoundRobinStrategy(),
+    };
+
+    private void LoadMainMenuScene()
+    {
+        SceneManager.LoadSceneAsync(TDConstant.SCENE_MAIN_MENU, LoadSceneMode.Additive);
+    }
+}

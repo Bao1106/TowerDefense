@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: a48d8ba1eb739eb4a84d59f94e69f68f
+timeCreated: 1538591474
+licenseType: Store
+NativeFormatImporter:
+  mainObjectFileID: 11400000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 129844
+  packageName: Neon Folders
+  packageVersion: 1.0.3
+  assetPath: Assets/Plugins/NeonFolders/Presets/Platforms/Windows.asset
+  uploadId: 272883

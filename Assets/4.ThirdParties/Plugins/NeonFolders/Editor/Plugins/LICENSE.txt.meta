@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 6c9b17258cf16f54f959357c49b12eb5
+timeCreated: 1538662010
+licenseType: Store
+TextScriptImporter:
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 129844
+  packageName: Neon Folders
+  packageVersion: 1.0.3
+  assetPath: Assets/Plugins/NeonFolders/Editor/Plugins/LICENSE.txt
+  uploadId: 272883

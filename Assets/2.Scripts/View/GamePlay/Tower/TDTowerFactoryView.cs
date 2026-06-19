@@ -1,0 +1,10 @@
+using UnityEngine;
+
+/// <summary>
+/// Subscriber of TDTowerFactoryControl.onCreateTowerSuccess — kept for backward compatibility.
+/// Init(key) is now called internally by TDTowerFactoryControl.CreateUnit via IPlacedUnit.
+/// This file is retained to avoid breaking scene references; it no longer contains active logic.
+/// </summary>
+public class TDTowerFactoryView : MonoBehaviour
+{
+}

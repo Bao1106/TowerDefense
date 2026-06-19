@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: 1d289adde395b8f41b0a830b16b556bb
+timeCreated: 1538596248
+licenseType: Store
+NativeFormatImporter:
+  mainObjectFileID: 11400000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 129844
+  packageName: Neon Folders
+  packageVersion: 1.0.3
+  assetPath: Assets/Plugins/NeonFolders/Basics.asset
+  uploadId: 272883

@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: acebc2e5f53d4e44aaffa96345fdb988
+timeCreated: 1538592253
+licenseType: Store
+NativeFormatImporter:
+  mainObjectFileID: 11400000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 129844
+  packageName: Neon Folders
+  packageVersion: 1.0.3
+  assetPath: Assets/Plugins/NeonFolders/Presets/Platforms/Playstation.asset
+  uploadId: 272883

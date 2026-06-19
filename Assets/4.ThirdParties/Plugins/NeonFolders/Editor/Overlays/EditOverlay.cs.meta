@@ -1,0 +1,19 @@
+fileFormatVersion: 2
+guid: 9835dcc7682cf244da9714befd18a930
+timeCreated: 1538576307
+licenseType: Store
+MonoImporter:
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 129844
+  packageName: Neon Folders
+  packageVersion: 1.0.3
+  assetPath: Assets/Plugins/NeonFolders/Editor/Overlays/EditOverlay.cs
+  uploadId: 272883

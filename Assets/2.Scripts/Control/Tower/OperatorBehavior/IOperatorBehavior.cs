@@ -1,0 +1,31 @@
+using TDEnums;
+using UnityEngine;
+
+/// <summary>
+/// Strategy interface that differentiates operator behavior by DeployZone.
+///
+/// PathCell → PathCellOperatorBehavior (block enemy, melee attack)
+/// TowerZone → TowerZoneOperatorBehavior (ranged attack, no blocking)
+///
+/// Factory: TDControl.CreateOperatorBehavior(DeployZone)
+/// </summary>
+public interface IOperatorBehavior
+{
+    /// Checks whether the given world position is a valid placement location for the operator.
+    bool CanPlace(Vector3 worldPos);
+
+    /// Executes operator placement (snap to cell, spawn prefab, mark cell as occupied).
+    void Place(Vector3 worldPos, Quaternion rotation, TDTowerSlotInfo slotInfo);
+
+    /// Called from TDOperatorView.Init() — registers the operator into the appropriate registry.
+    void OnInit(Vector2Int cell, OperatorData data, TDOperatorView view);
+
+    /// Finds a target, caches the pending target, and fires the attack VFX. Returns true to trigger the attack animation and reset the timer.
+    bool TryAttack(Vector2Int cell, Vector3 worldPos, OperatorData data);
+
+    /// Called from the OnAttackHit animation event — applies damage and fires the impact VFX at the enemy's position.
+    void ExecuteHit(Vector2Int cell, Vector3 worldPos, OperatorData data);
+
+    /// Cleanup when the operator is removed (killed or retreated).
+    void OnRemove(Vector2Int cell, Vector3 worldPos);
+}
