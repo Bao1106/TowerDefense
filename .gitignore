@@ -70,3 +70,9 @@ crashlytics-build.properties
 # Temporary auto-generated Android Assets
 /[Aa]ssets/[Ss]treamingAssets/aa.meta
 /[Aa]ssets/[Ss]treamingAssets/aa/*
+
+# Stale nested copy of an older snapshot of this project (untracked 2026-08-25)
+/Tower Defense/
+
+# CodeGraph local index (generated)
+.codegraph/

@@ -1,7 +1,0 @@
-<dependencies>
-  <androidPackages>
-    <androidPackage spec="androidx.appcompat:appcompat:1.2.0" />
-    <androidPackage spec="androidx.biometric:biometric:1.0.1" />
-    <androidPackage spec="com.google.android.material:material:1.0.0" />
-  </androidPackages>
-</dependencies>
