@@ -14,14 +14,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   levels:
   - levelIndex: 0
-    difficulty: 0
-    totalEnemies: 30
-    waveCount: 5
+    difficulty: 1
+    totalEnemies: 56
+    waveCount: 8
     waveInterval: 10
     spawnInterval: 2
   - levelIndex: 1
     difficulty: 1
-    totalEnemies: 40
-    waveCount: 4
+    totalEnemies: 72
+    waveCount: 8
     waveInterval: 10
     spawnInterval: 1.5

@@ -23,6 +23,7 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
     private float m_MaxHp;
     private float m_LastAttackTime = -999f;
     private bool m_Initialized;
+    private bool m_IsDying;
 
     public int Cost { get; private set; }
     public OperatorType OperatorType => m_OperatorType;
@@ -69,7 +70,7 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
 
     public void TakeDamage(float damage)
     {
-        if (!m_Initialized || m_CurrentHp <= 0) return;
+        if (!m_Initialized || m_IsDying || m_CurrentHp <= 0) return;
         m_CurrentHp -= damage;
         m_HPBarView?.UpdateHP(m_CurrentHp, m_MaxHp);
         if (m_CurrentHp <= 0) Die();
@@ -81,6 +82,9 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
 
     public void DoRetreat()
     {
+        // The corpse still playing its Die clip is not a unit that can walk off.
+        if (m_IsDying) return;
+
         ((IPlacedUnit)this).OnRemove();
         TDGameEventBus.OperatorDied(m_MyCell);
         Destroy(gameObject);
@@ -88,9 +92,36 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
 
     private void Die()
     {
+        if (m_IsDying) return;
+        m_IsDying = true;
+
+        // Free the cell and notify listeners immediately — same order as TDEnemyView.Die():
+        // the logical slot must open now, only the visual is allowed to linger.
         ((IPlacedUnit)this).OnRemove();
         TDGameEventBus.OperatorDied(m_MyCell);
-        Destroy(gameObject);
+        m_HPBarView?.Hide();
+
+        // No Die trigger on this prefab's controller → nothing to wait for.
+        if (!HasAnimatorTrigger(TDConstant.ANIM_TRIGGER_DIE))
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        m_Animator.SetTrigger(TDConstant.ANIM_TRIGGER_DIE);
+        Destroy(gameObject, TDConstant.OPERATOR_DIE_DURATION);
+    }
+
+    private bool HasAnimatorTrigger(string triggerName)
+    {
+        if (m_Animator == null || m_Animator.runtimeAnimatorController == null) return false;
+        var parameters = m_Animator.parameters; // allocates, but this runs once per death
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            if (parameters[i].type == AnimatorControllerParameterType.Trigger
+                && parameters[i].name == triggerName) return true;
+        }
+        return false;
     }
 
     // ── Animation event callback ──────────────────────────────────────────────

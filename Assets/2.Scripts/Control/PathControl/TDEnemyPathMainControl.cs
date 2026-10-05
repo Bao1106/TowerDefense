@@ -286,7 +286,10 @@ public class TDEnemyPathMainControl
 
     private static List<List<EnemyType>> BuildWavePlansInternal(Difficulty difficulty, int waveCount, int totalEnemies)
     {
-        if (difficulty >= Difficulty.Extreme)
+        // Was `>= Extreme`, i.e. the top two of five rungs. Mapped to Nightmare only, not
+        // to Hard: 15 waves of 75 enemies makes a match a marathon rather than a harder
+        // one, and Hard sits at hpMult 1.2 — it has not earned that yet.
+        if (difficulty >= Difficulty.Nightmare)
         {
             waveCount = Mathf.Max(waveCount, 15);
             totalEnemies = Mathf.Max(totalEnemies, 75);
@@ -344,10 +347,8 @@ public class TDEnemyPathMainControl
 
     private static (int bossWaves, int bossPerWave, float bossWaveMult) GetBossParams(Difficulty d) => d switch
     {
-        Difficulty.Easy => (1, 1, 2.0f),
         Difficulty.Normal => (1, 1, 2.0f),
         Difficulty.Hard => (2, 1, 2.5f),
-        Difficulty.Extreme => (3, 1, 2.5f),
         Difficulty.Nightmare => (5, 2, 2.5f),
         _ => (1, 1, 2.0f),
     };

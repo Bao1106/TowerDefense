@@ -46,23 +46,73 @@ public static class DifficultyRatioTable
     private static readonly Dictionary<Difficulty, RatioRow> k_Table =
         new Dictionary<Difficulty, RatioRow>
         {
-            { Difficulty.Easy, new RatioRow { normalPct=0.80f, fastPct=0.15f, tankPct=0.04f, bossPct=0.01f, hpMult=0.8f, speedMult=0.9f } },
             { Difficulty.Normal, new RatioRow { normalPct=0.60f, fastPct=0.25f, tankPct=0.12f, bossPct=0.03f, hpMult=1.0f, speedMult=1.0f } },
             { Difficulty.Hard, new RatioRow { normalPct=0.45f, fastPct=0.30f, tankPct=0.18f, bossPct=0.07f, hpMult=1.2f, speedMult=1.1f } },
-            { Difficulty.Extreme, new RatioRow { normalPct=0.30f, fastPct=0.30f, tankPct=0.25f, bossPct=0.15f, hpMult=1.5f, speedMult=1.2f } },
             { Difficulty.Nightmare, new RatioRow { normalPct=0.15f, fastPct=0.25f, tankPct=0.35f, bossPct=0.25f, hpMult=2.0f, speedMult=1.5f } },
         };
 
     public static RatioRow Get(Difficulty d) => k_Table[d];
 
     // Returns [normalCount, fastCount, tankCount, bossCount] — guaranteed sum = total
+    // Largest-remainder (Hamilton) apportionment.
+    //
+    // Replaces "round three types, give the leftover to Boss". That trick broke two ways,
+    // both found by actually running TDBalanceValidator:
+    //
+    //   [SUM] Normal total=6 → [4,2,1,0] sums to 7. Rounding 3.6/1.5/0.72 up gave 7 slots
+    //         out of 6, so Boss came out at -1 and Mathf.Max(0, …) quietly turned the
+    //         shortfall into an extra enemy. The comment claimed "sum always equals total".
+    //   [NO_BOSS] Normal total=38 → Boss wants 1.14 and gets 0, because the other three
+    //         had already absorbed the rounding in their favour.
+    //
+    // Hamilton has no leftover type at all: every count is floor(ideal), then the seats
+    // still unfilled go to the largest fractions. That makes all four assertions hold by
+    // construction rather than by luck — sum is total because seats are handed out one by
+    // one; nothing is negative because floor of a non-negative is non-negative; every
+    // count is within 1 of its ideal because it is floor or floor+1; and any type whose
+    // ideal is >= 1 gets at least floor(ideal) >= 1, so a stage that calls for a boss gets one.
     public static int[] Distribute(Difficulty d, int total)
     {
         RatioRow row = k_Table[d];
-        int normal = Mathf.RoundToInt(row.normalPct * total);
-        int fast = Mathf.RoundToInt(row.fastPct * total);
-        int tank = Mathf.RoundToInt(row.tankPct * total);
-        int boss = total - normal - fast - tank; // remainder → sum always equals total
-        return new[] { Mathf.Max(0, normal), Mathf.Max(0, fast), Mathf.Max(0, tank), Mathf.Max(0, boss) };
+        float[] pcts = { row.normalPct, row.fastPct, row.tankPct, row.bossPct };
+
+        var counts = new int[4];
+        var frac = new float[4];
+        int assigned = 0;
+
+        for (int i = 0; i < 4; i++)
+        {
+            float ideal = Mathf.Max(0f, pcts[i]) * total;
+            counts[i] = Mathf.FloorToInt(ideal);
+            frac[i] = ideal - counts[i];
+            assigned += counts[i];
+        }
+
+        // Hand out the remaining seats to the biggest fractions, one each.
+        while (assigned < total)
+        {
+            int best = -1;
+            for (int i = 0; i < 4; i++)
+                if (frac[i] > 0f && (best < 0 || frac[i] > frac[best])) best = i;
+
+            if (best < 0) best = 0; // percentages did not sum to 1 — RATIO reports that
+            counts[best]++;
+            frac[best] = 0f;
+            assigned++;
+        }
+
+        // Only reachable if the percentages sum above 1; take back from the smallest share.
+        while (assigned > total)
+        {
+            int worst = -1;
+            for (int i = 0; i < 4; i++)
+                if (counts[i] > 0 && (worst < 0 || counts[i] < counts[worst])) worst = i;
+
+            if (worst < 0) break;
+            counts[worst]--;
+            assigned--;
+        }
+
+        return counts;
     }
 }

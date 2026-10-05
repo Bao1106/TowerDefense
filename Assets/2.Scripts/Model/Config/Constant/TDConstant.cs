@@ -223,6 +223,11 @@ public static class TDConstant
     public const float VFX_MOVE_SPEED = 15f;
     public const float VFX_ARRIVE_THRESHOLD = 0.25f;
     // Tower/operator views
+    // How long the operator corpse lingers so the Die clip can finish before Destroy.
+    // Only used when the operator's Animator actually declares a "Die" trigger.
+    // ponytail: one value for every operator; move to OperatorData.dieDuration
+    // (mirroring EnemyData) if death clip lengths start to differ noticeably.
+    public const float OPERATOR_DIE_DURATION = 1.5f;
     public const string SELECTION_INDICATOR_NAME = "SelectionIndicator";
     public const string PATH_SLOT_DISABLED_OVERLAY = "DisabledOverlay";
     public const string PATH_SLOT_ICON = "SlotIcon";

@@ -39,12 +39,18 @@ namespace TDEnums
         Boss // 3000 HP, speed 1.0 — DragonBoar
     }
 
+    // Three rungs, not five. Easy was dropped because measurement showed the game was
+    // already winnable with two operators and no retreat — a rung below that taught the
+    // player nothing. Extreme went with it: five rungs meant neighbouring ones differed by
+    // ~15% HP, a gap nobody feels. What is left is spaced far enough apart to read as
+    // different games: hpMult 1.0 → 1.2 → 2.0.
+    //
+    // Values are 0/1/2, so every LevelConfig entry shifts UP one rung — Easy levels become
+    // Normal, Normal becomes Hard. That is the intent, not a migration accident.
     public enum Difficulty
     {
-        Easy,
         Normal,
         Hard,
-        Extreme,
         Nightmare
     }
 
