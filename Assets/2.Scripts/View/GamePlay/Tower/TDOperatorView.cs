@@ -24,6 +24,7 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
     private float m_LastAttackTime = -999f;
     private float m_NextPressureSample; // step 1.6 measurement — becomes the N1/N2 tick in Phase 2
     private float m_LastHitTime = -999f;
+    private TDMoraleIconView m_MoraleIcon;
 
     /// <summary>Morale state for this operator (§02). Null before Init.</summary>
     public TDOperatorMorale Morale { get; private set; }
@@ -84,6 +85,8 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         Sp = TDOperatorRoster.api?.SpOf(m_Data) ?? new TDOperatorSp();
         TDOperatorRoster.api?.OnDeployed(m_Data);
 
+        m_MoraleIcon = TDMoraleIconView.Attach(transform);
+
         m_Initialized = true;
         Debug.Log($"[TDOperatorView] Init cell={m_MyCell}, name={m_Data?.operatorName}, zone={data?.deployZone}, HP={m_CurrentHp}");
     }
@@ -119,6 +122,7 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
 
         bool wasBroken = Morale.IsBroken;
         Morale.Tick(deltaTime, ctx);
+        m_MoraleIcon?.Refresh(Morale);
 
         // Breaking is an event, not just a value crossing 100: it spikes everyone nearby
         // (§04 N3) and costs the whole team its wave-clear relief.
