@@ -135,9 +135,23 @@ public class TDEnemyPathMainView : MonoBehaviour
         foreach (var g in groups)
             allCorridors.AddRange(g.Corridors);
 
-        m_EnemyPathView.VisualizeAllPaths(allCorridors);
+        // The spine is walkable but belongs to no corridor — it has to be handed over
+        // separately or the chokepoints render as bare ground and cannot be deployed on.
+        HashSet<Vector2Int> spineRoad = null;
+        var spineCells = TDMazePathGenerator.api?.SpineCells;
+        if (spineCells != null)
+        {
+            spineRoad = new HashSet<Vector2Int>(spineCells);
+            foreach (var g in groups)
+            {
+                spineRoad.Remove(g.StartCell); // gates keep their own visual
+                spineRoad.Remove(g.EndCell);
+            }
+        }
 
-        TDEnemyPathMainControl.api.ComputeValidTowerCells(m_GridDTO, groups);
+        m_EnemyPathView.VisualizeAllPaths(allCorridors, spineRoad);
+
+        TDEnemyPathMainControl.api.ComputeValidTowerCells(m_GridDTO, groups, m_ActiveStage);
 
         LevelConfig config = TDLevelConfigSettings.api?.GetLevel(m_LevelIndex);
         if (config == null) return;
@@ -152,9 +166,10 @@ public class TDEnemyPathMainView : MonoBehaviour
             .Forget("StartWaveLoop");
     }
 
-    private void OnValidTowerCellsReady(List<Vector3> validPositions)
+    private void OnValidTowerCellsReady(List<Vector3> towerSlots)
     {
-        BuildGridZones(validPositions);
+        // Scenery goes on every wall cell; the event payload is only the buildable subset.
+        BuildGridZones(TDEnemyPathMainControl.api.WallCells);
     }
 
     // ── Grid Zone Spawning (SRP: extracted from God Method) ──────────────────
@@ -182,17 +197,47 @@ public class TDEnemyPathMainView : MonoBehaviour
         if (pathLeakCount > 0)
             Debug.LogWarning($"<color=orange>[PathView] {pathLeakCount} path cells leaked — filtered</color>");
 
-        // Shuffle to randomize obstacle placement
-        for (int i = filtered.Count - 1; i > 0; i--)
+        // Only the rationed slots are buildable; every other wall cell is scenery.
+        // Obstacles must never land on a slot — that would silently shrink the budget
+        // the Control just computed and make the real count random.
+        // A prop model is wider than the cell it stands on, so reserving only the slot cell
+        // left rocks and trees visually sitting on top of the zone tiles. Reserve a ring
+        // around each slot as well.
+        int clearance = TDConstant.TOWER_SLOT_CLEARANCE;
+        var slotCells = new HashSet<Vector2Int>();
+
+        foreach (var pos in TDEnemyPathMainControl.api.TowerSlots)
         {
-            int j = Random.Range(0, i + 1);
-            (filtered[i], filtered[j]) = (filtered[j], filtered[i]);
+            var c = TDGridMainModel.api.WorldToCell(pos);
+            for (int dx = -clearance; dx <= clearance; dx++)
+                for (int dy = -clearance; dy <= clearance; dy++)
+                    slotCells.Add(new Vector2Int(c.x + dx, c.y + dy));
         }
 
-        int obstacleCount = Mathf.RoundToInt(filtered.Count * TDConstant.CONFIG_MAZE_OBSTACLE_WALL_RATIO);
+        var sceneryCells = new List<Vector3>(filtered.Count);
+        foreach (var pos in filtered)
+        {
+            if (slotCells.Contains(TDGridMainModel.api.WorldToCell(pos))) continue;
+            sceneryCells.Add(pos);
+        }
 
+        // Shuffle to randomize obstacle placement
+        for (int i = sceneryCells.Count - 1; i > 0; i--)
+        {
+            int j = Random.Range(0, i + 1);
+            (sceneryCells[i], sceneryCells[j]) = (sceneryCells[j], sceneryCells[i]);
+        }
+
+        filtered = sceneryCells;
+
+        int obstacleCount = Mathf.RoundToInt(filtered.Count * TDConstant.DECOR_FILL_RATIO);
+
+        // Footprint blocking must never reach a tower slot. Built from ALL wall cells,
+        // a rock's radius could swallow a slot: it drew scenery on top of the zone tile
+        // and called SetOccupiedCell, so the slot went invisible AND unbuildable. That is
+        // why only 11 of 12 slots showed up. Scenery cells only.
         var validWallCells = new HashSet<Vector2Int>();
-        foreach (var pos in validPositions)
+        foreach (var pos in sceneryCells)
             validWallCells.Add(TDGridMainModel.api.WorldToCell(pos));
 
         GameObject tilePrefabForObstacle = m_ObstacleTilePrefab != null ? m_ObstacleTilePrefab : m_TowerZonePrefab;
@@ -240,11 +285,11 @@ public class TDEnemyPathMainView : MonoBehaviour
             Object.Instantiate(tilePrefabForObstacle, new Vector3(w.x, 0f, w.z), Quaternion.identity, transform);
         }
 
-        // Phase 2: tower zone tiles
-        foreach (var pos in filtered)
+        // Phase 2: tower zone tiles — ONLY on the rationed slots, not on every wall cell.
+        // This is what the player reads as "you may build here", so it has to match the
+        // budget exactly or the visual lies about what is placeable.
+        foreach (var pos in TDEnemyPathMainControl.api.TowerSlots)
         {
-            var cell = TDGridMainModel.api.WorldToCell(pos);
-            if (blockedCells.Contains(cell)) continue;
             var tile = Object.Instantiate(m_TowerZonePrefab, new Vector3(pos.x, 0f, pos.z), Quaternion.identity, transform);
             m_TowerZoneTiles.Add(tile);
         }

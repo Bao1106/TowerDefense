@@ -381,7 +381,15 @@ public class TDDeployController : MonoBehaviour
     private bool IsCellValid(Vector3 worldPos)
         => m_TowerType == TowerType.Operator
             ? IsValidOperatorPlacement(worldPos)
-            : TDGridMainModel.api.IsValidPlacement(worldPos);
+            : IsValidTowerPlacement(worldPos);
+
+    // Towers checked only bounds-and-occupied here, so a tower could be dropped on any
+    // empty cell — grass with no tile included — even though TDPlaceTowerControl rejects
+    // it later. Ranged operators never had the hole: TowerZoneOperatorBehavior.CanPlace
+    // has always tested IsInTowerZone. Same test now applies to both.
+    private static bool IsValidTowerPlacement(Vector3 worldPos)
+        => TDGridMainModel.api.IsInTowerZone(TDGridMainModel.api.WorldToCell(worldPos))
+        && TDGridMainModel.api.IsValidPlacement(worldPos);
 
     private bool IsValidOperatorPlacement(Vector3 worldPos)
     {

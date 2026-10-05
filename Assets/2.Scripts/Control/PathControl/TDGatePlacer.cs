@@ -28,12 +28,26 @@ public static class TDGatePlacer
 
         bool isVerticalBorder = border == BorderSide.Left || border == BorderSide.Right;
         int fixedAxis = GetFixedAxis(border, gridWidth, gridHeight);
-        int sectionLength = isVerticalBorder ? gridHeight : gridWidth;
+
+        // Sections span only the band the viewport leaves visible — on both axes.
+        int rangeMin = isVerticalBorder ? SafeMinY() : SafeMinX();
+        int rangeMax = isVerticalBorder ? SafeMaxY(gridHeight) : SafeMaxX(gridWidth);
+
+        // More gates than even coordinates in the band would place two on the same cell.
+        int evenSlots = (rangeMax - rangeMin) / 2 + 1;
+        if (count > evenSlots)
+        {
+            Debug.LogWarning($"<color=orange>[GatePlacer] {count} gates requested on {border} but only " +
+                             $"{evenSlots} even cells fit the UI-safe band [{rangeMin}..{rangeMax}] — clamping</color>");
+            count = Mathf.Max(1, evenSlots);
+        }
+
+        int span = rangeMax - rangeMin + 1;
 
         for (int i = 0; i < count; i++)
         {
-            int sectionMin = i * sectionLength / count;
-            int sectionMax = (i + 1) * sectionLength / count - 1;
+            int sectionMin = rangeMin + i * span / count;
+            int sectionMax = rangeMin + (i + 1) * span / count - 1;
 
             int picked = PickEvenInRange(sectionMin, sectionMax);
 
@@ -44,6 +58,28 @@ public static class TDGatePlacer
 
         return result;
     }
+
+    /// <summary>
+    /// Is this cell inside the band the fixed ortho camera actually shows?
+    ///
+    /// Shared viewport rule, not a gate-only one: a tower slot outside this band is just
+    /// as useless as an invisible gate — the player cannot see it to use it. It lives
+    /// here because the safe-band arithmetic does.
+    /// </summary>
+    public static bool IsOnScreen(Vector2Int cell, int gridWidth, int gridHeight)
+        => cell.x >= TDConstant.UI_SAFE_SIDE_COLS
+        && cell.x <= gridWidth - 1 - TDConstant.UI_SAFE_SIDE_COLS
+        && cell.y >= TDConstant.UI_SAFE_BOTTOM_ROWS
+        && cell.y <= gridHeight - 1 - TDConstant.UI_SAFE_TOP_ROWS;
+
+    // Lowest / highest even cell the viewport does not clip, on each axis.
+    private static int SafeMinY() => EvenAtOrAbove(TDConstant.UI_SAFE_BOTTOM_ROWS);
+    private static int SafeMaxY(int gridHeight) => EvenAtOrBelow(gridHeight - 1 - TDConstant.UI_SAFE_TOP_ROWS);
+    private static int SafeMinX() => EvenAtOrAbove(TDConstant.UI_SAFE_SIDE_COLS);
+    private static int SafeMaxX(int gridWidth) => EvenAtOrBelow(gridWidth - 1 - TDConstant.UI_SAFE_SIDE_COLS);
+
+    private static int EvenAtOrAbove(int v) => v % 2 == 0 ? v : v + 1;
+    private static int EvenAtOrBelow(int v) => v % 2 == 0 ? v : v - 1;
 
     // Rotation so the gate visual faces inward toward the map
     public static Quaternion FacingRotation(BorderSide border) => border switch
@@ -57,20 +93,18 @@ public static class TDGatePlacer
 
     // ── Private ───────────────────────────────────────────────────────────────
 
+    // Every border is inset out of the clipped band: row 0 sits under the deploy bar, the
+    // last row under the HUD, and the outermost columns run off the left and right edges.
+    // A gate the player cannot see is a gate they cannot plan against.
     private static int GetFixedAxis(BorderSide border, int gridWidth, int gridHeight)
-    {
-        int lastCol = gridWidth - 1; if (lastCol % 2 != 0) lastCol--;
-        int lastRow = gridHeight - 1; if (lastRow % 2 != 0) lastRow--;
-
-        return border switch
+        => border switch
         {
-            BorderSide.Left => 0,
-            BorderSide.Right => lastCol,
-            BorderSide.Bottom => 0,
-            BorderSide.Top => lastRow,
-            _ => 0,
+            BorderSide.Left => SafeMinX(),
+            BorderSide.Right => SafeMaxX(gridWidth),
+            BorderSide.Bottom => SafeMinY(),
+            BorderSide.Top => SafeMaxY(gridHeight),
+            _ => SafeMinX(),
         };
-    }
 
     // Picks a random even number in [min, max]. Falls back to the nearest even number if the section is empty.
     private static int PickEvenInRange(int min, int max)

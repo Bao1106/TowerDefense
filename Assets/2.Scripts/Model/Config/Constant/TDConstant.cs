@@ -173,6 +173,117 @@ public static class TDConstant
     // Path/maze generation
     public const int CONFIG_GATE_BUFFER = 2;
     public const int MAZE_MAX_ATTEMPTS = 10;
+
+    // ── Spine (convergent topology) ──────────────────────────────────────────
+    // Which macro-shape the generator builds. Swap this to eyeball each archetype.
+    // ponytail: a constant, not stage config — move it onto TDStageConfig at step 7.2
+    // when archetypes get spread across stages as the difficulty curve.
+    public const string CONFIG_SPINE_ARCHETYPE = TDSpineLibrary.CASCADE;
+
+    // Width of the passages linking chokepoints and feeding gates in.
+    //
+    // Was 2, on the reasoning that a 1-cell passage can be sealed by a single blocker.
+    // That reasoning belonged to the Living Maze direction, where a blocker made enemies
+    // re-path — and that direction was dropped. Here a blocker makes enemies STOP AND
+    // FIGHT, so a 1-cell passage is simply an Arknights lane, which is correct.
+    //
+    // Width 2 also doubled the footprint of every gate feed, and those are by far the
+    // longest part of the spine: at width 2 the spine ate ~51% of the grid, leaving too
+    // little wall for towers and ranged operators.
+    //
+    // Narrow passages + wide nodes is also the better read: the node is visibly where
+    // you are meant to stand and fight.
+    public const int SPINE_CORRIDOR_WIDTH = 1;
+
+    // Share of the grid that should end up walkable. Melee operators need road; towers
+    // and ranged operators need wall. Outside this band the generator logs a warning —
+    // tune the archetype's node widths and SPINE_CORRIDOR_WIDTH against the number it
+    // prints rather than by eye.
+    public const float ROAD_RATIO_MIN = 0.20f;
+    public const float ROAD_RATIO_MAX = 0.40f;
+
+    // ── UI-safe band ─────────────────────────────────────────────────────────
+    // Grid rows the HUD (top) and the deploy bar (bottom) cover. The camera is fixed
+    // ortho and never moves, so this is a hard input to generation, not a nuisance:
+    // "scrolling maps are the enemy of focus" — the whole board has to be visible.
+    //
+    // Gates used to be placed on the outermost ring, which is exactly the band the UI
+    // hides — that is why the start gate kept disappearing.
+    public const int UI_SAFE_TOP_ROWS = 1;
+    public const int UI_SAFE_BOTTOM_ROWS = 2;
+
+    // The left and right columns are clipped by the viewport too — the first attempt at
+    // this assumed the full width was on screen and the start gate stayed half off the
+    // left edge. Gates snap to even cells, so an inset of 1 lands them on column 2.
+    public const int UI_SAFE_SIDE_COLS = 1;
+
+    // ── Tower slot budget ────────────────────────────────────────────────────
+    // Kingdom Rush restricts building to a handful of authored slots: "if you spam
+    // cheap buildings, you will run out of locations." Scarcity of position IS the
+    // decision. Letting every wall cell be a tower spot gave ~110 options against ~8
+    // affordable units, so position cost nothing and no placement mattered.
+    //
+    //   slots = clamp(chambers * PER_CHAMBER * frontFactor * modeFactor * diffFactor,
+    //                 MIN, MAX)
+    //
+    // Melee stays unrestricted on path cells — Arknights does the same: ground tiles
+    // are plentiful, high ground is scarce. Only one side of it needs to be rationed.
+    public const int TOWER_SLOTS_PER_CHAMBER = 3;  // a chokepoint needs ~3 towers to be held
+    public const int TOWER_SLOTS_MIN = 8;
+    public const int TOWER_SLOTS_MAX = 20;         // hard ceiling: past this scarcity is gone again
+    public const float TOWER_SLOT_FRONT_BONUS = 0.35f;        // per extra front to cover
+    public const float TOWER_SLOT_SIMULTANEOUS_BONUS = 1.15f; // all gates at once = cannot concentrate
+    // How far a platform is treated as reaching. Was 3, which made every slot cover a 7x7
+    // box of 49 cells — 9 slots blanketed a 38-cell route and "100% covered" stopped
+    // discriminating between good and bad placements. 2 matches the operators' real reach
+    // (Layla is 3 cells in a line, not a 7x7 square).
+    public const int TOWER_SLOT_COVERAGE_RADIUS = 2;
+
+    // ── Generator acceptance (step 1.5) ──────────────────────────────────────
+    // Share of the roster the map may demand at its widest point. Above this the player
+    // cannot give ground anywhere — and "trade space for lives" is the whole reason the
+    // topology was made convergent. Chốt A cannot be answered without it.
+    public const float ACCEPT_MAX_FRONT_ROSTER_RATIO = 0.6f;
+
+    // Seconds of runway an enemy needs from the last chokepoint to the goal: the window
+    // to get a REPLACEMENT down after pulling a defender off that node.
+    //
+    // Was 12 (= 1.5 x STRESS_RETREAT_COUNTDOWN) and it failed every map — 4.0s against a
+    // 12s bar on a 21-cell grid, unreachable without a map half again as wide. The bar was
+    // wrong, not the map: the countdown only locks the operator you just withdrew, and the
+    // player still has seven other slots to drop something into immediately. What actually
+    // has to fit in the window is one drag-and-drop, ~2-3s.
+    //
+    // Derived from what it gates, not from whichever number happened to be nearby — the
+    // mistake worth remembering here.
+    public const float ACCEPT_MIN_GOAL_RUNWAY_SECONDS = 4f;
+
+    // Cells per platform. Buildable ground is placed as PLATFORMS, the same way obstacles
+    // are placed as props whose footprint then claims cells. A 2x2 block of high ground
+    // reads as "a rooftop to put archers on"; twelve scattered single cells read as noise.
+    public const int TOWER_PLATFORM_MIN_CELLS = 2;
+    public const int TOWER_PLATFORM_MAX_CELLS = 4;
+
+    // Keep scenery props out of this many cells around a slot. Blocking only the slot
+    // cell itself was not enough: a rock or tree model is wider than one cell, so it
+    // still covered the zone tile even when the cell underneath stayed free.
+    public const int TOWER_SLOT_CLEARANCE = 1;
+
+    // TOWER_SLOT_MIN_SPACING and TOWER_SLOT_MAX_PATH_DISTANCE used to live here. Both were
+    // patches, and the pipeline inversion — grid → enemy path → tower zones, iterating the
+    // ROUTE instead of wall cells — removed the need for either: route samples are spaced
+    // by construction, and a search that starts at the road never strands a platform in
+    // the scenery. Arknights contradicts both rules anyway: its high ground sits in
+    // adjacent blocks, at the map edge and deep inside alike.
+
+    // Share of the non-slot wall cells that get scenery on them.
+    //
+    // CONFIG_MAZE_OBSTACLE_WALL_RATIO (0.15) was set when EVERY wall cell was a tower
+    // zone, so 15% obstacles against 85% buildable read fine. With buildable rationed to
+    // ~12, that same 15% leaves ~58 cells bare and the map looks unfinished — and worse,
+    // an empty cell is ambiguous: the player cannot tell it apart from a slot they have
+    // not noticed. Scenery is what says "nothing happens here".
+    public const float DECOR_FILL_RATIO = 0.45f;
     // Tower slots (TDTowerMainControl)
     public const int CONFIG_MAX_SLOTS = 8;
     // Audio (TDAudioPrefs / TDBGMPlayer / TDSFXPlayer)

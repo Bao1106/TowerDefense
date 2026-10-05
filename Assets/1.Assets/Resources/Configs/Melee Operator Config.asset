@@ -50,9 +50,7 @@ MonoBehaviour:
     operatorPrefab: {fileID: 7089115756794705728, guid: 0eac88e9c3ebe82498062c1fa3c248ce, type: 3}
     icon: {fileID: 21300000, guid: 7045d6c0dfac8c04a94a49bde66859cd, type: 3}
     rangeOffsets:
-    - {x: 1, y: 0}
     - {x: 2, y: 0}
-    - {x: 3, y: 0}
   - operatorName: Ace
     operatorType: 2
     attackType: 1
@@ -65,8 +63,6 @@ MonoBehaviour:
     icon: {fileID: 21300000, guid: 39f87d384a2a9ba47bd2abf64697edaf, type: 3}
     rangeOffsets:
     - {x: 1, y: 0}
-    - {x: 2, y: 0}
-    - {x: 3, y: 0}
   - operatorName: Ginger
     operatorType: 3
     attackType: 0
@@ -99,8 +95,9 @@ MonoBehaviour:
     icon: {fileID: 21300000, guid: 78619acf8f31f1a4eb7935429699955c, type: 3}
     rangeOffsets:
     - {x: 1, y: 0}
+    - {x: 2, y: -1}
     - {x: 2, y: 0}
-    - {x: 3, y: 0}
+    - {x: 2, y: 1}
   - operatorName: Moon
     operatorType: 4
     attackType: 0

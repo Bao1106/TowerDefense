@@ -22,6 +22,7 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
     private float m_CurrentHp;
     private float m_MaxHp;
     private float m_LastAttackTime = -999f;
+    private float m_NextPressureSample; // step 1.6 measurement — becomes the N1/N2 tick in Phase 2
     private bool m_Initialized;
     private bool m_IsDying;
 
@@ -138,6 +139,8 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
     private void Update()
     {
         if (!m_Initialized || m_Behavior == null) return;
+
+        TDPressureProbe.Sample(m_MyCell, transform.rotation, m_Data, ref m_NextPressureSample);
 
         float attackInterval = 1f / (m_Data?.attackSpeed ?? 1f);
         if (Time.time - m_LastAttackTime < attackInterval) return;

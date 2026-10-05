@@ -145,7 +145,59 @@ public class TDEnemyPathMainControl
     }
 
     // Valid tower cells = wall cells, excluding gate buffers and occupied cells
-    public void ComputeValidTowerCells(IGridDTO gridDTO, List<TDPathGroup> groups)
+    /// <summary>
+    /// The subset of wall cells that are actually buildable. Everything else is scenery.
+    /// The view reads this to decide which cells get a tower-zone tile.
+    /// </summary>
+    public List<Vector3> TowerSlots { get; private set; } = new List<Vector3>();
+
+    /// <summary>
+    /// Every wall cell, slots included. Only the view wants this, to scatter scenery over
+    /// the cells that did not win a slot. Nothing that decides placement may read it.
+    /// </summary>
+    public List<Vector3> WallCells { get; private set; } = new List<Vector3>();
+
+    /// <summary>
+    /// How many buildable slots this stage gets.
+    ///
+    ///   chambers x PER_CHAMBER x frontFactor x modeFactor x diffFactor, clamped 8..20
+    ///
+    /// diffFactor is deliberately gentle. Difficulty already lives in DifficultyRatioTable
+    /// (composition, hpMult, speedMult) — Kingdom Rush ships the same map at every
+    /// difficulty. It is non-zero only because totalEnemies runs 30 → 75+, so gold income
+    /// roughly quintuples and the player needs somewhere to spend it. Scaling slots with
+    /// income outright would need ~47 at Nightmare, which throws the scarcity away again;
+    /// hence the hard ceiling.
+    /// </summary>
+    public static int ComputeTowerSlotBudget(TDStageConfig stage, int chokepointCount, int frontCount)
+    {
+        int chambers = Mathf.Max(1, chokepointCount);
+        int fronts = Mathf.Max(1, frontCount);
+
+        float frontFactor = 1f + TDConstant.TOWER_SLOT_FRONT_BONUS * (fronts - 1);
+
+        float modeFactor = stage != null && stage.GateMode == TDEnums.GateAssignmentMode.Simultaneous
+            ? TDConstant.TOWER_SLOT_SIMULTANEOUS_BONUS
+            : 1f;
+
+        var level = stage != null ? TDLevelConfigSettings.api?.GetLevel(stage.LevelIndex) : null;
+        float diffFactor = DifficultyslotFactor(level?.difficulty ?? TDEnums.Difficulty.Normal);
+
+        int raw = Mathf.RoundToInt(chambers * TDConstant.TOWER_SLOTS_PER_CHAMBER
+                                   * frontFactor * modeFactor * diffFactor);
+
+        return Mathf.Clamp(raw, TDConstant.TOWER_SLOTS_MIN, TDConstant.TOWER_SLOTS_MAX);
+    }
+
+    private static float DifficultyslotFactor(TDEnums.Difficulty d) => d switch
+    {
+        TDEnums.Difficulty.Normal => 1.05f,
+        TDEnums.Difficulty.Hard => 1.15f,
+        TDEnums.Difficulty.Nightmare => 1.35f,
+        _ => 1.00f,
+    };
+
+    public void ComputeValidTowerCells(IGridDTO gridDTO, List<TDPathGroup> groups, TDStageConfig stage = null)
     {
         var excluded = new HashSet<Vector2Int>();
 
@@ -173,12 +225,216 @@ public class TDEnemyPathMainControl
                 validPositions.Add(grid[x, y]);
             }
 
-        Debug.Log($"<color=cyan>[ComputeValidTowerCells] {validPositions.Count} wall cells = tower spots</color>");
+        // Every wall cell used to become a buildable tower spot. That gave ~110 options
+        // against ~8 affordable units, so no placement was a real decision. Ration them.
+        int budget = ComputeTowerSlotBudget(stage, TDMazePathGenerator.api?.ChokepointCount ?? 3, groups.Count);
+        TowerSlots = BuildTowerPlatforms(gridDTO, groups, validPositions, budget);
 
-        foreach (var pos in validPositions)
+        Debug.Log($"<color=cyan>[TowerSlots] budget {budget} cells from {validPositions.Count} wall cells " +
+                  $"(chambers {TDMazePathGenerator.api?.ChokepointCount ?? 0}, fronts {groups.Count}, " +
+                  $"mode {stage?.GateMode}, level {stage?.LevelIndex})</color>");
+
+        WallCells = validPositions;
+
+        foreach (var pos in TowerSlots)
             TDGridMainModel.api.RegisterTowerZoneCell(TDGridMainModel.api.WorldToCell(pos));
 
-        onValidTowerCellsReady?.Invoke(validPositions);
+        // The event means "these are the buildable cells" and TDDeployController lights up
+        // exactly what it receives. Handing it every wall cell — as this did while the view
+        // needed them for scenery — made the drag highlight show ~129 placeable cells while
+        // only 12 were registered. Scenery now reads WallCells instead.
+        onValidTowerCellsReady?.Invoke(TowerSlots);
+    }
+
+    private static readonly Vector2Int[] k_Dirs =
+        { Vector2Int.up, Vector2Int.right, Vector2Int.down, Vector2Int.left };
+
+    /// <summary>
+    /// Places buildable ground as PLATFORMS by walking the enemy route.
+    ///
+    /// The pipeline is grid → enemy path → tower zones, and the middle step is the input
+    /// to the last. Wall cells only say where a platform could physically stand; the route
+    /// says which of them are worth anything. So this iterates the ROUTE and searches
+    /// outward, rather than iterating wall cells and scoring each by nearby road.
+    ///
+    /// Inverting it removed two rules that had been added as patches:
+    ///   min spacing       — route samples are spaced by construction, so platforms are too
+    ///   max path distance — a search starting AT the road cannot strand a platform in the
+    ///                       scenery, so nothing needs rejecting after the fact
+    /// </summary>
+    private static List<Vector3> BuildTowerPlatforms(IGridDTO grid, List<TDPathGroup> groups,
+                                                     List<Vector3> wallCells, int cellBudget)
+    {
+        int r = TDConstant.TOWER_SLOT_COVERAGE_RADIUS;
+
+        // Where a platform may physically stand: wall cells the camera actually shows.
+        var buildable = new HashSet<Vector2Int>();
+        foreach (var pos in wallCells)
+        {
+            var c = TDGridMainModel.api.WorldToCell(pos);
+            if (TDGatePlacer.IsOnScreen(c, grid.width, grid.height)) buildable.Add(c);
+        }
+
+        // The enemy route, in travel order.
+        var route = new List<Vector2Int>();
+        var onRoute = new HashSet<Vector2Int>();
+        foreach (var g in groups)
+            foreach (var corridor in g.Corridors)
+                foreach (var cell in corridor)
+                    if (onRoute.Add(cell.position)) route.Add(cell.position);
+
+        var slots = new List<Vector3>();
+        if (route.Count == 0 || buildable.Count == 0) return slots;
+
+        int platformCount = Mathf.Max(1, Mathf.CeilToInt((float)cellBudget / TDConstant.TOWER_PLATFORM_MAX_CELLS));
+
+        var used = new HashSet<Vector2Int>();
+        var covered = new HashSet<Vector2Int>();
+
+        for (int p = 0; p < platformCount && slots.Count < cellBudget; p++)
+        {
+            // Sample the route at even intervals so cover spreads over the whole journey
+            // instead of piling up wherever the road happens to be densest.
+            Vector2Int sample = route[p * route.Count / platformCount];
+
+            // Best seed near this stretch: the one reaching the most route cells nobody
+            // covers yet. Counting only NEW cells is what stops two platforms doubling up
+            // on the same corner — no spacing rule required.
+            Vector2Int seed = default;
+            int bestGain = 0;
+
+            foreach (var cand in buildable)
+            {
+                if (used.Contains(cand)) continue;
+                if (Mathf.Max(Mathf.Abs(cand.x - sample.x), Mathf.Abs(cand.y - sample.y)) > r) continue;
+
+                int gain = 0;
+                for (int dx = -r; dx <= r; dx++)
+                    for (int dy = -r; dy <= r; dy++)
+                    {
+                        var t = new Vector2Int(cand.x + dx, cand.y + dy);
+                        if (onRoute.Contains(t) && !covered.Contains(t)) gain++;
+                    }
+
+                if (gain <= bestGain) continue;
+                bestGain = gain;
+                seed = cand;
+            }
+
+            if (bestGain == 0) continue; // this stretch is already covered — move along
+
+            int size = Mathf.Min(UnityEngine.Random.Range(TDConstant.TOWER_PLATFORM_MIN_CELLS,
+                                                          TDConstant.TOWER_PLATFORM_MAX_CELLS + 1),
+                                 cellBudget - slots.Count);
+
+            foreach (var cell in GrowPlatform(buildable, used, seed, size))
+            {
+                used.Add(cell);
+                slots.Add(TDGridMainModel.api.CellToWorld(cell));
+
+                for (int dx = -r; dx <= r; dx++)
+                    for (int dy = -r; dy <= r; dy++)
+                    {
+                        var t = new Vector2Int(cell.x + dx, cell.y + dy);
+                        if (onRoute.Contains(t)) covered.Add(t);
+                    }
+            }
+        }
+
+        float pct = route.Count > 0 ? 100f * covered.Count / route.Count : 0f;
+        Debug.Log($"<color=cyan>[TowerPlatforms] {slots.Count} cells over ~{platformCount} platforms, " +
+                  $"covering {covered.Count}/{route.Count} route cells ({pct:F0}%)</color>");
+
+        LogRealRangeCoverage(used, onRoute);
+        return slots;
+    }
+
+    /// <summary>
+    /// Step 1.6 — coverage measured with the REAL firing pattern, not the planning radius.
+    ///
+    /// `covered` above uses TOWER_SLOT_COVERAGE_RADIUS, which exists to pick seeds; it is a
+    /// square and the actual `rangeOffsets` are not. Reporting that number as "coverage"
+    /// would be measuring the tool instead of the result — the same mistake that produced
+    /// a 12-second runway constant derived from a countdown it had nothing to do with.
+    ///
+    /// Measures the ceiling: the player owns fewer units than there are platforms, so this
+    /// is what perfect placement and perfect facing would reach, never what a real match
+    /// achieves. A low ceiling means the platforms are in the wrong places.
+    /// </summary>
+    private static void LogRealRangeCoverage(HashSet<Vector2Int> slots, HashSet<Vector2Int> onRoute)
+    {
+        var roster = TDFlyweightOperatorDataSettings.api?.GetAllOperators();
+        if (roster == null || onRoute.Count == 0) return;
+
+        OperatorData narrowest = null;
+        foreach (var op in roster)
+        {
+            if (op.deployZone != TDEnums.DeployZone.TowerZone) continue;
+            int n = op.rangeOffsets?.Length ?? 0;
+            if (n == 0) continue;
+            if (narrowest == null || n < narrowest.rangeOffsets.Length) narrowest = op;
+        }
+        if (narrowest == null) return;
+
+        var range = new TDOffsetRangeDTO(narrowest.rangeOffsets);
+        var reached = new HashSet<Vector2Int>();
+
+        foreach (var slot in slots)
+        {
+            // Best of the four facings — the player rotates on deploy, so anything less
+            // would under-report by however unlucky the default rotation happens to be.
+            List<Vector2Int> best = null;
+            for (int a = 0; a < 360; a += 90)
+            {
+                var cells = range.GetCellsInRange(slot, Quaternion.Euler(0, a, 0));
+                int hits = 0;
+                foreach (var c in cells) if (onRoute.Contains(c)) hits++;
+
+                if (best != null && hits <= CountOnRoute(best, onRoute)) continue;
+                best = cells;
+            }
+
+            if (best == null) continue;
+            foreach (var c in best) if (onRoute.Contains(c)) reached.Add(c);
+        }
+
+        Debug.Log($"<color=cyan>[TowerPlatforms] real range ({narrowest.operatorName}, " +
+                  $"{narrowest.rangeOffsets.Length} cells): best-case cover " +
+                  $"{reached.Count}/{onRoute.Count} route cells " +
+                  $"({100f * reached.Count / onRoute.Count:F0}%)</color>");
+    }
+
+    private static int CountOnRoute(List<Vector2Int> cells, HashSet<Vector2Int> onRoute)
+    {
+        int n = 0;
+        foreach (var c in cells) if (onRoute.Contains(c)) n++;
+        return n;
+    }
+
+    /// <summary>Flood-fills a contiguous block of up to `size` buildable cells out from `seed`.</summary>
+    private static List<Vector2Int> GrowPlatform(HashSet<Vector2Int> buildable, HashSet<Vector2Int> used,
+                                                 Vector2Int seed, int size)
+    {
+        var block = new List<Vector2Int> { seed };
+        var claimed = new HashSet<Vector2Int> { seed };
+        var frontier = new Queue<Vector2Int>();
+        frontier.Enqueue(seed);
+
+        while (frontier.Count > 0 && block.Count < size)
+        {
+            var cur = frontier.Dequeue();
+
+            for (int d = 0; d < 4 && block.Count < size; d++)
+            {
+                var nb = cur + k_Dirs[d];
+                if (!buildable.Contains(nb) || used.Contains(nb) || !claimed.Add(nb)) continue;
+
+                block.Add(nb);
+                frontier.Enqueue(nb);
+            }
+        }
+
+        return block;
     }
 
     // ── Wave Loop ────────────────────────────────────────────────────────────
@@ -199,6 +455,18 @@ public class TDEnemyPathMainControl
 
         try
         {
+            // Prep time before wave 1. The delay below sits at the END of the loop, so
+            // until now the first wave spawned the instant the map finished generating.
+            //
+            // Normal hid it: 30 gold buys one Striker and one Striker holds. Nightmare made
+            // it fatal — a second body costs 9 seconds of passive income, and at 2x enemy HP
+            // the line is already gone by then. That is not a difficulty spike, it is the
+            // player being asked to answer before the question is readable.
+            //
+            // Reuses waveInterval rather than adding a constant: "the pause between waves"
+            // is exactly what this is, and wave 1 has as much right to one as wave 2.
+            await PauseAwareDelay(config.waveInterval, ct);
+
             for (int waveIdx = 0; waveIdx < wavePlans.Count; waveIdx++)
             {
                 ct.ThrowIfCancellationRequested();
