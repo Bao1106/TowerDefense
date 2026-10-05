@@ -120,15 +120,18 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
 
         MoraleContext = ctx;
 
-        bool wasBroken = Morale.IsBroken;
         Morale.Tick(deltaTime, ctx);
         m_MoraleIcon?.Refresh(Morale);
 
-        // Breaking is an event, not just a value crossing 100: it spikes everyone nearby
-        // (§04 N3) and costs the whole team its wave-clear relief.
-        if (!wasBroken && Morale.IsBroken)
+        // Breaking is an event, not just a value crossing 100: it spikes everyone nearby (§04 N3).
+        //
+        // Asked of the model rather than detected by comparing IsBroken before and after Tick —
+        // an ally's spike latches this operator OUTSIDE that window, so the comparison never saw
+        // a spike-induced break and every cascade died at the second link. Each link now fires on
+        // its victim's next frame, one frame apart, which is the intended pace of a chain.
+        if (Morale.ConsumeBreak())
         {
-            Morale.OnSetback();
+            Debug.Log($"[Morale] {m_Data?.operatorName} suy sụp tại {m_MyCell}");
             TDOperatorRegistry.api?.BroadcastSpike(m_MyCell, TDConstant.STRESS_ALLY_BREAK_SPIKE, wasBreak: true);
 
             // Collapse (§06 · 3.1). The one thing that has to happen ON the transition — everyone

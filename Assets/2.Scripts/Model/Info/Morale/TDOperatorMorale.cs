@@ -46,6 +46,7 @@ public sealed class TDOperatorMorale
     private float m_Value;
     private float m_RetreatCooldown;
     private bool m_Broken;
+    private bool m_BreakPending; // entered collapse, and nobody has reacted to it yet
 
     public float Value => m_Value;
 
@@ -68,7 +69,10 @@ public sealed class TDOperatorMorale
     /// <summary>Seconds left before this operator may be deployed again after a retreat.</summary>
     public float RetreatCooldown => m_RetreatCooldown;
 
-    /// <summary>Times this operator has broken or died this match — feeds Resolve in step 2.2.</summary>
+    /// <summary>
+    /// Times this operator has broken or died this match — feeds Resolve in step 2.2. A break is
+    /// counted where it happens, in SetValue, so it cannot depend on who pushed the value over.
+    /// </summary>
     public int Setbacks { get; private set; }
 
     /// <summary>Reports Broken while the latch holds, even though the value has fallen below 100.</summary>
@@ -229,6 +233,10 @@ public sealed class TDOperatorMorale
         // DEATH_KEEPS_STRESS is untouched and still does the punishing: coming back at ~84 is the
         // Stressed band at a x2.0 multiplier, seconds from breaking again under any pressure.
         m_Broken = false;
+
+        // Nor may an unannounced break outlive them: it would fire on the next deploy, spiking
+        // and releasing around an operator who just walked on fresh.
+        m_BreakPending = false;
     }
 
     /// <summary>
@@ -237,6 +245,19 @@ public sealed class TDOperatorMorale
     /// teaching the opposite of what it means to.
     /// </summary>
     public void OnSetback() => Setbacks++;
+
+    /// <summary>
+    /// True exactly once per entry into collapse, then cleared. The owner reacts to the break
+    /// here — spike the neighbours, release the held enemies — instead of comparing IsBroken
+    /// around its own Tick: an ally's N3 spike latches this operator OUTSIDE that Tick, so the
+    /// before/after comparison never saw it and every cascade stopped at the second link.
+    /// </summary>
+    public bool ConsumeBreak()
+    {
+        bool pending = m_BreakPending;
+        m_BreakPending = false;
+        return pending;
+    }
 
     private void Relieve(float amount) => SetValue(m_Value - Mathf.Max(0f, amount));
 
@@ -251,8 +272,17 @@ public sealed class TDOperatorMorale
     {
         m_Value = Mathf.Clamp(raw, 0f, TDConstant.STRESS_MAX);
 
-        if (m_Value >= TDConstant.STRESS_MAX) m_Broken = true;
-        else if (m_Value <= TDConstant.STRESS_STEADY_MAX) m_Broken = false;
+        if (!m_Broken && m_Value >= TDConstant.STRESS_MAX)
+        {
+            m_Broken = true;
+            m_BreakPending = true;
+            Setbacks++;
+        }
+        else if (m_Value <= TDConstant.STRESS_STEADY_MAX)
+        {
+            m_Broken = false;
+            m_BreakPending = false; // rescued before anyone handled the break: nothing left to announce
+        }
     }
 
     // ── Resolve (§07) ────────────────────────────────────────────────────────

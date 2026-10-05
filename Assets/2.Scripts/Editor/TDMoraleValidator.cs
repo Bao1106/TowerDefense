@@ -45,6 +45,7 @@ public static class TDMoraleValidator
         SkillPoints(f);
         RetreatIsNotAReset(f);
         BrokenState(f);
+        BreakEdge(f);
         BreakTimes(f);
         Resolve(f);
 
@@ -232,8 +233,7 @@ public static class TDMoraleValidator
         // which took a Knight from 26.8% Resolve to 6.8% off a single fall — LAST STAND stops
         // being offered after one bad moment, and a button that never appears cannot be the
         // deliberate choice §06 builds it to be.
-        var chain = At(TDConstant.STRESS_MAX);
-        chain.OnSetback();  // what TDOperatorView does on the break transition
+        var chain = At(TDConstant.STRESS_MAX); // the break itself is the first setback
         chain.OnDeath();
         if (chain.Setbacks != 1)
             f.Add($"[SETBACK_ONE_PER_INCIDENT] break-then-death counted {chain.Setbacks}, want 1");
@@ -311,6 +311,45 @@ public static class TDMoraleValidator
         var under = new TDOperatorMorale();
         under.OnRetreat();
         Near(f, "CLAMP_LOW", under.Value, 0f);
+    }
+
+    // ── J — a break is an EVENT, whoever pushed the value over ──────────────
+    //
+    // The view used to detect the break by reading IsBroken before Tick and comparing after.
+    // An ally's N3 spike latches the neighbour OUTSIDE that window, so a break caused by a
+    // spike never fired its own spike, setback or release — every cascade stopped at link two.
+
+    private static void BreakEdge(List<string> f)
+    {
+        var spiked = At(80f);
+        spiked.AddSpike(TDConstant.STRESS_ALLY_BREAK_SPIKE);
+        if (!spiked.ConsumeBreak()) f.Add("[EDGE_FROM_SPIKE] a spike-induced break raised no edge");
+        if (spiked.ConsumeBreak()) f.Add("[EDGE_ONCE] the same break was reported twice");
+        if (spiked.Setbacks != 1) f.Add($"[EDGE_SETBACK] spike break counted {spiked.Setbacks}, want 1");
+
+        spiked.AddSpike(TDConstant.STRESS_ALLY_BREAK_SPIKE); // already latched
+        if (spiked.ConsumeBreak()) f.Add("[EDGE_WHILE_LATCHED] a spike on a broken operator raised a second edge");
+
+        var ticked = new TDOperatorMorale();
+        for (int i = 0; i < 2000 && !ticked.IsBroken; i++) ticked.Tick(0.05f, Ctx(1, 2));
+        if (!ticked.ConsumeBreak()) f.Add("[EDGE_FROM_TICK] a tick-induced break raised no edge");
+
+        // ⭐ An edge nobody handled must not outlive the state it announces — otherwise it fires
+        // on the next deploy, spiking and releasing around an operator who is perfectly fine.
+        var rescued = At(TDConstant.STRESS_MAX);
+        rescued.OnRescue();
+        if (rescued.ConsumeBreak()) f.Add("[EDGE_CLEARED_BY_RESCUE] an unconsumed edge survived the rescue");
+
+        var died = At(TDConstant.STRESS_MAX);
+        died.OnDeath();
+        if (died.ConsumeBreak()) f.Add("[EDGE_CLEARED_BY_DEATH] an unconsumed edge would fire on redeploy");
+
+        var again = At(TDConstant.STRESS_MAX);
+        again.ConsumeBreak();
+        again.OnRescue();
+        again.AddSpike(TDConstant.STRESS_MAX);
+        if (!again.ConsumeBreak() || again.Setbacks != 2)
+            f.Add($"[EDGE_REBREAK] second break after rescue: setbacks {again.Setbacks}, want 2");
     }
 
     // ── F — the numbers the design doc quotes, in seconds ───────────────────
