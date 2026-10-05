@@ -75,6 +75,11 @@ public class TDDiamondPanelView : MonoBehaviour
     private Vector2 m_RetreatRestPos;
     private float m_GlowRestAlpha;
 
+    // Retreat can be refused (a collapsed operator cannot walk off) and has to SAY so.
+    private CanvasGroup m_RetreatGroup;
+    private TMPro.TMP_Text m_RetreatLabel;
+    private string m_RetreatLabelDefault;
+
     private Canvas m_Canvas;
     private Camera m_CanvasCam; // null for Overlay canvases
 
@@ -163,6 +168,12 @@ public class TDDiamondPanelView : MonoBehaviour
             m_RetreatBtn?.onClick.AddListener(() => m_OnRetreat?.Invoke());
 
             BuildRescueButton(retreatT);
+
+            // After the clone, so the Rescue copy does not inherit a group it never asked for.
+            var retreatGo = retreatT.gameObject;
+            m_RetreatGroup = retreatGo.TryGetComponent(out CanvasGroup group) ? group : retreatGo.AddComponent<CanvasGroup>();
+            m_RetreatLabel = retreatGo.GetComponentInChildren<TMPro.TMP_Text>(true);
+            m_RetreatLabelDefault = m_RetreatLabel != null ? m_RetreatLabel.text : null;
         }
 
         float cell = TDGridMainModel.api != null ? TDGridMainModel.api.cellSize : TDConstant.CONFIG_GRID_CELL_SIZE;
@@ -198,7 +209,11 @@ public class TDDiamondPanelView : MonoBehaviour
         m_RescueBtn?.onClick.RemoveAllListeners();
         m_RescueBtn?.onClick.AddListener(() => m_OnRescue?.Invoke());
 
-        m_RescueGroup = go.GetComponent<CanvasGroup>() ?? go.AddComponent<CanvasGroup>();
+        // TryGetComponent, not `GetComponent() ?? AddComponent()`: in the Editor a missing component
+        // comes back as a fake-null object that `??` does not catch. RetreatButton has no CanvasGroup,
+        // so the old form left this field fake-null and the Rescue corner was never dimmed or
+        // disabled in Play Mode — "40/50" stayed fully clickable.
+        m_RescueGroup = go.TryGetComponent(out CanvasGroup group) ? group : go.AddComponent<CanvasGroup>();
         m_RescueLabel = go.GetComponentInChildren<TMPro.TMP_Text>(true);
 
         BuildRescueFill(go);
@@ -325,6 +340,26 @@ public class TDDiamondPanelView : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Refuses the Retreat corner and says why, or (null) restores it. A collapsed operator cannot
+    /// walk off (§06), and the button used to stay bright and simply do nothing when pressed — the
+    /// panel closed and the player was left guessing whether the tap had even registered.
+    /// Same dimming as an unaffordable Rescue, so "not now, and here is why" reads one way.
+    /// </summary>
+    public void SetRetreatBlocked(string reason)
+    {
+        if (m_Mode != Mode.Retreat) return;
+
+        bool blocked = reason != null;
+        if (m_RetreatGroup != null)
+        {
+            m_RetreatGroup.alpha = blocked ? RESCUE_DIM_ALPHA : 1f;
+            m_RetreatGroup.interactable = !blocked;
+            m_RetreatGroup.blocksRaycasts = !blocked;
+        }
+        if (m_RetreatLabel != null) m_RetreatLabel.text = blocked ? reason : m_RetreatLabelDefault;
+    }
+
     /// <summary>Driven every frame from LateUpdate — SP charges while the panel is open.</summary>
     private void RefreshRescueFill()
     {
@@ -390,6 +425,11 @@ public class TDDiamondPanelView : MonoBehaviour
         m_OnCancel = null;
         m_OnRescue = rescue?.onRescue;
         ApplyRescueState(rescue);
+
+        // Every show starts unrefused; the caller refuses it afterwards if it must. Resetting here
+        // rather than in each caller means a tower — or any future caller — can never inherit the
+        // "BROKEN" label left over from the operator selected before it.
+        SetRetreatBlocked(null);
 
         if (m_CancelEdgeGlow != null) m_CancelEdgeGlow.SetActive(false);
         ClearAllArrows();

@@ -41,6 +41,9 @@ public class TDOperatorSelectionView : MonoBehaviour
     // in-world event. 0.5s is fast enough to say "choose" without becoming a strobe.
     private const float RESCUE_BLINK_PERIOD = 0.5f;
 
+    // What the Retreat corner says when it refuses a collapsed operator (§06: they cannot walk off).
+    private const string RETREAT_BLOCKED_LABEL = "BROKEN";
+
     private void Start()
     {
         EnhancedTouchSupport.Enable();
@@ -80,8 +83,16 @@ public class TDOperatorSelectionView : MonoBehaviour
         // a neighbour collapses, SP crosses 50, someone else gets there first. Re-push it while
         // it is open, silently: eight dictionary lookups, and only while something is selected.
         if (m_SelectedOperator != null)
+        {
             TDDiamondPanelView.Instance?.UpdateRescue(BuildRescueOption(m_SelectedOperator, log: false));
+
+            // Same reason, other corner: they can collapse — or be rescued — while the panel is open.
+            TDDiamondPanelView.Instance?.SetRetreatBlocked(RetreatBlockReason(m_SelectedOperator));
+        }
     }
+
+    private static string RetreatBlockReason(TDOperatorView op)
+        => op != null && op.IsCollapsed ? RETREAT_BLOCKED_LABEL : null;
 
     // ── Input ─────────────────────────────────────────────────────────────────
 
@@ -138,6 +149,7 @@ public class TDOperatorSelectionView : MonoBehaviour
         // SelectionIndicator quad is no longer needed and would visually clash with the diamond.
         ShowOperatorRange(op);
         TDDiamondPanelView.Instance?.ShowRetreat(op.transform.position, OnRetreatClicked, BuildRescueOption(op, log: true));
+        TDDiamondPanelView.Instance?.SetRetreatBlocked(RetreatBlockReason(op));
     }
 
     /// <summary>
