@@ -156,7 +156,9 @@ public class TDOperatorSelectionView : MonoBehaviour
         HideRangeHighlights();
         if (m_RangeHighlightPrefab == null || TDGridMainModel.api == null) return;
 
-        var data = TDFlyweightOperatorDataSettings.api.GetData(op.OperatorType);
+        // The deployed operator's own row, not one resolved from their archetype — otherwise
+        // this panel draws Striker's reach over Ace and the player is shown a lie.
+        var data = op.Data;
         if (data?.rangeOffsets == null || data.rangeOffsets.Length == 0) return;
 
         var rangeDto = new TDOffsetRangeDTO(data.rangeOffsets);

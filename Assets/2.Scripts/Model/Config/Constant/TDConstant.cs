@@ -285,7 +285,19 @@ public static class TDConstant
     // not noticed. Scenery is what says "nothing happens here".
     public const float DECOR_FILL_RATIO = 0.45f;
     // Tower slots (TDTowerMainControl)
-    public const int CONFIG_MAX_SLOTS = 8;
+    // The deploy bar's composition, not just its size. Shuffling one pool of towers + operators
+    // and taking the first 8 gave a melee/ranged split that changed every match — sometimes eight
+    // characters, sometimes half turrets. A player cannot build a habit against a bar that
+    // reshuffles what it offers, and the two halves are not interchangeable: melee stands ON the
+    // path and holds, ranged stands beside it and does not.
+    //
+    // "Melee" is DeployZone.PathCell; everything else (tower-zone operators and turrets) is ranged.
+    // Deploy surface, not weapon type — that is the distinction the player actually plays against.
+    public const int CONFIG_SLOTS_MELEE = 5;
+    public const int CONFIG_SLOTS_RANGED = 3;
+
+    // Derived, so the two can never drift out of step with the bar they fill.
+    public const int CONFIG_MAX_SLOTS = CONFIG_SLOTS_MELEE + CONFIG_SLOTS_RANGED;
     // Audio (TDAudioPrefs / TDBGMPlayer / TDSFXPlayer)
     public const string AUDIO_KEY_BGM = "audio_bgm_muted";
     public const string AUDIO_KEY_SFX = "audio_sfx_muted";
@@ -333,6 +345,176 @@ public static class TDConstant
     // Attack VFX (TDAttackVFX)
     public const float VFX_MOVE_SPEED = 15f;
     public const float VFX_ARRIVE_THRESHOLD = 0.25f;
+    // ── Morale (§02, §04, §05 of MORALE_SYSTEM_DESIGN.md) ────────────────────
+    //
+    // Tune by "how many seconds until they break", never by "points per second" —
+    // seconds are the only unit the player can feel. Break time = 72 / R, where R is the
+    // net rate BEFORE the state multiplier (the 72 already folds the three states in:
+    //   33/1.0 + 33/1.5 + 33/2.0 ≈ 33 + 22 + 17).
+    public const float STRESS_MAX = 100f;
+    public const float STRESS_CALM_MAX = 33f;
+    public const float STRESS_STEADY_MAX = 66f;
+
+    // Accelerating, not linear: hesitating late costs more than hesitating early, and the
+    // icon changing shape IS the tell that the clock just sped up.
+    public const float STRESS_MULT_CALM = 1.0f;
+    public const float STRESS_MULT_STEADY = 1.5f;
+    public const float STRESS_MULT_STRESSED = 2.0f;
+
+    // N2 — engagement clock. Zero when the pressure zone is empty, so guarding a quiet
+    // corner is free. Measured as ~96% of all stress accrued in a Normal match.
+    public const float STRESS_BASE_RATE = 1.6f;
+
+    // N1 — the line leaking. Charges only the enemies ABOVE tolerance.
+    // 0.5 was the first guess and measurement killed it: at 0.5 a surrounded operator
+    // accrues 1.6x the base rate, under the threshold where anyone notices a change.
+    // At 1.0 it is 2.1x. See §10 for the Nightmare numbers behind this.
+    public const float STRESS_PER_OVERLOAD = 1.0f;
+
+    // N3 — instant spikes, NOT multiplied by state. A 30-point jolt doubled at Stressed
+    // would almost always kill outright, turning a cascade into an automatic wipe.
+    public const float STRESS_ALLY_DEATH_SPIKE = 20f;
+    public const float STRESS_ALLY_BREAK_SPIKE = 30f;   // worse than death: they are still there
+    public const float STRESS_SPIKE_RADIUS = 2f;        // cells
+
+    // N4 — fear auras. Radius lives on the enemy data so designers can tune it.
+    public const float STRESS_AURA_BOSS = 2.0f;
+    public const float STRESS_AURA_HERALD = 1.5f;
+
+    // Recovery. Total relief is capped so a cluster of calm operators parked somewhere
+    // quiet cannot out-heal the core loop.
+    public const float STRESS_ALLY_CALM_RELIEF = 0.40f; // per adjacent Calm ally
+    public const float STRESS_RELIEF_CAP = 0.80f;       // ceiling on ally relief
+    public const float STRESS_IDLE_RELIEF = 0.60f;      // no enemy in the pressure zone
+    public const float STRESS_WAVE_CLEAR_RELIEF = 15f;  // a wave cleared with nobody broken
+
+    // Retreat gives -70, not a reset. Pull out at 70 and you are clean; pull out at 90 and
+    // you never are again. One number that teaches "retreating early is a reset, retreating
+    // late is a postponement" without a line of tutorial.
+    public const float STRESS_RETREAT_RELIEF = 70f;
+    public const float STRESS_RETREAT_COUNTDOWN = 8.0f; // forced by waveInterval = 10
+
+    // Death has to be WORSE than a retreat on every axis, or the player is rewarded for letting
+    // someone fall instead of pulling them out. Keeping the stress (§06) only punishes an
+    // operator who died stressed — one killed at 5 points paid nothing at all, and came back
+    // instantly while the retreated one waited 8 seconds. Dying was the faster exit.
+    //
+    // 2x retreat, so losing someone costs more than a whole wave interval without them. A
+    // placeholder for the permadeath of step 3.6, shaped like the thing it will become.
+    public const float STRESS_DEATH_COUNTDOWN = 16.0f;
+
+    public const float STRESS_RESCUE_RELIEF = 50f;
+
+    // ── Rescue (§06 · 3.2) ───────────────────────────────────────────────────
+    //
+    // SP is the SKILL resource (Arknights), not a rescue currency. It caps at a normal skill's
+    // cost and a rescue spends half of it — so saving a teammate is always paid for out of an
+    // activation you would otherwise have fired. Charges only while deployed, which stops "park
+    // the squad at home and bank SP": the resource that saves a life is earned by risking one.
+    public const float SP_MAX = 100f;
+    public const float SP_PER_SECOND = 1f;
+    public const float RESCUE_SP_COST = 50f;
+
+    // What an operator walks onto the field carrying, the FIRST time they are deployed.
+    //
+    // Measured need, not a guess. A real match ran 85 seconds; at 1/s from zero the first rescue
+    // costs 50 of them, and the log showed every reinforcement arriving too late to ever afford
+    // one — Tart was deployed at t+55s and died at 23 SP. Reinforcements are sent when things
+    // have already gone wrong, which is exactly when the squad needs a rescuer, so the resource
+    // was structurally unavailable at the only moment it mattered.
+    //
+    // 20 puts the first rescue at 30 seconds instead of 50. Granted once, at construction, so
+    // retreating and redeploying cannot farm it.
+    public const float SP_INITIAL = 20f;
+
+    // The rescuer pays in stress too, or pulling someone out of collapse is free and the player
+    // never has to weigh who can afford to spend the nerve.
+    public const float RESCUE_RESCUER_STRESS = 15f;
+
+    // ...but that cost may never itself break the rescuer. Cascading collapses started BY the
+    // act of preventing one would punish the only correct play in the game.
+    public const float RESCUE_RESCUER_CEILING = 90f;
+
+    // A broken operator recovers only while nothing has hit them for a while.
+    public const float STRESS_BROKEN_RELIEF = 1.0f;
+    public const float STRESS_BROKEN_CALM_SECONDS = 5.0f;
+
+    // Collapsed operators take triple damage (§06) — NOT a chance-to-die roll.
+    //
+    // The whole system's credibility rests on one unspoken contract: if you lose, it was your
+    // fault. A dice throw that removes an operator permanently tears that up — a player who
+    // loses someone to randomness says "this game is unfair", and once they say it once they
+    // say it forever. x3 reaches nearly the same outcome (they die fast once hit) while staying
+    // COUNTABLE: look at the HP bar and you know how many seconds are left. Never arbitrary.
+    public const float STRESS_BROKEN_DAMAGE_MULT = 3.0f;
+
+    // ── Resolve (§07) — the chance LAST STAND is offered instead of breaking ─
+    //
+    // Derived from the RATIO between endurance and damage, never from absolute power, and
+    // never hand-authored. Ratios make Resolve orthogonal to strength for free: a cheap
+    // Defender still reads high, an expensive Striker still reads low. Hand-authoring would
+    // mean that one day somebody ships a Defender with 10% resolve and nothing catches it.
+    //
+    // log10 because E spans 0.86 to 667 across the roster — nearly 800x. A linear map would
+    // pile four fifths of the roster onto the same value.
+    public const float RESOLVE_E_LO = -0.5f;   // log10(E) at the bottom of the scale
+    public const float RESOLVE_E_HI = 3.0f;    // ...and at the top
+    public const float RESOLVE_BASE_MIN = 10f;
+    public const float RESOLVE_BASE_SPAN = 35f; // so the derived band is 10%..45%
+
+    // In-match adjustments, then a clamp. Two layers kept apart on purpose: who a person is
+    // (derived) plus what is happening to them (added). The first two are things the player
+    // can influence, which is what turns luck into something good play can buy.
+    public const float RESOLVE_ADJ_CALM_ALLY = 10f;    // a Calm ally standing next to them
+    public const float RESOLVE_ADJ_ALLY_BROKE = -15f;  // someone nearby broke this wave
+    public const float RESOLVE_ADJ_PER_SETBACK = -10f; // per break/death already survived
+    public const float RESOLVE_MIN = 5f;
+    public const float RESOLVE_MAX = 60f;
+
+    // Step 2.5 — raw numbers floating over each operator's head. Deliberately ugly and
+    // deliberately first: four knobs have to be tuned on READABLE NUMBERS before 4-5 days
+    // go into icons, sounds and feedback. Building the pretty version first and only then
+    // discovering STRESS_BASE_RATE is wrong costs the work twice.
+    // Flip to false to hide it; delete the file once Phase 4 ships the real icons.
+    public const bool MORALE_DEBUG_OVERLAY = false;
+    public const string COLOR_MORALE_CALM = "#A1CD3A";
+    public const string COLOR_MORALE_STEADY = "#FC7B01";
+    public const string COLOR_MORALE_STRESSED = "#FB2425";
+
+    // Collapse leaves the green → orange → red ramp entirely. That is the point: the first three
+    // are degrees of the same thing and read as a temperature, so a fourth red would say "even
+    // hotter" when the state is not on that scale at all. An unrelated hue says "off the scale".
+    public const string COLOR_MORALE_BROKEN = "#3C3180";
+
+    // The ONLY state whose badge is inverted: pale disc, dark symbol.
+    //
+    // Forced by measurement, not taste. Against the asphalt operators actually stand on (L=0.069)
+    // #3C3180 scores 1.23:1 — invisible. And no other dark shade rescues it: Calm/Steady/Stressed
+    // already occupy greyscale 175/148/100, and everything below Stressed lands on the road at 74.
+    // The only free slot that is still VISIBLE is above ~190, so the disc goes pale (5.45:1) and
+    // #3C3180 moves onto the symbol, where a dark mark on a light ground is exactly what it needs.
+    //
+    // The inversion is a bonus channel: no other state reads light-on-dark, so collapse is
+    // recognisable from the badge's polarity alone, before shape or hue resolve.
+    public const string COLOR_MORALE_BROKEN_DISC = "#CFC7E8";
+
+    // Rescue's own colour, off the morale ramp entirely — it is an ACTION, not a state, and must
+    // not read as "one worse than Stressed". Cyan also carries the support/heal convention.
+    public const string COLOR_RESCUE = "#35C4E8";
+
+    // How far Retreat and Rescue sit from the diamond's centre, as a multiple of their authored
+    // prefab position. 1.0 = exactly where the prefab puts them, tucked against the diamond.
+    //
+    // It was briefly 1.55, on measurement: the prefab's ~127px offset is almost exactly where the
+    // diagonally adjacent operator lands on screen (128px at ortho size 10, 1080p, 40-degree
+    // pitch), so both buttons sit on top of a neighbour, and a tap meant for that neighbour is
+    // swallowed with no feedback. Pushing them into the gap between the 1-cell and 2-cell
+    // neighbours (~128 and ~256px) fixed the taps but detached the buttons from the panel.
+    //
+    // Back to 1.0 by choice: the buttons read as part of the diamond, and the overlap is lived
+    // with. Raise this if the mis-tap becomes the worse problem again.
+    public const float DIAMOND_ACTION_SPREAD = 1.0f;
+
     // Tower/operator views
     // How long the operator corpse lingers so the Die clip can finish before Destroy.
     // Only used when the operator's Animator actually declares a "Die" trigger.

@@ -495,6 +495,12 @@ public class TDEnemyPathMainControl
 
                 await Task.WhenAll(spawnTasks);
                 await PauseAwareDelay(config.waveInterval, ct);
+
+                // §05 wave relief. Raised here rather than through a new bus event: the loop
+                // already owns "a wave is over", and the registry already owns "who is still
+                // standing" — a third party to carry the message between them would be one
+                // more place for the two to disagree.
+                TDOperatorRegistry.api?.OnWaveCleared();
             }
 
             Debug.Log($"<color=green>All {wavePlans.Count} waves completed!</color>");

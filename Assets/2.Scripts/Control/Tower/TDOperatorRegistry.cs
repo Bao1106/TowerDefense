@@ -114,4 +114,64 @@ public class TDOperatorRegistry
             return new List<TDEnemyView>(list); // snapshot to avoid modifying while iterating
         return new List<TDEnemyView>();
     }
+
+    // ─── Morale (§04 N3, §05 wave relief) ─────────────────────────────────────
+    //
+    // These live here because the registry is the only thing that knows where everyone is
+    // standing. Putting them anywhere else would mean a second place tracking operator
+    // positions, and this project has already paid for "two sources of truth" more than once.
+
+    /// <summary>True if any operator broke during the current wave — lowers Resolve (§07).</summary>
+    public bool AnyBrokeThisWave { get; private set; }
+
+    /// <summary>Number of Calm allies orthogonally or diagonally adjacent to `cell`.</summary>
+    public int CountCalmAlliesAdjacent(Vector2Int cell)
+    {
+        int n = 0;
+        for (int dx = -1; dx <= 1; dx++)
+            for (int dy = -1; dy <= 1; dy++)
+            {
+                if (dx == 0 && dy == 0) continue;
+                var view = GetOperatorView(new Vector2Int(cell.x + dx, cell.y + dy));
+                if (view != null && view.Morale != null && view.Morale.State == TDEnums.MoraleState.Calm) n++;
+            }
+        return n;
+    }
+
+    /// <summary>
+    /// N3 — an ally died or broke at `origin`. Everyone within the spike radius takes it,
+    /// the casualty excluded. Distance is Chebyshev, matching how the pressure zone counts.
+    /// </summary>
+    public void BroadcastSpike(Vector2Int origin, float amount, bool wasBreak)
+    {
+        if (wasBreak) AnyBrokeThisWave = true;
+
+        int r = Mathf.CeilToInt(TDConstant.STRESS_SPIKE_RADIUS);
+        foreach (var kv in m_OperatorViews)
+        {
+            var cell = kv.Key;
+            if (cell == origin) continue;
+            if (Mathf.Max(Mathf.Abs(cell.x - origin.x), Mathf.Abs(cell.y - origin.y)) > r) continue;
+            kv.Value?.Morale?.AddSpike(amount);
+        }
+    }
+
+    /// <summary>
+    /// A wave finished. Everyone still deployed steadies a little — but only if nobody
+    /// broke, which is what makes holding the line without casualties worth something
+    /// beyond simply surviving it.
+    /// </summary>
+    public void OnWaveCleared()
+    {
+        // No squad-wide gate any more. Morale.OnWaveCleared() skips anyone who is collapsed, so
+        // the relief reaches exactly the operators who held — which is what makes it a valve
+        // instead of a bonus that switches off the moment it is needed.
+        //
+        // AnyBrokeThisWave survives because §07 still reads it: a teammate breaking lowers
+        // everyone's Resolve for the rest of the wave. That is a separate rule from recovery.
+        foreach (var kv in m_OperatorViews)
+            kv.Value?.Morale?.OnWaveCleared();
+
+        AnyBrokeThisWave = false;
+    }
 }

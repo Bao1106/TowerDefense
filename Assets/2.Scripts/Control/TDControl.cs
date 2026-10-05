@@ -42,6 +42,7 @@ public class TDControl
         
         //Init sub control
         TDOperatorRegistry.api = new TDOperatorRegistry();
+        TDOperatorRoster.api = new TDOperatorRoster();
         TDEnemyRegistry.api = new TDEnemyRegistry();
         TDEnemyPathControl.api = new TDEnemyPathControl();
         TDEnemyControl.api = new TDEnemyControl();

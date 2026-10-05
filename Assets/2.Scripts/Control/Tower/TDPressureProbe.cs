@@ -90,6 +90,35 @@ public static class TDPressureProbe
         return n;
     }
 
+    /// <summary>
+    /// N4 — strongest fear aura reaching this cell, in points per second. Auras do not
+    /// stack with themselves; the worst one in range wins, so two bosses are frightening
+    /// rather than lethal-by-arithmetic.
+    ///
+    /// ponytail: radius and rate are hardcoded per enemy type here. §08 moves both onto
+    /// EnemyData as `fearAuraRadius` / `fearAuraRate` when Herald arrives in Phase 5 — at
+    /// that point this reads the fields and the type switch disappears.
+    /// </summary>
+    public static float AuraRateAt(Vector2Int cell)
+    {
+        var enemies = TDEnemyRegistry.api?.GetAll();
+        if (enemies == null || enemies.Count == 0) return 0f;
+
+        var grid = TDGridMainModel.api;
+        float worst = 0f;
+
+        foreach (var enemy in enemies)
+        {
+            if (enemy == null || enemy.EnemyType != EnemyType.Boss) continue;
+
+            var ec = grid.WorldToCell(enemy.transform.position);
+            int dist = Mathf.Max(Mathf.Abs(ec.x - cell.x), Mathf.Abs(ec.y - cell.y));
+            if (dist <= 3 && TDConstant.STRESS_AURA_BOSS > worst) worst = TDConstant.STRESS_AURA_BOSS;
+        }
+
+        return worst;
+    }
+
     /// <summary>Tolerance before N1 starts charging (§03).</summary>
     public static int Tolerance(OperatorData data)
         => data != null && data.deployZone == DeployZone.TowerZone ? 1 : 1 + Mathf.Max(0, data?.blockCount ?? 0);

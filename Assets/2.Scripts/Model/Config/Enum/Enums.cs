@@ -54,8 +54,25 @@ namespace TDEnums
         Nightmare
     }
 
+    // Morale bands. Three discrete states, not a continuous bar: the player reads an icon,
+    // and the icon changing shape is also the moment the accrual multiplier changes.
+    public enum MoraleState
+    {
+        Calm,      // 0-33   x1.0
+        Steady,    // 34-66  x1.5
+        Stressed,  // 67-99  x2.0
+        Broken     // 100 — cannot block, attack or retreat; takes triple damage
+    }
+
     // Class archetype — defines behavior (deploy zone, block count, attack style).
     // The specific identity of each operator is stored in OperatorData.operatorName.
+    // ARCHETYPE, deliberately not identity. Several operators legitimately share one — Striker,
+    // Ace and Layla are all "melee reach" — and that is the whole point: this enum answers
+    // "what shape of unit is it" for VFX and deploy zone, nothing else.
+    //
+    // WHO an operator is comes from their OperatorData row, and code must carry that reference
+    // rather than looking it up from this enum. GetData(OperatorType) is Find(first match), so
+    // any lookup keyed on an archetype silently hands back the wrong roster member's stats.
     public enum OperatorType
     {
         Knight, // PathCell, block 2 — melee balanced

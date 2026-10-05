@@ -34,7 +34,7 @@ public class TDDeployController : MonoBehaviour
 
     private GameObject m_Ghost;
     private TowerType m_TowerType;
-    private OperatorType m_OperatorType;
+    private OperatorData m_OperatorData; // the roster row itself — never re-resolved from an archetype
     private int m_SlotIndex = -1;
     private int m_RotationIndex;
 
@@ -130,6 +130,12 @@ public class TDDeployController : MonoBehaviour
 
     private void Update()
     {
+        // Operators off the field have no view to tick them, and their retreat cooldown has to
+        // run down somewhere or it never expires. This Update already exists and this component
+        // already owns "what can be deployed right now", so it is the honest home — rather than
+        // a new Update, which §15 step 2.4 committed to not adding.
+        TDOperatorRoster.api?.TickOffField(Time.deltaTime);
+
         if (m_State == DeployState.Idle || m_Ghost == null) return;
 
 #if UNITY_ANDROID && !UNITY_EDITOR
@@ -284,7 +290,7 @@ public class TDDeployController : MonoBehaviour
         IsPlacingUnit = true;
         TDGameEventBus.UnitPickup();
         m_TowerType = slot.towerType;
-        m_OperatorType = slot.operatorType;
+        m_OperatorData = slot.operatorData;
         m_RotationIndex = 0;
         m_LastSnappedPos = Vector3.negativeInfinity;
         m_DragFingerId = -1;
@@ -295,7 +301,7 @@ public class TDDeployController : MonoBehaviour
 
         if (slot.towerType == TowerType.Operator)
         {
-            var opData = TDFlyweightOperatorDataSettings.api?.GetData(m_OperatorType);
+            var opData = m_OperatorData;
             if (opData?.deployZone == DeployZone.TowerZone) ShowHighlights();
             else ShowOperatorHighlights();
         }
@@ -393,7 +399,7 @@ public class TDDeployController : MonoBehaviour
 
     private bool IsValidOperatorPlacement(Vector3 worldPos)
     {
-        var data = TDFlyweightOperatorDataSettings.api?.GetData(m_OperatorType);
+        var data = m_OperatorData;
         if (data == null) return false;
         return TDControl.CreateOperatorBehavior(data.deployZone).CanPlace(worldPos);
     }
@@ -436,7 +442,7 @@ public class TDDeployController : MonoBehaviour
         if (m_Ghost == null || m_RangeHighlightPrefab == null) return;
 
         var data = m_TowerType == TowerType.Operator
-            ? (object)TDFlyweightOperatorDataSettings.api?.GetData(m_OperatorType)
+            ? (object)m_OperatorData
             : TDFlyweightTowerDataSettings.api?.GetData(m_TowerType);
 
         Vector2Int[] offsets = m_TowerType == TowerType.Operator
