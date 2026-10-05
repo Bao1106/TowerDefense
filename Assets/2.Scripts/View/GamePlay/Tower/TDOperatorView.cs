@@ -28,6 +28,10 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
     /// <summary>Morale state for this operator (§02). Null before Init.</summary>
     public TDOperatorMorale Morale { get; private set; }
 
+    /// <summary>Skill points (§06 · 3.2). A combat resource of its own — deliberately NOT a field
+    /// on Morale, because skills will spend it and skill code must not reach into the stress model.</summary>
+    public TDOperatorSp Sp { get; private set; }
+
     /// <summary>Last context fed to morale — reused by the debug overlay so it does not
     /// rebuild one (and re-scan every enemy) just to print a projection.</summary>
     public TDMoraleContext MoraleContext { get; private set; }
@@ -77,6 +81,7 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         // what makes a career degrade across a match instead of resetting every time they step
         // off the field — and it is the only reason OnRetreat's -70 means anything.
         Morale = TDOperatorRoster.api?.MoraleOf(m_Data) ?? new TDOperatorMorale();
+        Sp = TDOperatorRoster.api?.SpOf(m_Data) ?? new TDOperatorSp();
         TDOperatorRoster.api?.OnDeployed(m_Data);
 
         m_Initialized = true;
@@ -121,13 +126,35 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         {
             Morale.OnSetback();
             TDOperatorRegistry.api?.BroadcastSpike(m_MyCell, TDConstant.STRESS_ALLY_BREAK_SPIKE, wasBreak: true);
+
+            // Collapse (§06 · 3.1). The one thing that has to happen ON the transition — everyone
+            // they were holding walks free the instant they stop holding. Everything else about
+            // being collapsed (no blocking, no attacking, no self-retreat, x3 damage) is derived
+            // live from IsBroken, so recovering needs no matching "un-collapse" step.
+            TDOperatorRegistry.api?.ReleaseBlockedEnemies(m_MyCell);
         }
     }
+
+    /// <summary>
+    /// Collapsed (§06): holds nothing, swings at nothing, cannot walk off under its own power,
+    /// and takes triple damage. Derived from morale rather than latched, because an operator left
+    /// alone recovers slowly on their own and must come back to work without a second code path.
+    /// </summary>
+    public bool IsCollapsed => Morale != null && Morale.IsBroken;
+
+    /// <summary>
+    /// False while collapsed — that dead end is exactly what Rescue (3.2) exists to open. Read by
+    /// both DoRetreat and TDOperatorRetreatControl: one expression, so the refund and the action
+    /// can never disagree about whether the retreat happened.
+    /// </summary>
+    public bool CanRetreat => !m_IsDying && m_Initialized && !IsCollapsed;
 
     public void TakeDamage(float damage)
     {
         if (!m_Initialized || m_IsDying || m_CurrentHp <= 0) return;
         m_LastHitTime = Time.time;
+
+        if (IsCollapsed) damage *= TDConstant.STRESS_BROKEN_DAMAGE_MULT;
 
         m_CurrentHp -= damage;
         m_HPBarView?.UpdateHP(m_CurrentHp, m_MaxHp);
@@ -140,8 +167,10 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
 
     public void DoRetreat()
     {
-        // The corpse still playing its Die clip is not a unit that can walk off.
-        if (m_IsDying) return;
+        // Covers the corpse still playing its Die clip, and the collapsed operator who cannot
+        // walk off by themselves. Guarded here and not only in the UI: a button is one caller,
+        // not the rule.
+        if (!CanRetreat) return;
 
         // The price of pulling out: -70 stress and 8 seconds before this operator can go back.
         // Leave at 70 and you come back clean; leave at 90 and you never will.
@@ -212,6 +241,14 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
 
         TDPressureProbe.Sample(m_MyCell, transform.rotation, m_Data, ref m_NextPressureSample);
         TickMorale(Time.deltaTime);
+
+        // SP only accrues on the field, and not while collapsed: an operator who cannot hold or
+        // swing is in no state to be banking the resource that rescues someone else.
+        if (!IsCollapsed) Sp?.Tick(Time.deltaTime);
+
+        // Collapsed operators stop swinging (§06). After TickMorale, so they keep accruing and
+        // keep recovering — standing there useless is the state, not being switched off.
+        if (IsCollapsed) return;
 
         float attackInterval = 1f / (m_Data?.attackSpeed ?? 1f);
         if (Time.time - m_LastAttackTime < attackInterval) return;

@@ -211,6 +211,24 @@ public class TDEnemyView : MonoBehaviour
                 }
                 else
                 {
+                    // Walking over a collapsed operator earns one blow in passing (§06 · 3.1).
+                    //
+                    // Without this the collapsed state is perfectly safe: this is the ONLY place
+                    // in the game that damages an operator, and it is gated on blocking — so an
+                    // operator who has stopped blocking can never be hit, and the x3 multiplier
+                    // had nothing to multiply. Collapse was meant to be a dead end worth spending
+                    // a Rescue on; it was a rest.
+                    //
+                    // One blow per enemy passing through, not a damage-per-second: the threat
+                    // scales with how many are still coming. Collapsing mid-wave is lethal,
+                    // collapsing after the last enemy is survivable — which is exactly the
+                    // judgement call Rescue asks the player to make.
+                    if (TDOperatorRegistry.api != null && TDOperatorRegistry.api.IsBrokenAt(arrivedCell))
+                    {
+                        TDOperatorRegistry.api.GetOperatorView(arrivedCell)?.TakeDamage(m_AttackDamage);
+                        TriggerSafe(TDConstant.ANIM_TRIGGER_ATTACK);
+                    }
+
                     m_CurrentPathIndex++;
                 }
             }

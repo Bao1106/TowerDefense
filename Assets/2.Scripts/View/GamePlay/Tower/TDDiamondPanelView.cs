@@ -78,8 +78,19 @@ public class TDDiamondPanelView : MonoBehaviour
     private Canvas m_Canvas;
     private Camera m_CanvasCam; // null for Overlay canvases
 
+    // Rescue corner — cloned from RetreatButton in BuildRescueButton, never authored in the prefab.
+    private GameObject m_RescueGo;
+    private RectTransform m_RescueRect;
+    private Vector2 m_RescueRestPos;
+    private Button m_RescueBtn;
+    private CanvasGroup m_RescueGroup;
+    private TMPro.TMP_Text m_RescueLabel;
+    private Image m_RescueFill;
+    private System.Func<float> m_RescueProgress;
+
     private Action m_OnCancel;
     private Action m_OnRetreat;
+    private Action m_OnRescue;
 
     private Vector3 m_CenterWorld; // ground cell center (touch math)
     private enum Mode { Hidden, Deploy, Retreat }
@@ -97,12 +108,15 @@ public class TDDiamondPanelView : MonoBehaviour
     private const float BTN_SLIDE_PX    = 60f;   // how far the button slides in from outside
     private const float ARROW_PUNCH_AMT = 0.30f; // additive scale on punch
     private const float ARROW_PUNCH_DUR = 0.22f;
+    private const float RESCUE_DIM_ALPHA = 0.6f;
+    private const string RESCUE_ICON_PATH = "Sprites/Morale/icon_rescue_white";
 
     private Tween m_ScaleTween;
     private Tween m_AlphaTween;
     private Tween m_BtnSlideTween;
     private Tween m_GlowTween;
     private Tween m_ArrowPunchTween;
+    private Tween m_RescueSlideTween;
 
     private bool m_Resolved;
 
@@ -140,13 +154,194 @@ public class TDDiamondPanelView : MonoBehaviour
         {
             m_RetreatGo = retreatT.gameObject;
             m_RetreatRect = (RectTransform)retreatT;
-            m_RetreatRestPos = m_RetreatRect.anchoredPosition;
+
+            // Scaled off the authored position — see DIAMOND_ACTION_SPREAD for the trade-off
+            // between reading as part of the diamond and not sitting on a neighbouring operator.
+            m_RetreatRestPos = m_RetreatRect.anchoredPosition * TDConstant.DIAMOND_ACTION_SPREAD;
+            m_RetreatRect.anchoredPosition = m_RetreatRestPos;
             m_RetreatBtn = retreatT.GetComponent<Button>();
             m_RetreatBtn?.onClick.AddListener(() => m_OnRetreat?.Invoke());
+
+            BuildRescueButton(retreatT);
         }
 
         float cell = TDGridMainModel.api != null ? TDGridMainModel.api.cellSize : TDConstant.CONFIG_GRID_CELL_SIZE;
         DeadZoneRadius = cell * TDConstant.DIAMOND_DEADZONE_RATIO;
+    }
+
+    // ── Rescue button (§06 · 3.2) ───────────────────────────────────────────────
+
+    /// <summary>
+    /// Cloned from RetreatButton at runtime and mirrored to the opposite vertical tip.
+    ///
+    /// Cloned rather than authored because §06 asks for a second button on the SAME panel and no
+    /// new prefab: a copy inherits the frame, outline, icon and label styling for free and cannot
+    /// drift from its sibling when someone restyles the diamond. Everything but position and text
+    /// is whatever RetreatButton is.
+    ///
+    /// Position is not a layout choice. Retreat sits at the upper-left tip, so Rescue takes the
+    /// LOWER-left one: opposed along the vertical axis is the furthest two touch targets can be
+    /// from each other on this panel. In a real-time game the player presses from muscle memory,
+    /// and one mis-tap retreats the operator they meant to save.
+    /// </summary>
+    private void BuildRescueButton(Transform retreatT)
+    {
+        var go = Instantiate(retreatT.gameObject, retreatT.parent);
+        go.name = "RescueButton";
+
+        m_RescueGo = go;
+        m_RescueRect = (RectTransform)go.transform;
+        m_RescueRestPos = new Vector2(m_RetreatRestPos.x, -m_RetreatRestPos.y);
+        m_RescueRect.anchoredPosition = m_RescueRestPos;
+
+        m_RescueBtn = go.GetComponent<Button>();
+        m_RescueBtn?.onClick.RemoveAllListeners();
+        m_RescueBtn?.onClick.AddListener(() => m_OnRescue?.Invoke());
+
+        m_RescueGroup = go.GetComponent<CanvasGroup>() ?? go.AddComponent<CanvasGroup>();
+        m_RescueLabel = go.GetComponentInChildren<TMPro.TMP_Text>(true);
+
+        BuildRescueFill(go);
+        ApplyRescueIcon(go);
+
+        go.SetActive(false);
+    }
+
+    /// <summary>
+    /// A second copy of the button's own background, drawn on top and filled bottom-up by SP.
+    ///
+    /// The charge IS the button, not a number beside it. "35/50" is a fact the player has to read
+    /// and convert; a bar rising toward the brim is the same fact at a glance, and it updates
+    /// every frame instead of freezing at whatever it said when the panel opened. It also uses
+    /// the drain/fill language the morale icon already taught.
+    ///
+    /// Cloned from the base image so it matches the button's silhouette exactly — a rectangle
+    /// would spill outside the diamond tip's shape.
+    /// </summary>
+    private void BuildRescueFill(GameObject buttonGo)
+    {
+        var baseImg = buttonGo.GetComponent<Image>();
+        if (baseImg == null) return;
+
+        var fillGo = new GameObject("SpFill", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        var rt = (RectTransform)fillGo.transform;
+        rt.SetParent(buttonGo.transform, worldPositionStays: false);
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+
+        // First child: drawn after the button's own background, before its icon and label — so
+        // the charge rises behind the symbol rather than over it.
+        rt.SetSiblingIndex(0);
+
+        m_RescueFill = fillGo.GetComponent<Image>();
+        m_RescueFill.sprite = baseImg.sprite;
+        m_RescueFill.type = Image.Type.Filled;
+        m_RescueFill.fillMethod = Image.FillMethod.Vertical;
+        m_RescueFill.fillOrigin = (int)Image.OriginVertical.Bottom;
+        m_RescueFill.raycastTarget = false;
+        m_RescueFill.color = Hex(TDConstant.COLOR_RESCUE);
+        m_RescueFill.fillAmount = 0f;
+    }
+
+    /// <summary>
+    /// Swaps in a rescue icon if one exists, and tints it so the two buttons never read as the
+    /// same control. Optional on purpose: the button is usable the moment the code lands, and
+    /// dropping the PNG in later needs no code change.
+    /// </summary>
+    private void ApplyRescueIcon(GameObject buttonGo)
+    {
+        var icon = buttonGo.transform.Find("Icon")?.GetComponent<Image>();
+        if (icon == null) return;
+
+        var sprite = Resources.Load<Sprite>(RESCUE_ICON_PATH);
+        if (sprite != null) icon.sprite = sprite;
+        icon.color = Hex(TDConstant.COLOR_RESCUE);
+    }
+
+    private static Color Hex(string hex)
+        => ColorUtility.TryParseHtmlString(hex, out var c) ? c : Color.white;
+
+    /// <summary>
+    /// Applies §06's three display rules. They are rules about ATTENTION, not about permission:
+    ///
+    ///   no target        → hidden outright. A button that is permanently greyed teaches the
+    ///                      player to stop looking at that corner, and then they miss it on the
+    ///                      one occasion it matters.
+    ///   target, can't    → visible, dimmed, and SAYING WHY ("35/50"). The player has to know the
+    ///                      option exists and what would unlock it, or they cannot plan for it.
+    ///   ready            → visible, bright.
+    /// </summary>
+    private void ApplyRescueState(RescueOption? option)
+    {
+        if (m_RescueGo == null) return;
+
+        if (option == null)
+        {
+            m_RescueGo.SetActive(false);
+            return;
+        }
+
+        var opt = option.Value;
+        m_RescueProgress = opt.progress;
+        m_RescueGo.SetActive(true);
+
+        if (m_RescueGroup != null)
+        {
+            // Not dimmed to near-invisible any more — the FILL now carries "not yet", so the
+            // button can stay legible while still reading as unavailable.
+            m_RescueGroup.alpha = opt.ready ? 1f : RESCUE_DIM_ALPHA;
+            m_RescueGroup.interactable = opt.ready;
+            m_RescueGroup.blocksRaycasts = opt.ready;
+        }
+
+        if (m_RescueLabel != null) m_RescueLabel.text = opt.label;
+        RefreshRescueFill();
+    }
+
+    /// <summary>
+    /// Re-evaluates the Rescue corner on an already-open panel, with no show animation.
+    ///
+    /// Needed because the panel is built once at selection time and everything it describes keeps
+    /// moving: a neighbour collapses, SP crosses the threshold, the target gets rescued by someone
+    /// else. Without this the button that should have appeared stays hidden until the player
+    /// deselects and taps again — which looks exactly like the feature not working.
+    /// </summary>
+    public void UpdateRescue(RescueOption? rescue)
+    {
+        if (m_Mode != Mode.Retreat || !m_Resolved) return;
+
+        bool wasShown = m_RescueGo != null && m_RescueGo.activeSelf;
+
+        m_OnRescue = rescue?.onRescue;
+        ApplyRescueState(rescue);
+
+        // Slide it in only when it has just appeared, so it does not re-animate every frame.
+        if (!wasShown && m_RescueGo != null && m_RescueGo.activeSelf)
+        {
+            m_RescueSlideTween?.Kill();
+            m_RescueSlideTween = AnimateButtonSlideIn(m_RescueRect, m_RescueRestPos);
+        }
+    }
+
+    /// <summary>Driven every frame from LateUpdate — SP charges while the panel is open.</summary>
+    private void RefreshRescueFill()
+    {
+        if (m_RescueFill == null) return;
+        m_RescueFill.fillAmount = m_RescueProgress != null ? Mathf.Clamp01(m_RescueProgress()) : 0f;
+    }
+
+    /// <summary>What the panel needs to know to draw the Rescue corner. Built by the caller.</summary>
+    public struct RescueOption
+    {
+        public bool ready;
+        public string label;
+        public Action onRescue;
+
+        /// <summary>0-1 toward affording a rescue. A callback, not a value: SP climbs while the
+        /// panel is open, and a number captured at open time would sit frozen and lie.</summary>
+        public Func<float> progress;
     }
 
     // ── Modes ─────────────────────────────────────────────────────────────────
@@ -162,25 +357,39 @@ public class TDDiamondPanelView : MonoBehaviour
         if (m_CancelEdgeGlow != null) m_CancelEdgeGlow.SetActive(true);
         if (m_CancelGo != null) m_CancelGo.SetActive(true);
         if (m_RetreatGo != null) m_RetreatGo.SetActive(false);
+        if (m_RescueGo != null) m_RescueGo.SetActive(false); // deploy mode never offers Rescue
         ClearAllArrows();
         m_CurrentDirIndex = -1;
 
         gameObject.SetActive(true);
         UpdateScreenPosition();
+        RefreshRescueFill();
 
         PlayShowRootAnim();
-        AnimateButtonSlideIn(m_CancelRect, m_CancelRestPos);
+        m_BtnSlideTween?.Kill();
+        m_BtnSlideTween = AnimateButtonSlideIn(m_CancelRect, m_CancelRestPos);
         AnimateGlowFadeIn();
     }
 
     public void ShowRetreat(Vector3 cellCenterGround, Action onRetreat)
+        => ShowRetreat(cellCenterGround, onRetreat, null);
+
+    /// <summary>
+    /// Retreat corner always, Rescue corner only when `rescue` says there is something to rescue.
+    /// Still Mode.Retreat — §06 is explicit that Rescue must not become a third mode: the diamond
+    /// has four tips and this one uses two of them, so a new state would only widen the surface
+    /// that produced the "ghost diamond" bugs already fixed here.
+    /// </summary>
+    public void ShowRetreat(Vector3 cellCenterGround, Action onRetreat, RescueOption? rescue)
     {
         EnsureResolved();
         m_CenterWorld = cellCenterGround;
         m_Mode = Mode.Retreat;
-        
+
         m_OnRetreat = onRetreat;
         m_OnCancel = null;
+        m_OnRescue = rescue?.onRescue;
+        ApplyRescueState(rescue);
 
         if (m_CancelEdgeGlow != null) m_CancelEdgeGlow.SetActive(false);
         ClearAllArrows();
@@ -190,9 +399,17 @@ public class TDDiamondPanelView : MonoBehaviour
 
         gameObject.SetActive(true);
         UpdateScreenPosition();
+        RefreshRescueFill();
 
         PlayShowRootAnim();
-        AnimateButtonSlideIn(m_RetreatRect, m_RetreatRestPos);
+        m_BtnSlideTween?.Kill();
+        m_BtnSlideTween = AnimateButtonSlideIn(m_RetreatRect, m_RetreatRestPos);
+
+        // Its own tween handle: sharing m_BtnSlideTween would kill the retreat slide mid-flight
+        // and strand that button between its entry position and its rest position.
+        m_RescueSlideTween?.Kill();
+        if (m_RescueGo != null && m_RescueGo.activeSelf)
+            m_RescueSlideTween = AnimateButtonSlideIn(m_RescueRect, m_RescueRestPos);
     }
 
     public void Hide()
@@ -201,6 +418,8 @@ public class TDDiamondPanelView : MonoBehaviour
         m_Mode = Mode.Hidden;
         m_OnCancel = null;
         m_OnRetreat = null;
+        m_OnRescue = null;
+        m_RescueProgress = null;
 
         if (!gameObject.activeSelf) return; // already inactive — nothing to do
 
@@ -287,13 +506,12 @@ public class TDDiamondPanelView : MonoBehaviour
     }
 
     // Slide the button in from outside the diamond toward its authored rest position.
-    private void AnimateButtonSlideIn(RectTransform rect, Vector2 restPos)
+    private Tween AnimateButtonSlideIn(RectTransform rect, Vector2 restPos)
     {
-        if (rect == null) return;
-        m_BtnSlideTween?.Kill();
+        if (rect == null) return null;
         Vector2 outward = restPos.sqrMagnitude > 0.01f ? restPos.normalized : Vector2.up;
         rect.anchoredPosition = restPos + outward * BTN_SLIDE_PX;
-        m_BtnSlideTween = rect
+        return rect
             .DOAnchorPos(restPos, SHOW_DUR).SetEase(Ease.OutCubic)
             .SetUpdate(true);
     }
@@ -312,6 +530,7 @@ public class TDDiamondPanelView : MonoBehaviour
     private void PlayArrowPunch(RectTransform arrow)
     {
         m_ArrowPunchTween?.Kill();
+        m_RescueSlideTween?.Kill();
         arrow.localScale = Vector3.one;
         m_ArrowPunchTween = arrow
             .DOPunchScale(Vector3.one * ARROW_PUNCH_AMT, ARROW_PUNCH_DUR, 5, 0.6f)
@@ -340,6 +559,7 @@ public class TDDiamondPanelView : MonoBehaviour
         m_BtnSlideTween?.Kill();
         m_GlowTween?.Kill();
         m_ArrowPunchTween?.Kill();
+        m_RescueSlideTween?.Kill();
     }
 
     // ── Screen positioning ──────────────────────────────────────────────────────
@@ -357,6 +577,7 @@ public class TDDiamondPanelView : MonoBehaviour
             return;
         }
         UpdateScreenPosition();
+        RefreshRescueFill();
     }
 
     // Project the operator's body-height anchor onto the screen and move the diamond there.

@@ -60,17 +60,33 @@ public class TDOperatorRegistry
     /// Unregisters the operator — automatically force-unblocks all enemies currently held at that cell.
     public void UnregisterOperator(Vector2Int cell)
     {
-        if (m_BlockedEnemies.TryGetValue(cell, out var list))
-        {
-            // Snapshot to avoid modifying the list while iterating
-            var snapshot = new List<TDEnemyView>(list);
-            list.Clear();
-            foreach (var enemy in snapshot)
-                enemy?.ForceUnblock();
-        }
+        ReleaseBlockedEnemies(cell);
         m_Operators.Remove(cell);
         m_BlockedEnemies.Remove(cell);
         m_OperatorViews.Remove(cell);
+    }
+
+    /// <summary>
+    /// Everyone this cell was holding walks free, while the cell keeps its operator (§06 collapse).
+    ///
+    /// Deliberately the same release path death uses: an enemy must not care WHY the wall in
+    /// front of it stopped being a wall. The count has to be zeroed by hand here because
+    /// ForceUnblock() does not call OnEnemyUnblocked — with the entry surviving (unlike death,
+    /// which removes it), a stale count would keep the cell permanently "full".
+    /// </summary>
+    public void ReleaseBlockedEnemies(Vector2Int cell)
+    {
+        if (!m_BlockedEnemies.TryGetValue(cell, out var list)) return;
+
+        // Snapshot to avoid modifying the list while iterating
+        var snapshot = new List<TDEnemyView>(list);
+        list.Clear();
+
+        if (m_Operators.TryGetValue(cell, out var info))
+            m_Operators[cell] = (info.capacity, 0);
+
+        foreach (var enemy in snapshot)
+            enemy?.ForceUnblock();
     }
 
     public bool HasOperatorAt(Vector2Int cell)
@@ -82,8 +98,40 @@ public class TDOperatorRegistry
     public bool CanBlock(Vector2Int cell)
     {
         if (!m_Operators.TryGetValue(cell, out var info)) return false;
+
+        // A collapsed operator is not a wall (§06). They are still standing on the cell — still
+        // targetable, still occupying it, still someone the player has to deal with — but enemies
+        // walk straight through. Read live from morale rather than latched into a flag, because
+        // a broken operator left alone recovers on their own and must start holding again.
+        if (IsBrokenAt(cell)) return false;
+
         return info.count < info.capacity;
     }
+
+    /// <summary>
+    /// Collapsed operators standing next to `cell` — the rescue candidates for whoever is there.
+    /// Chebyshev adjacency, matching how the pressure zone and the N3 spike already measure
+    /// "next to", so a player who has learned one range has learned all three.
+    /// </summary>
+    public List<TDOperatorView> GetRescueTargetsAround(Vector2Int cell)
+    {
+        var found = new List<TDOperatorView>();
+
+        for (int dx = -1; dx <= 1; dx++)
+            for (int dy = -1; dy <= 1; dy++)
+            {
+                if (dx == 0 && dy == 0) continue;
+                var view = GetOperatorView(new Vector2Int(cell.x + dx, cell.y + dy));
+                if (view != null && view.IsCollapsed) found.Add(view);
+            }
+
+        return found;
+    }
+
+    /// <summary>True if the operator standing at `cell` has collapsed.</summary>
+    public bool IsBrokenAt(Vector2Int cell)
+        => m_OperatorViews.TryGetValue(cell, out var view)
+        && view != null && view.Morale != null && view.Morale.IsBroken;
 
     /// An enemy starts being blocked — increments the counter and stores the reference.
     public void OnEnemyBlocked(Vector2Int cell, TDEnemyView enemy)
