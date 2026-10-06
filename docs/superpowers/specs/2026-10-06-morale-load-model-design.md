@@ -230,7 +230,7 @@ Stress được cộng qua `TDOperatorMorale.SetValue`, nên gãy vì lọt phá
 | | → Steady | → Stressed | → Gãy | Tổng |
 |---|--:|--:|--:|--:|
 | Melee đứng một mình | 4 | 2 | 2 | **8** |
-| Melee có xạ thủ yểm trợ | 5 | 4 | 2 | **11** |
+| Melee có xạ thủ yểm trợ | 5 | 3 | 3 | **11** |
 | Xạ thủ, 1 người phủ ô | 12 | 7 | 6 | **25** |
 
 **Phản hồi tối thiểu** (bản đầy đủ thuộc Tầng 4):
@@ -438,7 +438,7 @@ Thay đổi cấu trúc đi kèm:
 |---|---|
 | `TDMoraleValidator` | Bảng "8 / 11 / 25 con lọt thì gãy". Chia 7/3 ở mọi ca biên: không xạ thủ, melee suy sụp, turret không gánh, không còn ai gánh. Herald ×2 không cộng dồn. Hệ số band. Gãy vì lọt phát cạnh gãy. "Rảnh" mới bật hồi đúng lúc |
 | `TDBalanceValidator` | Bảng ρ theo từng wave cho mọi level × độ khó, so với mục tiêu §5.7. Boss chỉ có một nguồn. Bầy nở đúng: tổng HUD = tổng thật |
-| Kiểm "không ai hơn ai mọi mặt" (mới) | So từng cặp **trong cùng nhóm**: melee với melee, xạ thủ với xạ thủ, turret với turret. Báo lỗi nếu A ≥ B ở **mọi** trục và hơn hẳn ở ít nhất một trục. Trục: block, DPS đơn mục tiêu, HP, giá (thấp hơn là hơn), số ô tầm, đánh nhiều mục tiêu (có hơn không). Turret bỏ trục block và HP |
+| Kiểm "không ai hơn ai mọi mặt" (mới) | So từng cặp **trong cùng nhóm**: melee với melee, xạ thủ với xạ thủ, turret với turret. Báo lỗi nếu A ≥ B ở **mọi** trục và hơn hẳn ở ít nhất một trục. Trục: block, DPS đơn mục tiêu, HP, giá (thấp hơn là hơn), số ô tầm, số mục tiêu tối đa mỗi đòn. Turret bỏ trục block và HP |
 
 ### 7.2 Bot đo trong Play Mode (hiệu chỉnh)
 
