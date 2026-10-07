@@ -22,7 +22,6 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
     private float m_CurrentHp;
     private float m_MaxHp;
     private float m_LastAttackTime = -999f;
-    private float m_NextPressureSample; // step 1.6 measurement — becomes the N1/N2 tick in Phase 2
     private float m_LastHitTime = -999f;
     private TDMoraleIconView m_MoraleIcon;
 
@@ -33,9 +32,6 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
     /// on Morale, because skills will spend it and skill code must not reach into the stress model.</summary>
     public TDOperatorSp Sp { get; private set; }
 
-    /// <summary>Last context fed to morale — reused by the debug overlay so it does not
-    /// rebuild one (and re-scan every enemy) just to print a projection.</summary>
-    public TDMoraleContext MoraleContext { get; private set; }
     private bool m_Initialized;
     private bool m_IsDying;
 
@@ -117,8 +113,6 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
             allyBrokeThisWave = TDOperatorRegistry.api?.AnyBrokeThisWave ?? false,
         };
 
-        MoraleContext = ctx;
-
         Morale.Tick(deltaTime, ctx);
         m_MoraleIcon?.Refresh(Morale);
 
@@ -147,6 +141,12 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
     /// alone recovers slowly on their own and must come back to work without a second code path.
     /// </summary>
     public bool IsCollapsed => Morale != null && Morale.IsBroken;
+
+    /// <summary>This operator's share of a leak (TDOperatorRegistry.ReportLeak). Returns the points added.</summary>
+    public float ReceiveLeak(float share, float amplifier) => Morale?.OnLeak(share, amplifier) ?? 0f;
+
+    /// <summary>True if this operator's current range reaches `cell` (ranged only; melee never covers).</summary>
+    public bool Covers(Vector2Int cell) => m_Initialized && m_Behavior != null && m_Behavior.Covers(m_MyCell, cell);
 
     /// <summary>
     /// False while collapsed — that dead end is exactly what Rescue (3.2) exists to open. Read by
@@ -245,7 +245,6 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
     {
         if (!m_Initialized || m_Behavior == null) return;
 
-        TDPressureProbe.Sample(m_MyCell, transform.rotation, m_Data, ref m_NextPressureSample);
         TickMorale(Time.deltaTime);
 
         // SP only accrues on the field, and not while collapsed: an operator who cannot hold or

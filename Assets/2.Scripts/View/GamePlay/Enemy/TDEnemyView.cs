@@ -211,6 +211,12 @@ public class TDEnemyView : MonoBehaviour
                 }
                 else
                 {
+                    // A melee stands here but cannot hold this enemy (full, or collapsed): a leak
+                    // (spec §5.2). Enemies released by ForceUnblock never get here for this cell —
+                    // it already stepped their path index past it.
+                    if (TDOperatorRegistry.api != null && TDOperatorRegistry.api.HasOperatorAt(arrivedCell))
+                        TDOperatorRegistry.api.ReportLeak(arrivedCell);
+
                     // Walking over a collapsed operator earns one blow in passing (§06 · 3.1).
                     //
                     // Without this the collapsed state is perfectly safe: this is the ONLY place

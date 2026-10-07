@@ -47,6 +47,7 @@ public static class TDMoraleValidator
         BrokenState(f);
         BreakEdge(f);
         Leaks(f);
+        LeakSplit(f);
         Resolve(f);
         FocusScale(f);
 
@@ -354,6 +355,25 @@ public static class TDMoraleValidator
             if (!m.ConsumeBreak()) f.Add($"[{tag}_EDGE] a leak-induced collapse raised no edge");
         }
         if (new TDOperatorMorale().LeaksToBreak(0f) != int.MaxValue) f.Add("[LEAKS_NO_SHARE] share 0 reported a finite count");
+    }
+
+    // Spec §5.2 split table: melee 70%, covering ranged share 30%; broken melee hands it all over.
+    private static void LeakSplit(List<string> f)
+    {
+        void Is(string tag, (float m, float r) got, float m, float r)
+        { Near(f, tag + "_MELEE", got.m, m); Near(f, tag + "_RANGED", got.r, r); }
+
+        Is("SPLIT_ALONE",        TDLeakShare.Split(true, 0),  1f,   0f);
+        Is("SPLIT_SUPPORTED",    TDLeakShare.Split(true, 1),  0.7f, 0.3f);
+        Is("SPLIT_TWO_RANGED",   TDLeakShare.Split(true, 2),  0.7f, 0.15f);
+        Is("SPLIT_MELEE_BROKEN", TDLeakShare.Split(false, 2), 0f,   0.5f);
+        Is("SPLIT_NOBODY",       TDLeakShare.Split(false, 0), 0f,   0f);
+
+        for (int k = 0; k <= 4; k++)
+        {
+            var s = TDLeakShare.Split(true, k);
+            Near(f, $"SPLIT_SUMS_{k}", s.melee + k * s.eachRanged, 1f);
+        }
     }
 
     // ── G — Resolve is derived, and lands where §07 says ────────────────────

@@ -124,4 +124,6 @@ public class PathCellOperatorBehavior : IOperatorBehavior
     public bool IsEngaged(Vector2Int cell)
         => (TDOperatorRegistry.api != null && TDOperatorRegistry.api.GetBlockedEnemies(cell).Count > 0)
            || FindEnemyInRange(cell) != null;
+
+    public bool Covers(Vector2Int myCell, Vector2Int target) => false;
 }

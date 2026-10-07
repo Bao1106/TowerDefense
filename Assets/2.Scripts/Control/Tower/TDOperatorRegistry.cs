@@ -205,6 +205,35 @@ public class TDOperatorRegistry
     }
 
     /// <summary>
+    /// An enemy walked through `cell` past a full or collapsed melee (spec §5.2). The melee there,
+    /// if still standing, and every standing ranged operator whose current range covers the cell
+    /// split the leak by TDLeakShare. Turrets have no morale and never take a share.
+    /// </summary>
+    public void ReportLeak(Vector2Int cell)
+    {
+        var melee = GetOperatorView(cell);
+        bool meleeStanding = melee != null && !melee.IsCollapsed;
+
+        var ranged = new List<TDOperatorView>();
+        foreach (var view in m_OperatorViews.Values)
+            if (view != null && view.Data != null && view.Data.deployZone == TDEnums.DeployZone.TowerZone
+                && !view.IsCollapsed && view.Covers(cell))
+                ranged.Add(view);
+
+        var (meleeShare, eachRanged) = TDLeakShare.Split(meleeStanding, ranged.Count);
+        float amplifier = LeakAmplifierAt(cell);
+
+        var parts = new List<string>();
+        if (meleeStanding) parts.Add($"{melee.Data.operatorName} +{melee.ReceiveLeak(meleeShare, amplifier):F1}");
+        foreach (var r in ranged) parts.Add($"{r.Data.operatorName} +{r.ReceiveLeak(eachRanged, amplifier):F1}");
+        Debug.Log($"[Leak] {cell} → {(parts.Count > 0 ? string.Join(", ", parts) : "nobody")}");
+    }
+
+    // ponytail: no Herald yet, so every leak is x1. Task 12 replaces this with the Herald
+    // amplifier (x2 within HERALD_RADIUS of a live Herald).
+    private float LeakAmplifierAt(Vector2Int cell) => 1f;
+
+    /// <summary>
     /// A wave finished. Everyone still deployed steadies a little — but only if nobody
     /// broke, which is what makes holding the line without casualties worth something
     /// beyond simply surviving it.

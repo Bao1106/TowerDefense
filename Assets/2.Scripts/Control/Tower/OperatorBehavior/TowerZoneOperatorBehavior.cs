@@ -32,6 +32,9 @@ public class TowerZoneOperatorBehavior : IOperatorBehavior
 
     public void OnInit(Vector2Int cell, OperatorData data, TDOperatorView view)
     {
+        // Into the morale roster (spikes, wave relief, Rescue, leaks) — NOT RegisterOperator,
+        // which is the blocking list.
+        TDOperatorRegistry.api?.RegisterOperatorView(cell, view);
         m_OperatorTransform = view.transform;
         m_RangeDTO = new TDOffsetRangeDTO(data?.rangeOffsets);
     }
@@ -39,6 +42,7 @@ public class TowerZoneOperatorBehavior : IOperatorBehavior
     public void OnRemove(Vector2Int cell, Vector3 worldPos)
     {
         TDGridMainModel.api?.UnoccupyCell(worldPos);
+        TDOperatorRegistry.api?.UnregisterOperator(cell); // no block list here, so nothing is released
         m_OperatorTransform = null;
     }
 
@@ -69,6 +73,10 @@ public class TowerZoneOperatorBehavior : IOperatorBehavior
 
     public bool IsEngaged(Vector2Int cell)
         => m_OperatorTransform != null && FindNearestInRange(cell, m_OperatorTransform.position) != null;
+
+    public bool Covers(Vector2Int myCell, Vector2Int target)
+        => m_RangeDTO != null && m_OperatorTransform != null
+        && m_RangeDTO.GetCellsInRange(myCell, m_OperatorTransform.rotation).Contains(target);
 
     private TDEnemyView FindNearestInRange(Vector2Int cell, Vector3 worldPos)
     {
