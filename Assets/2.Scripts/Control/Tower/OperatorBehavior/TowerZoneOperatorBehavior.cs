@@ -66,7 +66,23 @@ public class TowerZoneOperatorBehavior : IOperatorBehavior
         if (m_PendingTarget == null) return;
 
         Vector3 impactPos = m_PendingTarget.transform.position;
-        m_PendingTarget.TakeDamage(data?.damage ?? 0f);
+        float damage = data?.damage ?? 0f;
+        int radius = data?.splashRadius ?? 0;
+
+        if (radius > 0 && TDEnemyRegistry.api != null)
+        {
+            // Full damage to everyone within `radius` cells (Chebyshev) of the target, the target
+            // included exactly once. Copy first: a kill unregisters and edits the live list.
+            var centre = TDGridMainModel.api.WorldToCell(impactPos);
+            foreach (var enemy in new List<TDEnemyView>(TDEnemyRegistry.api.GetAll()))
+            {
+                if (enemy == null) continue;
+                var d = TDGridMainModel.api.WorldToCell(enemy.transform.position) - centre;
+                if (Mathf.Max(Mathf.Abs(d.x), Mathf.Abs(d.y)) <= radius) enemy.TakeDamage(damage);
+            }
+        }
+        else m_PendingTarget.TakeDamage(damage);
+
         TDGameEventBus.OperatorImpacted(impactPos, data?.operatorType ?? OperatorType.Ranger);
         m_PendingTarget = null;
     }

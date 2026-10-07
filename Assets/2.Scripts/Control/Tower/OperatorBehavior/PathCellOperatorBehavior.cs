@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using TDEnums;
 using UnityEngine;
 
@@ -16,9 +17,10 @@ using UnityEngine;
 /// hittable even when the data forgets to list {0,0}. That is a gameplay invariant, not
 /// something to leave depending on four asset rows being right.
 ///
-/// Exactly ONE enemy is struck per swing, whatever `blockCount` or `attackType` say. Those
-/// describe how many an operator HOLDS; melee always hits one. Widening the target set
-/// without that rule quadrupled Striker's DPS on unchanged tuning numbers.
+/// `blockCount` is how many enemies an operator HOLDS; `attackType` is how many it STRIKES.
+/// Data decides, never this class: Single swings at one, Multiple at every enemy it is
+/// holding. Today only Ace is Multiple. Keep it in data — the last time code widened the
+/// target set on its own, Striker's DPS quadrupled on unchanged tuning numbers.
 /// </summary>
 public class PathCellOperatorBehavior : IOperatorBehavior
 {
@@ -68,20 +70,29 @@ public class PathCellOperatorBehavior : IOperatorBehavior
     {
         if (TDOperatorRegistry.api == null) return false;
 
-        // ONE target, always. `blockCount` is how many enemies an operator HOLDS, not how
-        // many it strikes — a Defender pins three and still swings at one of them.
-        //
-        // Whoever it is blocking wins the tie: an operator must never turn its back on the
-        // enemy it is holding to swat someone walking past.
         var blocked = TDOperatorRegistry.api.GetBlockedEnemies(cell);
-        var target = blocked.Count > 0 ? blocked[0] : FindEnemyInRange(cell);
-        if (target == null) return false;
+        var targets = SelectTargets(blocked, blocked.Count > 0 ? null : FindEnemyInRange(cell),
+                                    data?.attackType ?? AttackType.Single);
+        if (targets.Count == 0) return false;
 
-        target.TakeDamage(data?.damage ?? 0f);
+        foreach (var target in targets)
+            target.TakeDamage(data?.damage ?? 0f);
 
         TDGameEventBus.OperatorAttacked(worldPos, data?.operatorType ?? OperatorType.Knight);
         TDGameEventBus.OperatorImpacted(worldPos, data?.operatorType ?? OperatorType.Knight);
         return true;
+    }
+
+    /// <summary>
+    /// Who one swing hits. Whoever it is blocking wins the tie: an operator must never turn
+    /// its back on the enemy it is holding to swat someone walking past. Generic so the
+    /// validator can check it without enemies in a scene.
+    /// </summary>
+    public static List<T> SelectTargets<T>(IReadOnlyList<T> blocked, T inRange, AttackType type) where T : class
+    {
+        if (blocked.Count > 0)
+            return type == AttackType.Multiple ? new List<T>(blocked) : new List<T> { blocked[0] };
+        return inRange != null ? new List<T> { inRange } : new List<T>();
     }
 
     /// <summary>

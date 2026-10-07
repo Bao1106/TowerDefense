@@ -13,8 +13,8 @@ public class OperatorData : IDeployableDTO
     [Tooltip("Class archetype — determines the deploy zone and block/attack style")]
     public OperatorType operatorType;
 
-    [Tooltip("Single = 1 target, Multiple = all blocked enemies / all enemies in range")]
-    public AttackType attackType = AttackType.Multiple;
+    [Tooltip("Melee: Single = 1 target, Multiple = every enemy it is blocking (1 in range when blocking none). Ranged ignores it — see splashRadius")]
+    public AttackType attackType = AttackType.Single;
 
     public int cost;
     public float hp;
@@ -34,6 +34,10 @@ public class OperatorData : IDeployableDTO
 
     [Tooltip("Cells within attack range when facing +X — default {(0,0)} = same cell as the operator")]
     public Vector2Int[] rangeOffsets;
+
+    [Min(0)]
+    [Tooltip("0 = single target; N = also hits every enemy within N cells (Chebyshev) of the target")]
+    public int splashRadius;
 
     // deployZone is derived from the class archetype — no manual configuration needed
     [JsonIgnore]

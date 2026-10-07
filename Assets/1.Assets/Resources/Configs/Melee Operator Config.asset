@@ -28,7 +28,7 @@ MonoBehaviour:
     - {x: 2, y: 0}
   - operatorName: Defender
     operatorType: 1
-    attackType: 1
+    attackType: 0
     cost: 20
     hp: 3000
     damage: 20
@@ -41,7 +41,7 @@ MonoBehaviour:
     - {x: 1, y: 0}
   - operatorName: Striker
     operatorType: 2
-    attackType: 1
+    attackType: 0
     cost: 18
     hp: 700
     damage: 80
@@ -85,7 +85,7 @@ MonoBehaviour:
     - {x: 5, y: 0}
   - operatorName: Layla
     operatorType: 2
-    attackType: 1
+    attackType: 0
     cost: 18
     hp: 750
     damage: 75
@@ -117,6 +117,7 @@ MonoBehaviour:
     - {x: 2, y: 1}
     - {x: 3, y: 0}
     - {x: 4, y: 0}
+    splashRadius: 1
   - operatorName: Tart
     operatorType: 1
     attackType: 0

@@ -49,6 +49,7 @@ public static class TDMoraleValidator
         Leaks(f);
         LeakSplit(f);
         DeployCap(f);
+        Targets(f);
         Resolve(f);
         FocusScale(f);
 
@@ -393,6 +394,23 @@ public static class TDMoraleValidator
         if (cap.Limit != TDConstant.CONFIG_MAX_SLOTS) f.Add("[CAP_BAD_LIMIT] limit 0 was accepted");
         cap.OnUnitPlaced(); cap.Initialize(3);
         if (cap.OnField != 0) f.Add("[CAP_RESET_ON_INIT] a new match inherited units");
+    }
+
+    // Spec §5.6: blockCount is how many a melee HOLDS, attackType is how many it STRIKES.
+    private static void Targets(List<string> f)
+    {
+        var two = new List<string> { "a", "b" };
+        var none = new List<string>();
+        Seq(f, "TARGETS_SINGLE_BLOCKED", PathCellOperatorBehavior.SelectTargets(two, "c", AttackType.Single), "a");
+        Seq(f, "TARGETS_MULTI_BLOCKED",  PathCellOperatorBehavior.SelectTargets(two, "c", AttackType.Multiple), "a", "b");
+        Seq(f, "TARGETS_FREE_IN_RANGE",  PathCellOperatorBehavior.SelectTargets(none, "c", AttackType.Multiple), "c");
+        Seq(f, "TARGETS_NONE",           PathCellOperatorBehavior.SelectTargets(none, null, AttackType.Single));
+    }
+
+    private static void Seq(List<string> f, string tag, List<string> got, params string[] want)
+    {
+        string g = string.Join(",", got), w = string.Join(",", want);
+        if (g != w) f.Add($"[{tag}] got [{g}] want [{w}]");
     }
 
     // ── G — Resolve is derived, and lands where §07 says ────────────────────
