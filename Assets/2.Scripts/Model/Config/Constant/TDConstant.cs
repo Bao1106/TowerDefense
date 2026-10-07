@@ -93,6 +93,9 @@ public static class TDConstant
     public const int CONFIG_ENEMIES_NUMBER = 5;
     public const int CONFIG_ENEMY_SPAWN_DELAY_MS = 2000;
     public const int CONFIG_WAVE_INTERVAL_MS = 10000;
+    // D14: later waves spawn denser (spawnInterval / wave weight) but never closer than this — the
+    // densest grunt spacing in Arknights 4-4. A level that asks for denser keeps its own value.
+    public const float CONFIG_SPAWN_INTERVAL_FLOOR = 0.8f;
     public const int CONFIG_NUM_PATHS = 3;
     public const int CONFIG_MAX_WAVES = 10;
     public const float CONFIG_PATH_OFFSET_Y = 0.1f;

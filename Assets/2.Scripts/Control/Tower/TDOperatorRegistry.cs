@@ -233,7 +233,7 @@ public class TDOperatorRegistry
         Debug.Log($"[Leak] {cell} → {(parts.Count > 0 ? string.Join(", ", parts) : "nobody")}");
     }
 
-    // ponytail: no Herald yet, so every leak is x1. Task 12 replaces this with the Herald
+    // ponytail: no Herald yet, so every leak is x1. The Herald task replaces this with the Herald
     // amplifier (x2 within HERALD_RADIUS of a live Herald).
     private float LeakAmplifierAt(Vector2Int cell) => 1f;
 

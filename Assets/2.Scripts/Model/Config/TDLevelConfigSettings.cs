@@ -39,14 +39,15 @@ public class TDLevelConfigSettings : ScriptableObject
 // Spec §5.7: the LEVEL owns rhythm and capacity (waves, total, intervals, deployLimit,
 // waveGrowth); the DIFFICULTY owns load — the mix of enemy types, hp/speed, the boss plan —
 // and nudges the level's deploy cap and starting gold.
-// Distribute(diff, total) → [Normal, Fast, Tank, Horde, Herald]. Bosses are not a share: they
-// come from bossWaveCount × bossPerWave, the one place that decides how many there are.
+// Distribute(diff, total, progress) → [Normal, Fast, Tank, Horde, Herald]. Bosses are not a
+// share: they come from bossWaveCount × bossPerWave, the one place that decides how many.
 
 public static class DifficultyRatioTable
 {
     public struct RatioRow
     {
-        public float normalPct, fastPct, tankPct, hordePct, heraldPct;
+        public float normalPct, fastPct, tankPct, hordePct, heraldPct; // the match average
+        public float mixRamp; // D14: heavy shares run from (1 − r)× at the first wave to (1 + r)× at the last
         public float hpMult, speedMult;
         public int bossWaveCount, bossPerWave;
         public float bossWaveMult;
@@ -54,26 +55,38 @@ public static class DifficultyRatioTable
     }
 
     // Horde and Herald do not exist yet, so the spec's Normal/Fast/Tank shares are renormalised
-    // over three types; Tasks 11 and 12 set the final five-way split.
+    // over three types; the Horde and Herald tasks set the final five-way split.
+    // mixRamp is capped by normalPct / heavy shares (Normal must not go negative late):
+    // Nightmare's 55% heavy average leaves room for 0.45 at most.
     private static readonly Dictionary<Difficulty, RatioRow> k_Table =
         new Dictionary<Difficulty, RatioRow>
         {
-            { Difficulty.Normal, new RatioRow { normalPct=0.647f, fastPct=0.235f, tankPct=0.118f, hpMult=1.0f, speedMult=1.0f,
+            { Difficulty.Normal, new RatioRow { normalPct=0.647f, fastPct=0.235f, tankPct=0.118f, mixRamp=1.0f, hpMult=1.0f, speedMult=1.0f,
                                                 bossWaveCount=1, bossPerWave=1, bossWaveMult=2.0f, deployLimitDelta=+1, startingGold=40 } },
-            { Difficulty.Hard, new RatioRow { normalPct=0.519f, fastPct=0.286f, tankPct=0.195f, hpMult=1.2f, speedMult=1.1f,
+            { Difficulty.Hard, new RatioRow { normalPct=0.519f, fastPct=0.286f, tankPct=0.195f, mixRamp=0.8f, hpMult=1.2f, speedMult=1.1f,
                                               bossWaveCount=2, bossPerWave=1, bossWaveMult=2.5f, deployLimitDelta=0, startingGold=30 } },
-            { Difficulty.Nightmare, new RatioRow { normalPct=0.373f, fastPct=0.299f, tankPct=0.328f, hpMult=1.5f, speedMult=1.25f,
+            { Difficulty.Nightmare, new RatioRow { normalPct=0.373f, fastPct=0.299f, tankPct=0.328f, mixRamp=0.4f, hpMult=1.5f, speedMult=1.25f,
                                                    bossWaveCount=3, bossPerWave=1, bossWaveMult=2.5f, deployLimitDelta=-1, startingGold=30 } },
         };
 
     public static RatioRow Get(Difficulty d) => k_Table[d];
 
-    // Returns [Normal, Fast, Tank, Horde, Herald] — guaranteed sum = total.
-    public static int[] Distribute(Difficulty d, int total)
+    // The mix at `progress` through the match (0 = first wave, 1 = last), as
+    // [Normal, Fast, Tank, Horde, Herald]. Spec §5.7 / D14 — the Arknights shape: open on light
+    // enemies, bring the heavy ones in as the match goes on. The ramp is linear and symmetric
+    // about mid-match, so the per-wave average is exactly the table; Fast stays flat (its job
+    // is stress, not escalation) and Normal takes what is left.
+    public static float[] Shares(Difficulty d, float progress)
     {
         RatioRow row = k_Table[d];
-        return Apportion(new[] { row.normalPct, row.fastPct, row.tankPct, row.hordePct, row.heraldPct }, total);
+        float k = 1f - row.mixRamp + 2f * row.mixRamp * Mathf.Clamp01(progress);
+        float tank = row.tankPct * k, horde = row.hordePct * k, herald = row.heraldPct * k;
+        return new[] { 1f - row.fastPct - tank - horde - herald, row.fastPct, tank, horde, herald };
     }
+
+    // Returns [Normal, Fast, Tank, Horde, Herald] — guaranteed sum = total.
+    public static int[] Distribute(Difficulty d, int total, float progress)
+        => Apportion(Shares(d, progress), total);
 
     // Splits `total` in proportion to `weights` (any scale) — largest-remainder (Hamilton).
     //

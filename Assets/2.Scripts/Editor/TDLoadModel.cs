@@ -26,9 +26,9 @@ public static class TDLoadModel
     /// One row per wave of `level` played at difficulty `d` — `d`, not level.difficulty, so the
     /// same level can be tabled at all three.
     ///
-    /// T is the time the spawner spends releasing the wave (bodies × spawnInterval), not the
-    /// pause after it: that is what reproduces the "current curve" §5.7 measures against, and
-    /// the pause is the same for every wave so it would only flatten the shape.
+    /// T is the time the spawner spends releasing the wave — bodies × that wave's own spacing
+    /// (SpawnIntervalFor, the function the wave loop uses; D14) — not the pause after it: the
+    /// pause is the same for every wave, so it would only flatten the shape.
     /// </summary>
     public static List<WaveLoad> Compute(LevelConfig level, Difficulty d,
         IReadOnlyList<OperatorData> roster, IReadOnlyList<EnemyData> enemies)
@@ -59,7 +59,7 @@ public static class TDLoadModel
                 hp += (Find(enemies, type)?.baseHP ?? 0f) * row.hpMult;
 
             int bodies = plan[i].Count;
-            float seconds = bodies * level.spawnInterval;
+            float seconds = bodies * TDEnemyPathMainControl.SpawnIntervalFor(level.spawnInterval, i, plan.Count, level.waveGrowth);
             float h = bodies > 0 ? hp / bodies : 0f;
             float capacity = dps * seconds + block * h;
             float rho = capacity > 0f ? hp / capacity : hp > 0f ? float.PositiveInfinity : 0f;

@@ -480,6 +480,7 @@ public class TDEnemyPathMainControl
                 int perGroup = Mathf.Max(1, batch.Count / assignments.Count);
 
                 var spawnTasks = new List<Task>();
+                float interval = SpawnIntervalFor(config.spawnInterval, waveIdx, wavePlans.Count, config.waveGrowth);
 
                 for (int a = 0; a < assignments.Count; a++)
                 {
@@ -490,7 +491,7 @@ public class TDEnemyPathMainControl
 
                     onWaveGroupStart?.Invoke(waveIdx, groups.IndexOf(group));
                     spawnTasks.Add(SpawnBatch(group.SpawnWorldPos, corridor, slice, ratio,
-                        waveIdx, config.spawnInterval, ct));
+                        waveIdx, interval, ct));
                 }
 
                 await Task.WhenAll(spawnTasks);
@@ -521,17 +522,35 @@ public class TDEnemyPathMainControl
         if (actual != config.totalEnemies)
             Debug.LogWarning($"[BuildWavePlans] level {config.levelIndex} asks for {config.totalEnemies} enemies; " +
                              $"{config.waveCount} waves and their bosses need at least {actual}");
-        Debug.Log($"<color=cyan>BuildWavePlans: {plans.Count} waves, {actual} enemies, sizes [{string.Join(", ", plans.Select(w => w.Count))}]</color>");
+        var intervals = plans.Select((_, i) => SpawnIntervalFor(config.spawnInterval, i, plans.Count, config.waveGrowth).ToString("F2"));
+        Debug.Log($"<color=cyan>BuildWavePlans: {plans.Count} waves, {actual} enemies, sizes [{string.Join(", ", plans.Select(w => w.Count))}], " +
+                  $"intervals [{string.Join(", ", intervals)}]</color>");
         return plans;
     }
 
     public int GetActualEnemyCount(List<List<EnemyType>> wavePlans)
         => wavePlans.Sum(w => w.Count);
 
+    // Spec §5.7: wave i of n weighs 1 + (g − 1)·i/(n − 1) — g is the last wave's weight over the first's.
+    public static float GrowthWeight(int waveIdx, int waveCount, float waveGrowth)
+        => waveCount <= 1 ? 1f : 1f + (waveGrowth - 1f) * waveIdx / (waveCount - 1);
+
+    // D14: a heavier wave also spawns denser, so the load per second rises with it — a bigger
+    // wave at the same spacing only lasts longer, and the ρ table stayed flat after the cap.
+    // Never slower than the level's own spawnInterval; never under the floor unless the level
+    // already asked for that. The wave loop and TDLoadModel both read this one function.
+    public static float SpawnIntervalFor(float spawnInterval, int waveIdx, int waveCount, float waveGrowth)
+    {
+        float w = GrowthWeight(waveIdx, waveCount, waveGrowth);
+        if (w <= 0f) return spawnInterval;
+        return Mathf.Min(spawnInterval, Mathf.Max(TDConstant.CONFIG_SPAWN_INTERVAL_FLOOR, spawnInterval / w));
+    }
+
     private static readonly EnemyType[] k_MixTypes = { EnemyType.Normal, EnemyType.Fast, EnemyType.Tank };
 
-    // Spec §5.7. Wave i weighs 1 + (g − 1)·i/(n − 1), boss waves × bossWaveMult on top, and the
-    // level's total is apportioned by weight — growth reshapes a match without lengthening it.
+    // Spec §5.7. Wave i weighs GrowthWeight, boss waves × bossWaveMult on top, and the level's
+    // total is apportioned by weight — growth reshapes a match without lengthening it. The mix
+    // follows the match's progress (D14): light enemies open, heavy ones arrive later.
     // Public and static so TDBalanceValidator checks this exact code, not a copy of it.
     public static List<List<EnemyType>> BuildWavePlans(Difficulty difficulty, int waveCount, int totalEnemies, float waveGrowth)
     {
@@ -548,7 +567,7 @@ public class TDEnemyPathMainControl
         int floor = 0;
         for (int i = 0; i < waveCount; i++)
         {
-            weights[i] = waveCount == 1 ? 1f : 1f + (waveGrowth - 1f) * i / (waveCount - 1);
+            weights[i] = GrowthWeight(i, waveCount, waveGrowth);
             if (isBoss[i]) weights[i] *= row.bossWaveMult;
             min[i] = isBoss[i] ? row.bossPerWave + 1 : 1; // a boss never walks in alone
             floor += min[i];
@@ -574,7 +593,8 @@ public class TDEnemyPathMainControl
         for (int w = 0; w < waveCount; w++)
         {
             int bosses = isBoss[w] ? row.bossPerWave : 0;
-            int[] mix = DifficultyRatioTable.Distribute(difficulty, sizes[w] - bosses);
+            float progress = waveCount == 1 ? 0f : (float)w / (waveCount - 1);
+            int[] mix = DifficultyRatioTable.Distribute(difficulty, sizes[w] - bosses, progress);
 
             // Horde and Herald (mix[3], mix[4]) have zero share until those enemy types exist.
             var wave = new List<EnemyType>(sizes[w]);

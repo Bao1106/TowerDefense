@@ -54,41 +54,48 @@ public static class TDBalanceValidator
         foreach (Difficulty d in System.Enum.GetValues(typeof(Difficulty)))
         {
             var row = DifficultyRatioTable.Get(d);
-            float[] pcts = { row.normalPct, row.fastPct, row.tankPct, row.hordePct, row.heraldPct };
 
-            // Ratios must describe a whole distribution, or every count below is meaningless.
-            float sumPct = 0f;
-            for (int i = 0; i < pcts.Length; i++) sumPct += pcts[i];
-            if (Mathf.Abs(sumPct - 1f) > 0.001f)
-                failures.Add($"[RATIO] {d}: percentages sum to {sumPct:F3}, expected 1.000");
-
-            for (int total = 1; total <= MAX_TOTAL; total++)
+            // The mix shifts over a match (D14), so every check holds at its start, middle and end.
+            foreach (float t in new[] { 0f, 0.5f, 1f })
             {
-                int[] counts = DifficultyRatioTable.Distribute(d, total);
+                float[] pcts = DifficultyRatioTable.Shares(d, t);
 
-                // A — the invariant the remainder trick exists to guarantee.
-                int sum = 0;
-                for (int i = 0; i < counts.Length; i++) sum += counts[i];
-                if (sum != total)
-                    failures.Add($"[SUM] {d} total={total}: counts sum to {sum} — [{string.Join(",", counts)}]");
+                // Ratios must describe a whole distribution, or every count below is meaningless.
+                float sumPct = 0f;
+                for (int i = 0; i < pcts.Length; i++) sumPct += pcts[i];
+                if (Mathf.Abs(sumPct - 1f) > 0.001f)
+                    failures.Add($"[RATIO] {d} t={t}: percentages sum to {sumPct:F3}, expected 1.000");
 
-                // B — a negative count means the remainder went underwater.
-                for (int i = 0; i < counts.Length; i++)
+                for (int total = 1; total <= MAX_TOTAL; total++)
                 {
-                    if (counts[i] < 0)
-                        failures.Add($"[NEGATIVE] {d} total={total}: {k_TypeNames[i]}={counts[i]}");
-                }
+                    int[] counts = DifficultyRatioTable.Distribute(d, total, t);
 
-                // C — every explicitly-rounded type stays within one of its ideal share.
-                // The remainder index is skipped: absorbing the others' error is its job.
-                for (int i = 0; i < counts.Length; i++)
-                {
-                    if (i == REMAINDER_INDEX) continue;
-                    float ideal = pcts[i] * total;
-                    if (Mathf.Abs(counts[i] - ideal) > 1f)
-                        failures.Add($"[DRIFT] {d} total={total}: {k_TypeNames[i]}={counts[i]}, ideal={ideal:F2}");
+                    // A — the invariant the remainder trick exists to guarantee.
+                    int sum = 0;
+                    for (int i = 0; i < counts.Length; i++) sum += counts[i];
+                    if (sum != total)
+                        failures.Add($"[SUM] {d} t={t} total={total}: counts sum to {sum} — [{string.Join(",", counts)}]");
+
+                    // B — a negative count means the remainder went underwater.
+                    for (int i = 0; i < counts.Length; i++)
+                    {
+                        if (counts[i] < 0)
+                            failures.Add($"[NEGATIVE] {d} t={t} total={total}: {k_TypeNames[i]}={counts[i]}");
+                    }
+
+                    // C — every explicitly-rounded type stays within one of its ideal share.
+                    // The remainder index is skipped: absorbing the others' error is its job.
+                    for (int i = 0; i < counts.Length; i++)
+                    {
+                        if (i == REMAINDER_INDEX) continue;
+                        float ideal = pcts[i] * total;
+                        if (Mathf.Abs(counts[i] - ideal) > 1f)
+                            failures.Add($"[DRIFT] {d} t={t} total={total}: {k_TypeNames[i]}={counts[i]}, ideal={ideal:F2}");
+                    }
                 }
             }
+
+            Mix(failures, d, row);
 
             // The maze generator proves wave 1 is affordable against CONFIG_PLAYER_STARTING_GOLD;
             // a difficulty that starts the player below it voids that proof.
@@ -98,9 +105,60 @@ public static class TDBalanceValidator
             Growth(failures, d, row);
         }
 
+        Density(failures);
         Dominance(failures);
         LoadFactor(failures);
         return failures;
+    }
+
+    // ── Mix — spec 2026-10-06 §5.7 / D14: heavy types arrive as the match goes on ──
+    //
+    // Heavy shares ramp from (1 − r) to (1 + r) of the table, so the match average IS the
+    // table; mixRamp only decides when the heavy enemies come.
+    private static void Mix(List<string> f, Difficulty d, DifficultyRatioTable.RatioRow row)
+    {
+        foreach (float t in new[] { 0f, 1f })
+        {
+            var s = DifficultyRatioTable.Shares(d, t);
+            if (s.Any(x => x < 0f) || Mathf.Abs(s.Sum() - 1f) > 0.001f)
+                f.Add($"[MIX_FEASIBLE] {d} t={t}: [{string.Join(", ", s.Select(x => x.ToString("F3")))}]");
+        }
+
+        float[] table = { row.normalPct, row.fastPct, row.tankPct, row.hordePct, row.heraldPct };
+        var mid = DifficultyRatioTable.Shares(d, 0.5f);
+        for (int i = 0; i < table.Length; i++)
+            if (Mathf.Abs(mid[i] - table[i]) > 0.001f)
+                f.Add($"[MIX_AVERAGE] {d}: {k_TypeNames[i]} {mid[i]:F3} mid-match, table says {table[i]:F3}");
+
+        float Heavy(float t) { var s = DifficultyRatioTable.Shares(d, t); return s[2] + s[3] + s[4]; }
+        if (Heavy(1f) < Heavy(0f) || (row.mixRamp > 0f && Heavy(1f) <= Heavy(0f)))
+            f.Add($"[MIX_RAMPS] {d}: heavy share {Heavy(0f):F3} at the start, {Heavy(1f):F3} at the end");
+    }
+
+    // ── Density — spec 2026-10-06 §5.7 / D14: later waves come faster ───────
+    //
+    // Never slower than the level's own spawnInterval, never denser than the floor — unless
+    // the level already asked for denser, which is its call, not ours.
+    private static void Density(List<string> f)
+    {
+        foreach (float s in new[] { 0.5f, 1.5f, 2f })
+            foreach (float g in new[] { 0.5f, 1f, 2.7f })
+                for (int n = 1; n <= 10; n++)
+                {
+                    string at = $"s={s} g={g} n={n}";
+                    float prev = TDEnemyPathMainControl.SpawnIntervalFor(s, 0, n, g);
+                    if (Mathf.Abs(prev - s) > 0.0001f) f.Add($"[DENSITY_FIRST] {at}: wave 1 at {prev:F2}");
+
+                    for (int i = 0; i < n; i++)
+                    {
+                        float si = TDEnemyPathMainControl.SpawnIntervalFor(s, i, n, g);
+                        if (si > s + 0.0001f) f.Add($"[DENSITY_NEVER_SLOWER] {at} wave {i + 1}: {si:F2}");
+                        if (si < Mathf.Min(s, TDConstant.CONFIG_SPAWN_INTERVAL_FLOOR) - 0.0001f)
+                            f.Add($"[DENSITY_FLOOR] {at} wave {i + 1}: {si:F2}");
+                        if (g >= 1f && si > prev + 0.0001f) f.Add($"[DENSITY_MONOTONE] {at} wave {i + 1}: {si:F2} after {prev:F2}");
+                        prev = si;
+                    }
+                }
     }
 
     // ── Growth — spec 2026-10-06 §5.7: waves grow, the level's total holds ──
@@ -217,20 +275,25 @@ public static class TDBalanceValidator
                 foreach (var r in rows)
                     if (float.IsNaN(r.rho) || float.IsInfinity(r.rho)) f.Add($"[RHO_FINITE] {at} wave {r.wave}: ρ = {r.rho}");
 
+                // D14: load keeps rising after the team reaches the cap. A ratio, so it holds
+                // calibrated or not — this is the shape the waves exist to produce.
+                int limit = Mathf.Max(1, level.deployLimit + DifficultyRatioTable.Get(d).deployLimitDelta);
+                var atCap = rows.FirstOrDefault(r => !r.isBoss && r.onField == limit);
+                var last = rows.LastOrDefault(r => !r.isBoss);
+                if (atCap.wave > 0 && last.wave > atCap.wave && last.rho < 1.1f * atCap.rho)
+                    f.Add($"[RHO_RISES] {at}: last regular wave {last.rho:F2} < 1.1 × first at cap {atCap.rho:F2}");
+
                 float e = TDLoadModel.EfficiencyOf(d);
                 if (float.IsNaN(e) || rows.Count == 0) continue;
 
                 var want = k_RhoTargets[d];
-                int limit = Mathf.Max(1, level.deployLimit + DifficultyRatioTable.Get(d).deployLimitDelta);
                 var early = rows.Where(r => r.onField < limit).ToList();
                 if (early.Count > 0 && early.Max(r => r.rho) > want.early + 0.1f)
                     f.Add($"[RHO_EARLY] {at}: peak before the cap {early.Max(r => r.rho):F2} > {want.early:F2} + 0.1");
-                var cap = rows.FirstOrDefault(r => !r.isBoss && r.onField == limit);
-                if (cap.wave > 0 && Mathf.Abs(cap.rho - want.atCap) > 0.1f)
-                    f.Add($"[RHO_AT_CAP] {at} wave {cap.wave}: {cap.rho:F2}, want {want.atCap:F2} ± 0.1");
-                var late = rows.LastOrDefault(r => !r.isBoss);
-                if (late.wave > 0 && Mathf.Abs(late.rho - want.late) > 0.1f)
-                    f.Add($"[RHO_LATE] {at} wave {late.wave}: {late.rho:F2}, want {want.late:F2} ± 0.1");
+                if (atCap.wave > 0 && Mathf.Abs(atCap.rho - want.atCap) > 0.1f)
+                    f.Add($"[RHO_AT_CAP] {at} wave {atCap.wave}: {atCap.rho:F2}, want {want.atCap:F2} ± 0.1");
+                if (last.wave > 0 && Mathf.Abs(last.rho - want.late) > 0.1f)
+                    f.Add($"[RHO_LATE] {at} wave {last.wave}: {last.rho:F2}, want {want.late:F2} ± 0.1");
                 var boss = rows.Where(r => r.isBoss).ToList();
                 if (boss.Count > 0 && Mathf.Abs(boss.Max(r => r.rho) - want.peak) > 0.15f)
                     f.Add($"[RHO_PEAK] {at}: {boss.Max(r => r.rho):F2}, want {want.peak:F2} ± 0.15");
