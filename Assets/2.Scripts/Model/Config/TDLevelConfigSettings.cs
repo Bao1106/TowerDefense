@@ -24,6 +24,8 @@ public class TDLevelConfigSettings : ScriptableObject
         => m_api ??= TDResourceObject.GetResource<TDLevelConfigSettings>(TDConstant.CONFIG_LEVEL);
     [SerializeField] private List<LevelConfig> levels;
 
+    public List<LevelConfig> GetAllLevels() => levels ?? new List<LevelConfig>();
+
     public LevelConfig GetLevel(int levelIndex)
     {
         var cfg = levels.Find(l => l.levelIndex == levelIndex);

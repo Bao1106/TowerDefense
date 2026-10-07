@@ -24,6 +24,8 @@ public class TDFlyweightEnemyDataSettings : ScriptableObject
         => m_api ??= TDResourceObject.GetResource<TDFlyweightEnemyDataSettings>(TDConstant.CONFIG_ENEMY);
     [SerializeField] private List<EnemyData> enemies;
 
+    public List<EnemyData> GetAllEnemies() => enemies ?? new List<EnemyData>();
+
     public EnemyData GetData(EnemyType type)
     {
         var data = enemies.Find(e => e.type == type);

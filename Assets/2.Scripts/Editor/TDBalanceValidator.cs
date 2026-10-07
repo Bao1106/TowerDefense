@@ -99,6 +99,7 @@ public static class TDBalanceValidator
         }
 
         Dominance(failures);
+        LoadFactor(failures);
         return failures;
     }
 
@@ -184,6 +185,81 @@ public static class TDBalanceValidator
                 }
                 if (allGe && anyGt) f.Add($"[DOMINATED] {group[a].name} ≥ {group[b].name} on every axis");
             }
+    }
+
+    // ── LoadFactor — spec 2026-10-06 §4.2 / §5.7: ρ per wave, every level × difficulty ──
+    //
+    // ρ = wave HP / (team DPS × T + team block × H). Structure is always checked; the
+    // targets only once EfficiencyOf(d) is calibrated against bot runs — an uncalibrated ρ
+    // is a shape, not a number to hold the data to.
+    private static readonly Dictionary<Difficulty, (float early, float atCap, float late, float peak)> k_RhoTargets = new()
+    {
+        { Difficulty.Normal,    (0.50f, 0.60f, 0.75f, 1.00f) },
+        { Difficulty.Hard,      (0.60f, 0.75f, 0.90f, 1.20f) },
+        { Difficulty.Nightmare, (0.70f, 0.85f, 1.00f, 1.40f) },
+    };
+
+    private static void LoadFactor(List<string> f)
+    {
+        var ops = LoadConfig<TDFlyweightOperatorDataSettings>()?.GetAllOperators();
+        var enemies = LoadConfig<TDFlyweightEnemyDataSettings>()?.GetAllEnemies();
+        var levels = LoadConfig<TDLevelConfigSettings>()?.GetAllLevels();
+        if (ops == null || enemies == null || levels == null) { f.Add("[RHO_CONFIG] operator, enemy or level config not loadable"); return; }
+
+        foreach (var name in TDLoadModel.ReferenceTeam)
+            if (!ops.Any(o => o.operatorName == name)) f.Add($"[RHO_TEAM_RESOLVES] reference team member '{name}' not in the operator config");
+
+        foreach (var level in levels)
+            foreach (Difficulty d in System.Enum.GetValues(typeof(Difficulty)))
+            {
+                var rows = TDLoadModel.Compute(level, d, ops, enemies);
+                string at = $"level {level.levelIndex} {d}";
+                foreach (var r in rows)
+                    if (float.IsNaN(r.rho) || float.IsInfinity(r.rho)) f.Add($"[RHO_FINITE] {at} wave {r.wave}: ρ = {r.rho}");
+
+                float e = TDLoadModel.EfficiencyOf(d);
+                if (float.IsNaN(e) || rows.Count == 0) continue;
+
+                var want = k_RhoTargets[d];
+                int limit = Mathf.Max(1, level.deployLimit + DifficultyRatioTable.Get(d).deployLimitDelta);
+                var early = rows.Where(r => r.onField < limit).ToList();
+                if (early.Count > 0 && early.Max(r => r.rho) > want.early + 0.1f)
+                    f.Add($"[RHO_EARLY] {at}: peak before the cap {early.Max(r => r.rho):F2} > {want.early:F2} + 0.1");
+                var cap = rows.FirstOrDefault(r => !r.isBoss && r.onField == limit);
+                if (cap.wave > 0 && Mathf.Abs(cap.rho - want.atCap) > 0.1f)
+                    f.Add($"[RHO_AT_CAP] {at} wave {cap.wave}: {cap.rho:F2}, want {want.atCap:F2} ± 0.1");
+                var late = rows.LastOrDefault(r => !r.isBoss);
+                if (late.wave > 0 && Mathf.Abs(late.rho - want.late) > 0.1f)
+                    f.Add($"[RHO_LATE] {at} wave {late.wave}: {late.rho:F2}, want {want.late:F2} ± 0.1");
+                var boss = rows.Where(r => r.isBoss).ToList();
+                if (boss.Count > 0 && Mathf.Abs(boss.Max(r => r.rho) - want.peak) > 0.15f)
+                    f.Add($"[RHO_PEAK] {at}: {boss.Max(r => r.rho):F2}, want {want.peak:F2} ± 0.15");
+            }
+    }
+
+    [MenuItem("Tools/TD/Print Load Table")]
+    public static void PrintLoadTableFromMenu() => Debug.Log(LoadTable());
+
+    /// One line per wave for every level × difficulty — the table §5.7 compares against.
+    public static string LoadTable()
+    {
+        var ops = LoadConfig<TDFlyweightOperatorDataSettings>()?.GetAllOperators();
+        var enemies = LoadConfig<TDFlyweightEnemyDataSettings>()?.GetAllEnemies();
+        var levels = LoadConfig<TDLevelConfigSettings>()?.GetAllLevels();
+        if (ops == null || enemies == null || levels == null) return "[LoadTable] operator, enemy or level config not loadable";
+
+        var sb = new System.Text.StringBuilder();
+        foreach (var level in levels)
+            foreach (Difficulty d in System.Enum.GetValues(typeof(Difficulty)))
+            {
+                float e = TDLoadModel.EfficiencyOf(d);
+                sb.AppendLine($"── level {level.levelIndex} · {d} · {level.totalEnemies} enemies / {level.waveCount} waves · growth {level.waveGrowth} · " +
+                              (float.IsNaN(e) ? "uncalibrated" : $"efficiency {e:F2}") + " ──");
+                sb.AppendLine("wave  boss  onField      hp  bodies      T      ρ");
+                foreach (var r in TDLoadModel.Compute(level, d, ops, enemies))
+                    sb.AppendLine($"{r.wave,4}  {(r.isBoss ? "  B " : "    ")}  {r.onField,7}  {r.hp,6:F0}  {r.bodies,6}  {r.seconds,5:F1}  {r.rho,5:F2}");
+            }
+        return sb.ToString();
     }
 
     // Straight from the asset database: the configs' .api routes through a scene object and
