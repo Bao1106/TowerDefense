@@ -156,6 +156,9 @@ public class TDEnemyPathMainView : MonoBehaviour
         LevelConfig config = TDLevelConfigSettings.api?.GetLevel(m_LevelIndex);
         if (config == null) return;
 
+        // Difficulty sets the opening purse (spec §5.7). After the HUD's Start, which seeds
+        // the floor value — this is the one that stands.
+        TDGoldControl.api?.Initialize(DifficultyRatioTable.Get(config.difficulty).startingGold);
         TDDeployCap.api?.Initialize(TDDeployCap.LimitFor(config));
 
         // BUG-02 fix: use the actual enemy count from the generated wave plans

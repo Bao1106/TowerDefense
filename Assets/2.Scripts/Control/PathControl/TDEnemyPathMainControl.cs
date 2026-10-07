@@ -516,11 +516,82 @@ public class TDEnemyPathMainControl
 
     public List<List<EnemyType>> BuildWavePlans(LevelConfig config)
     {
-        return BuildWavePlansInternal(config.difficulty, config.waveCount, config.totalEnemies);
+        var plans = BuildWavePlans(config.difficulty, config.waveCount, config.totalEnemies, config.waveGrowth);
+        int actual = plans.Sum(w => w.Count);
+        if (actual != config.totalEnemies)
+            Debug.LogWarning($"[BuildWavePlans] level {config.levelIndex} asks for {config.totalEnemies} enemies; " +
+                             $"{config.waveCount} waves and their bosses need at least {actual}");
+        Debug.Log($"<color=cyan>BuildWavePlans: {plans.Count} waves, {actual} enemies, sizes [{string.Join(", ", plans.Select(w => w.Count))}]</color>");
+        return plans;
     }
 
     public int GetActualEnemyCount(List<List<EnemyType>> wavePlans)
         => wavePlans.Sum(w => w.Count);
+
+    private static readonly EnemyType[] k_MixTypes = { EnemyType.Normal, EnemyType.Fast, EnemyType.Tank };
+
+    // Spec §5.7. Wave i weighs 1 + (g − 1)·i/(n − 1), boss waves × bossWaveMult on top, and the
+    // level's total is apportioned by weight — growth reshapes a match without lengthening it.
+    // Public and static so TDBalanceValidator checks this exact code, not a copy of it.
+    public static List<List<EnemyType>> BuildWavePlans(Difficulty difficulty, int waveCount, int totalEnemies, float waveGrowth)
+    {
+        var row = DifficultyRatioTable.Get(difficulty);
+        waveCount = Mathf.Max(1, waveCount);
+        int bossWaveCount = Mathf.Min(row.bossWaveCount, waveCount);
+
+        var isBoss = new bool[waveCount];
+        for (int k = 1; k <= bossWaveCount; k++)
+            isBoss[Mathf.Clamp(Mathf.CeilToInt((float)waveCount * k / bossWaveCount) - 1, 0, waveCount - 1)] = true;
+
+        var weights = new float[waveCount];
+        var min = new int[waveCount];
+        int floor = 0;
+        for (int i = 0; i < waveCount; i++)
+        {
+            weights[i] = waveCount == 1 ? 1f : 1f + (waveGrowth - 1f) * i / (waveCount - 1);
+            if (isBoss[i]) weights[i] *= row.bossWaveMult;
+            min[i] = isBoss[i] ? row.bossPerWave + 1 : 1; // a boss never walks in alone
+            floor += min[i];
+        }
+
+        // A level asking for fewer enemies than its waves can hold gets the minimum, not a
+        // missing boss: the boss plan is the difficulty's promise.
+        int[] sizes = DifficultyRatioTable.Apportion(weights, Mathf.Max(totalEnemies, floor));
+
+        // Rounding can starve a light early wave; feed it from the biggest wave that can spare
+        // one. A donor always exists because the total is at least the sum of the minimums.
+        for (int i = 0; i < waveCount; i++)
+            while (sizes[i] < min[i])
+            {
+                int donor = -1;
+                for (int j = 0; j < waveCount; j++)
+                    if (sizes[j] > min[j] && (donor < 0 || sizes[j] > sizes[donor])) donor = j;
+                sizes[donor]--;
+                sizes[i]++;
+            }
+
+        var plans = new List<List<EnemyType>>(waveCount);
+        for (int w = 0; w < waveCount; w++)
+        {
+            int bosses = isBoss[w] ? row.bossPerWave : 0;
+            int[] mix = DifficultyRatioTable.Distribute(difficulty, sizes[w] - bosses);
+
+            // Horde and Herald (mix[3], mix[4]) have zero share until those enemy types exist.
+            var wave = new List<EnemyType>(sizes[w]);
+            for (int t = 0; t < k_MixTypes.Length; t++)
+                for (int i = 0; i < mix[t]; i++) wave.Add(k_MixTypes[t]);
+
+            for (int i = wave.Count - 1; i > 0; i--)
+            {
+                int rIdx = Random.Range(0, i + 1);
+                (wave[i], wave[rIdx]) = (wave[rIdx], wave[i]);
+            }
+
+            for (int i = 0; i < bosses; i++) wave.Add(EnemyType.Boss);
+            plans.Add(wave);
+        }
+        return plans;
+    }
 
     // ── Private ───────────────────────────────────────────────────────────────
 
@@ -557,75 +628,6 @@ public class TDEnemyPathMainControl
             await PauseAwareDelay(spawnInterval, ct);
         }
     }
-
-    private static List<List<EnemyType>> BuildWavePlansInternal(Difficulty difficulty, int waveCount, int totalEnemies)
-    {
-        // Was `>= Extreme`, i.e. the top two of five rungs. Mapped to Nightmare only, not
-        // to Hard: 15 waves of 75 enemies makes a match a marathon rather than a harder
-        // one, and Hard sits at hpMult 1.2 — it has not earned that yet.
-        if (difficulty >= Difficulty.Nightmare)
-        {
-            waveCount = Mathf.Max(waveCount, 15);
-            totalEnemies = Mathf.Max(totalEnemies, 75);
-        }
-
-        var (bossWaveCount, bossPerWave, bossWaveMult) = GetBossParams(difficulty);
-        bossWaveCount = Mathf.Min(bossWaveCount, waveCount);
-
-        int regularWaveCount = waveCount - bossWaveCount;
-        float r = totalEnemies / (regularWaveCount + bossWaveCount * bossWaveMult);
-        int regularSize = Mathf.Max(1, Mathf.RoundToInt(r));
-        int bossWaveSize = Mathf.Max(bossPerWave + 1, Mathf.RoundToInt(r * bossWaveMult));
-
-        var bossWaveIndices = new HashSet<int>();
-        for (int k = 1; k <= bossWaveCount; k++)
-        {
-            int idx = Mathf.Clamp(Mathf.CeilToInt((float)waveCount * k / bossWaveCount) - 1, 0, waveCount - 1);
-            bossWaveIndices.Add(idx);
-        }
-
-        var ratio = DifficultyRatioTable.Get(difficulty);
-        float nonBossTotal = ratio.normalPct + ratio.fastPct + ratio.tankPct;
-
-        var plans = new List<List<EnemyType>>(waveCount);
-        for (int w = 0; w < waveCount; w++)
-        {
-            bool isBossWave = bossWaveIndices.Contains(w);
-            int nonBossCount = isBossWave ? bossWaveSize - bossPerWave : regularSize;
-
-            int normalCount = Mathf.RoundToInt(ratio.normalPct / nonBossTotal * nonBossCount);
-            int fastCount = Mathf.RoundToInt(ratio.fastPct / nonBossTotal * nonBossCount);
-            int tankCount = Mathf.Max(0, nonBossCount - normalCount - fastCount);
-
-            var wave = new List<EnemyType>(nonBossCount + (isBossWave ? bossPerWave : 0));
-            for (int i = 0; i < normalCount; i++) wave.Add(EnemyType.Normal);
-            for (int i = 0; i < fastCount; i++) wave.Add(EnemyType.Fast);
-            for (int i = 0; i < tankCount; i++) wave.Add(EnemyType.Tank);
-
-            for (int i = wave.Count - 1; i > 0; i--)
-            {
-                int rIdx = Random.Range(0, i + 1);
-                (wave[i], wave[rIdx]) = (wave[rIdx], wave[i]);
-            }
-
-            if (isBossWave)
-                for (int i = 0; i < bossPerWave; i++)
-                    wave.Add(EnemyType.Boss);
-
-            plans.Add(wave);
-        }
-
-        Debug.Log($"<color=cyan>BuildWavePlans: {waveCount} waves | regular={regularSize} | bossWaves={bossWaveCount}</color>");
-        return plans;
-    }
-
-    private static (int bossWaves, int bossPerWave, float bossWaveMult) GetBossParams(Difficulty d) => d switch
-    {
-        Difficulty.Normal => (1, 1, 2.0f),
-        Difficulty.Hard => (2, 1, 2.5f),
-        Difficulty.Nightmare => (5, 2, 2.5f),
-        _ => (1, 1, 2.0f),
-    };
 
     private static async Task PauseAwareDelay(float seconds, CancellationToken ct)
     {

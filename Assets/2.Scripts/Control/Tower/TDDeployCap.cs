@@ -51,5 +51,8 @@ public sealed class TDDeployCap
 
     public void NotifyRejected() => OnRejected?.Invoke();
 
-    public static int LimitFor(LevelConfig level) => level != null ? level.deployLimit : TDConstant.CONFIG_MAX_SLOTS;
+    // Level owns capacity, difficulty nudges it (spec §5.7). Never below 1: a match nobody can deploy into is not a match.
+    public static int LimitFor(LevelConfig level) => level != null
+        ? Mathf.Max(1, level.deployLimit + DifficultyRatioTable.Get(level.difficulty).deployLimitDelta)
+        : TDConstant.CONFIG_MAX_SLOTS;
 }

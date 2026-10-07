@@ -13,6 +13,7 @@ public class LevelConfig
     public float waveInterval; // seconds between waves
     public float spawnInterval; // seconds between enemies in same wave
     public int deployLimit = 5; // units on the field at once — operators and turrets alike (spec §5.1)
+    public float waveGrowth = 1f; // last regular wave ÷ first, interpolated linearly; 1 = every wave the same (spec §5.7)
 }
 
 [CreateAssetMenu(menuName = "Game Configs/Level Config", fileName = "Level Config", order = 3)]
@@ -33,31 +34,48 @@ public class TDLevelConfigSettings : ScriptableObject
 }
 
 // ── Difficulty Ratio Table ─────────────────────────────────────────────────────
-// Defines the percentage distribution of each enemy type and HP/Speed multipliers per difficulty level.
-// Distribute(diff, total) → [normalCount, fastCount, tankCount, bossCount]
+// Spec §5.7: the LEVEL owns rhythm and capacity (waves, total, intervals, deployLimit,
+// waveGrowth); the DIFFICULTY owns load — the mix of enemy types, hp/speed, the boss plan —
+// and nudges the level's deploy cap and starting gold.
+// Distribute(diff, total) → [Normal, Fast, Tank, Horde, Herald]. Bosses are not a share: they
+// come from bossWaveCount × bossPerWave, the one place that decides how many there are.
 
 public static class DifficultyRatioTable
 {
     public struct RatioRow
     {
-        public float normalPct, fastPct, tankPct, bossPct;
+        public float normalPct, fastPct, tankPct, hordePct, heraldPct;
         public float hpMult, speedMult;
+        public int bossWaveCount, bossPerWave;
+        public float bossWaveMult;
+        public int deployLimitDelta, startingGold;
     }
 
+    // Horde and Herald do not exist yet, so the spec's Normal/Fast/Tank shares are renormalised
+    // over three types; Tasks 11 and 12 set the final five-way split.
     private static readonly Dictionary<Difficulty, RatioRow> k_Table =
         new Dictionary<Difficulty, RatioRow>
         {
-            { Difficulty.Normal, new RatioRow { normalPct=0.60f, fastPct=0.25f, tankPct=0.12f, bossPct=0.03f, hpMult=1.0f, speedMult=1.0f } },
-            { Difficulty.Hard, new RatioRow { normalPct=0.45f, fastPct=0.30f, tankPct=0.18f, bossPct=0.07f, hpMult=1.2f, speedMult=1.1f } },
-            { Difficulty.Nightmare, new RatioRow { normalPct=0.15f, fastPct=0.25f, tankPct=0.35f, bossPct=0.25f, hpMult=2.0f, speedMult=1.5f } },
+            { Difficulty.Normal, new RatioRow { normalPct=0.647f, fastPct=0.235f, tankPct=0.118f, hpMult=1.0f, speedMult=1.0f,
+                                                bossWaveCount=1, bossPerWave=1, bossWaveMult=2.0f, deployLimitDelta=+1, startingGold=40 } },
+            { Difficulty.Hard, new RatioRow { normalPct=0.519f, fastPct=0.286f, tankPct=0.195f, hpMult=1.2f, speedMult=1.1f,
+                                              bossWaveCount=2, bossPerWave=1, bossWaveMult=2.5f, deployLimitDelta=0, startingGold=30 } },
+            { Difficulty.Nightmare, new RatioRow { normalPct=0.373f, fastPct=0.299f, tankPct=0.328f, hpMult=1.5f, speedMult=1.25f,
+                                                   bossWaveCount=3, bossPerWave=1, bossWaveMult=2.5f, deployLimitDelta=-1, startingGold=30 } },
         };
 
     public static RatioRow Get(Difficulty d) => k_Table[d];
 
-    // Returns [normalCount, fastCount, tankCount, bossCount] — guaranteed sum = total
-    // Largest-remainder (Hamilton) apportionment.
+    // Returns [Normal, Fast, Tank, Horde, Herald] — guaranteed sum = total.
+    public static int[] Distribute(Difficulty d, int total)
+    {
+        RatioRow row = k_Table[d];
+        return Apportion(new[] { row.normalPct, row.fastPct, row.tankPct, row.hordePct, row.heraldPct }, total);
+    }
+
+    // Splits `total` in proportion to `weights` (any scale) — largest-remainder (Hamilton).
     //
-    // Replaces "round three types, give the leftover to Boss". That trick broke two ways,
+    // Replaced "round three types, give the leftover to Boss". That trick broke two ways,
     // both found by actually running TDBalanceValidator:
     //
     //   [SUM] Normal total=6 → [4,2,1,0] sums to 7. Rounding 3.6/1.5/0.72 up gave 7 slots
@@ -67,23 +85,24 @@ public static class DifficultyRatioTable
     //         had already absorbed the rounding in their favour.
     //
     // Hamilton has no leftover type at all: every count is floor(ideal), then the seats
-    // still unfilled go to the largest fractions. That makes all four assertions hold by
-    // construction rather than by luck — sum is total because seats are handed out one by
-    // one; nothing is negative because floor of a non-negative is non-negative; every
-    // count is within 1 of its ideal because it is floor or floor+1; and any type whose
-    // ideal is >= 1 gets at least floor(ideal) >= 1, so a stage that calls for a boss gets one.
-    public static int[] Distribute(Difficulty d, int total)
+    // still unfilled go to the largest fractions. Sum is total because seats are handed out
+    // one by one; nothing is negative because floor of a non-negative is non-negative; every
+    // count is within 1 of its ideal because it is floor or floor+1. The wave sizer uses the
+    // same routine, so enemy mix and wave sizes round the same way.
+    public static int[] Apportion(float[] weights, int total)
     {
-        RatioRow row = k_Table[d];
-        float[] pcts = { row.normalPct, row.fastPct, row.tankPct, row.bossPct };
+        int n = weights.Length;
+        var counts = new int[n];
+        float sum = 0f;
+        for (int i = 0; i < n; i++) sum += Mathf.Max(0f, weights[i]);
+        if (n == 0 || total <= 0) return counts;
+        if (sum <= 0f) { counts[0] = total; return counts; }
 
-        var counts = new int[4];
-        var frac = new float[4];
+        var frac = new float[n];
         int assigned = 0;
-
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < n; i++)
         {
-            float ideal = Mathf.Max(0f, pcts[i]) * total;
+            float ideal = Mathf.Max(0f, weights[i]) / sum * total;
             counts[i] = Mathf.FloorToInt(ideal);
             frac[i] = ideal - counts[i];
             assigned += counts[i];
@@ -92,28 +111,13 @@ public static class DifficultyRatioTable
         // Hand out the remaining seats to the biggest fractions, one each.
         while (assigned < total)
         {
-            int best = -1;
-            for (int i = 0; i < 4; i++)
-                if (frac[i] > 0f && (best < 0 || frac[i] > frac[best])) best = i;
-
-            if (best < 0) best = 0; // percentages did not sum to 1 — RATIO reports that
+            int best = 0;
+            for (int i = 1; i < n; i++)
+                if (frac[i] > frac[best]) best = i;
             counts[best]++;
-            frac[best] = 0f;
+            frac[best] = -1f;
             assigned++;
         }
-
-        // Only reachable if the percentages sum above 1; take back from the smallest share.
-        while (assigned > total)
-        {
-            int worst = -1;
-            for (int i = 0; i < 4; i++)
-                if (counts[i] > 0 && (worst < 0 || counts[i] < counts[worst])) worst = i;
-
-            if (worst < 0) break;
-            counts[worst]--;
-            assigned--;
-        }
-
         return counts;
     }
 }

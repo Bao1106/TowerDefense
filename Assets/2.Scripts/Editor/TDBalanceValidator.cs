@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using TDEnums;
 using UnityEditor;
 using UnityEngine;
@@ -21,13 +22,11 @@ public static class TDBalanceValidator
     private const int MAX_TOTAL = 200;
     private const int MAX_REPORTED = 25;
 
-    // Distribute() gives this index the leftover so the sum always lands on `total`,
-    // which means it absorbs every other type's rounding error. Tolerance checks skip it.
-    // NOTE: when Distribute() moves to 6 types this must become the Normal index (0),
-    // because Boss is too small to absorb the drift — see MORALE_SYSTEM_DESIGN.md § 11.3.
-    private const int REMAINDER_INDEX = 3; // Boss
+    // Hamilton apportionment hands no type a leftover any more; this is just the one share the
+    // DRIFT check excuses. Normal: the largest share, so the one that can best absorb a seat.
+    private const int REMAINDER_INDEX = 0; // Normal
 
-    private static readonly string[] k_TypeNames = { "Normal", "Fast", "Tank", "Boss" };
+    private static readonly string[] k_TypeNames = { "Normal", "Fast", "Tank", "Horde", "Herald" };
 
     [MenuItem("Tools/TD/Validate Balance Tables")]
     public static void RunFromMenu()
@@ -55,7 +54,7 @@ public static class TDBalanceValidator
         foreach (Difficulty d in System.Enum.GetValues(typeof(Difficulty)))
         {
             var row = DifficultyRatioTable.Get(d);
-            float[] pcts = { row.normalPct, row.fastPct, row.tankPct, row.bossPct };
+            float[] pcts = { row.normalPct, row.fastPct, row.tankPct, row.hordePct, row.heraldPct };
 
             // Ratios must describe a whole distribution, or every count below is meaningless.
             float sumPct = 0f;
@@ -89,18 +88,52 @@ public static class TDBalanceValidator
                     if (Mathf.Abs(counts[i] - ideal) > 1f)
                         failures.Add($"[DRIFT] {d} total={total}: {k_TypeNames[i]}={counts[i]}, ideal={ideal:F2}");
                 }
-
-                // D — a stage whose ratios call for a boss must actually get one.
-                // This is the assertion that fires when Distribute() grows to 6 types and
-                // the leftover for Boss is eaten by the extra rounding error.
-                float bossIdeal = row.bossPct * total;
-                if (bossIdeal >= 1f && counts[3] < 1)
-                    failures.Add($"[NO_BOSS] {d} total={total}: bossPct={row.bossPct:F2} wants {bossIdeal:F2} boss, got 0");
             }
+
+            // The maze generator proves wave 1 is affordable against CONFIG_PLAYER_STARTING_GOLD;
+            // a difficulty that starts the player below it voids that proof.
+            if (row.startingGold < TDConstant.CONFIG_PLAYER_STARTING_GOLD)
+                failures.Add($"[STARTING_GOLD_FLOOR] {d}: starts with {row.startingGold} < {TDConstant.CONFIG_PLAYER_STARTING_GOLD}");
+
+            Growth(failures, d, row);
         }
 
         Dominance(failures);
         return failures;
+    }
+
+    // ── Growth — spec 2026-10-06 §5.7: waves grow, the level's total holds ──
+    //
+    // Boss count has ONE source, the difficulty row; the generator and this check both read it
+    // (it used to be bossPct here and GetBossParams there — two answers to one question).
+    // A level asking for fewer enemies than its waves can hold (every wave 1, every boss wave
+    // its bosses + 1 escort) gets that minimum instead, so `want` is max(total, floor).
+    private static void Growth(List<string> f, Difficulty d, DifficultyRatioTable.RatioRow row)
+    {
+        foreach (float g in new[] { 1f, 2.7f })
+            for (int waves = 1; waves <= 10; waves++)
+            {
+                int floor = waves + Mathf.Min(row.bossWaveCount, waves) * row.bossPerWave;
+                for (int total = waves; total <= MAX_TOTAL; total++)
+                {
+                    var plan = TDEnemyPathMainControl.BuildWavePlans(d, waves, total, g);
+                    int sum = plan.Sum(w => w.Count);
+                    int want = Mathf.Max(total, floor);
+                    if (sum != want) f.Add($"[GROWTH_SUM] {d} w={waves} t={total} g={g}: {sum}, want {want}");
+                    if (plan.Any(w => w.Count < 1)) f.Add($"[GROWTH_MIN1] {d} w={waves} t={total} g={g}");
+                    // boss waves keep room for at least one escort
+                    foreach (var w in plan.Where(w => w.Contains(EnemyType.Boss)))
+                        if (w.Count < row.bossPerWave + 1) f.Add($"[GROWTH_BOSS_ROOM] {d} w={waves} t={total}");
+                    // regular waves never shrink when g >= 1 (one of slack for rounding)
+                    var regular = plan.Where(w => !w.Contains(EnemyType.Boss)).Select(w => w.Count).ToList();
+                    for (int i = 1; i < regular.Count; i++)
+                        if (regular[i] < regular[i - 1] - 1) f.Add($"[GROWTH_MONOTONE] {d} w={waves} t={total} g={g}");
+
+                    int bosses = plan.Sum(w => w.Count(e => e == EnemyType.Boss));
+                    if (waves >= row.bossWaveCount && bosses != row.bossWaveCount * row.bossPerWave)
+                        f.Add($"[BOSS_PRESENT] {d} w={waves} t={total}: {bosses} bosses, want {row.bossWaveCount * row.bossPerWave}");
+                }
+            }
     }
 
     // ── Dominance — spec 2026-10-06 §5.6: every unit has a role ─────────────
