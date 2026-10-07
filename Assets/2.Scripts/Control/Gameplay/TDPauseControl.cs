@@ -21,8 +21,10 @@ public class TDPauseControl
     {
         if (!IsPaused) return;
         IsPaused = false;
-        // Restore the correct speed multiplier instead of hardcoding 1f
-        Time.timeScale = TDSpeedControl.api?.SpeedMultiplier ?? 1f;
+        // Speed control owns the formula (speed x focus); restoring SpeedMultiplier alone would
+        // drop the selection slow-down.
+        if (TDSpeedControl.api != null) TDSpeedControl.api.Apply();
+        else Time.timeScale = 1f;
         onPauseChanged?.Invoke(false);
     }
 

@@ -48,6 +48,7 @@ public static class TDMoraleValidator
         BreakEdge(f);
         BreakTimes(f);
         Resolve(f);
+        FocusScale(f);
 
         return f;
     }
@@ -350,6 +351,21 @@ public static class TDMoraleValidator
         again.AddSpike(TDConstant.STRESS_MAX);
         if (!again.ConsumeBreak() || again.Setbacks != 2)
             f.Add($"[EDGE_REBREAK] second break after rescue: setbacks {again.Setbacks}, want 2");
+    }
+
+    // ── H — focus slow-mo: one formula, pause always wins ───────────────────
+    //
+    // Not a morale rule, but it rides here because this is the one runnable check for gameplay
+    // rules — and the slow-down exists for morale: rotating a squad in real time on a phone,
+    // with a 2.4-second Stressed window under siege, is not a decision anyone can make at 1x.
+
+    private static void FocusScale(List<string> f)
+    {
+        Near(f, "FOCUS_NORMAL", TDSpeedControl.ScaleFor(false, TDConstant.SPEED_NORMAL, true), TDConstant.SPEED_FOCUS);
+        Near(f, "FOCUS_FAST", TDSpeedControl.ScaleFor(false, TDConstant.SPEED_FAST, true),
+             TDConstant.SPEED_FAST * TDConstant.SPEED_FOCUS);
+        Near(f, "PAUSE_WINS", TDSpeedControl.ScaleFor(true, TDConstant.SPEED_FAST, true), 0f);
+        Near(f, "NO_FOCUS", TDSpeedControl.ScaleFor(false, TDConstant.SPEED_FAST, false), TDConstant.SPEED_FAST);
     }
 
     // ── F — the numbers the design doc quotes, in seconds ───────────────────

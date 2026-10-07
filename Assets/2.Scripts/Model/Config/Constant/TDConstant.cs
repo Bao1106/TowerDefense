@@ -170,6 +170,11 @@ public static class TDConstant
     // Game speed (TDSpeedControl)
     public const float SPEED_NORMAL = 1f;
     public const float SPEED_FAST = 2f;
+
+    // Time slows to this fraction while an operator is selected (Arknights convention). Morale makes
+    // the player act on individual operators mid-wave — retreat, rescue, pick a target — and on a
+    // phone that needs a beat to aim. A tuning knob: lower reads calmer, higher keeps the pressure.
+    public const float SPEED_FOCUS = 0.25f;
     // Path/maze generation
     public const int CONFIG_GATE_BUFFER = 2;
     public const int MAZE_MAX_ATTEMPTS = 10;

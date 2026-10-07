@@ -74,6 +74,11 @@ public class TDOperatorSelectionView : MonoBehaviour
 
     private void Update()
     {
+        // Time slows while something is selected. Derived every frame rather than switched on and
+        // off at each path — pause, victory, a new deploy, a cancelled pick — so no exit can leave
+        // the game stuck slowed. Before the game-ended check: the end-of-match deselect must land.
+        TDSpeedControl.api?.SetFocus(HasSelected);
+
         if (TDGameStateControl.api != null && TDGameStateControl.api.IsGameEnded) return;
         HandleTapInput();
 
@@ -274,7 +279,7 @@ public class TDOperatorSelectionView : MonoBehaviour
     /// </summary>
     private void BlinkRescueCandidates()
     {
-        if (m_RescuePayer == null || m_RescuePayer.IsCollapsed) { EndRescuePick(); return; }
+        if (m_RescuePayer == null || m_RescuePayer.IsCollapsed) { Deselect(); return; }
 
         bool on = Mathf.Repeat(Time.unscaledTime, RESCUE_BLINK_PERIOD) < RESCUE_BLINK_PERIOD * 0.5f;
 
@@ -292,7 +297,7 @@ public class TDOperatorSelectionView : MonoBehaviour
             c.SetSelected(on);
         }
 
-        if (m_RescueCandidates.Count == 0) EndRescuePick();
+        if (m_RescueCandidates.Count == 0) Deselect();
     }
 
     private void ResolveRescueTap(Vector2 screenPos)
@@ -313,7 +318,11 @@ public class TDOperatorSelectionView : MonoBehaviour
 
         // Anything else backs out. Tapping away from a decision must always be an exit, or the
         // player who opened this by accident is trapped in it while the wave keeps coming.
-        EndRescuePick();
+        //
+        // A full Deselect, not just EndRescuePick: the pick hides the diamond but leaves the rescuer
+        // selected, and SelectOperator ignores a tap on the operator already selected — so the next
+        // tap on that same rescuer opened nothing, and with focus slow-mo the game stayed slowed.
+        Deselect();
     }
 
     private void EndRescuePick()
