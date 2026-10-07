@@ -46,7 +46,7 @@ public static class TDMoraleValidator
         RetreatIsNotAReset(f);
         BrokenState(f);
         BreakEdge(f);
-        BreakTimes(f);
+        Leaks(f);
         Resolve(f);
         FocusScale(f);
 
@@ -55,12 +55,10 @@ public static class TDMoraleValidator
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    private static TDMoraleContext Ctx(int enemies, int tolerance, int calmAllies = 0,
-                                       float aura = 0f, float sinceHit = 0f)
+    private static TDMoraleContext Ctx(bool engaged, int calmAllies = 0, float aura = 0f, float sinceHit = 0f)
         => new TDMoraleContext
         {
-            enemiesInZone = enemies,
-            tolerance = tolerance,
+            engaged = engaged,
             calmAlliesAdjacent = calmAllies,
             auraRate = aura,
             secondsSinceHit = sinceHit,
@@ -79,38 +77,23 @@ public static class TDMoraleValidator
             f.Add($"[{tag}] got {got:F3}, want {want:F3}");
     }
 
-    // ── A — the four sources produce the rates §04 specifies ────────────────
+    // ── A — rates: no clock any more — only the aura accrues, and idling recovers ──
 
     private static void Rates(List<string> f)
     {
-        var m = new TDOperatorMorale();
-
-        // N2 alone: engaged but at or under tolerance.
-        Near(f, "N2", m.NetRate(Ctx(1, 2)), TDConstant.STRESS_BASE_RATE);
-        Near(f, "N2_AT_TOLERANCE", m.NetRate(Ctx(2, 2)), TDConstant.STRESS_BASE_RATE);
-
-        // N1 charges only the excess — the whole reason the earlier definition was dead.
-        Near(f, "N1_OVER_4", m.NetRate(Ctx(6, 2)),
-             TDConstant.STRESS_BASE_RATE + 4f * TDConstant.STRESS_PER_OVERLOAD);
-
-        // N4 stacks on top and is not an overload.
-        Near(f, "N4_AURA", m.NetRate(Ctx(1, 2, aura: TDConstant.STRESS_AURA_BOSS)),
-             TDConstant.STRESS_BASE_RATE + TDConstant.STRESS_AURA_BOSS);
-
-        // An empty zone must cost nothing — guarding a quiet corner is free by design.
-        if (m.NetRate(Ctx(0, 2)) > 0f)
-            f.Add("[IDLE_FREE] empty pressure zone still accrues stress");
+        Near(f, "ENGAGED_IS_FLAT", new TDOperatorMorale().NetRate(Ctx(true)), 0f);
+        Near(f, "IDLE_RELIEF", new TDOperatorMorale().NetRate(Ctx(false)), -TDConstant.STRESS_IDLE_RELIEF);
+        Near(f, "N4_AURA", new TDOperatorMorale().NetRate(Ctx(true, aura: TDConstant.STRESS_AURA_BOSS)), TDConstant.STRESS_AURA_BOSS);
+        Near(f, "N4_AURA_MULT", At(70f).NetRate(Ctx(true, aura: TDConstant.STRESS_AURA_BOSS)),
+             TDConstant.STRESS_AURA_BOSS * TDConstant.STRESS_MULT_STRESSED);
+        Near(f, "ALLY_NO_STRESS_EFFECT", new TDOperatorMorale().NetRate(Ctx(true, calmAllies: 5)), 0f);
     }
 
-    // ── B — multipliers apply to rates only ─────────────────────────────────
+    // ── B — multipliers apply to the aura and to leaks, never to spikes ─────
 
     private static void Multipliers(List<string> f)
     {
-        float baseRate = TDConstant.STRESS_BASE_RATE + 4f * TDConstant.STRESS_PER_OVERLOAD;
-
-        Near(f, "MULT_CALM", At(10f).NetRate(Ctx(6, 2)), baseRate * TDConstant.STRESS_MULT_CALM);
-        Near(f, "MULT_STEADY", At(50f).NetRate(Ctx(6, 2)), baseRate * TDConstant.STRESS_MULT_STEADY);
-        Near(f, "MULT_STRESSED", At(70f).NetRate(Ctx(6, 2)), baseRate * TDConstant.STRESS_MULT_STRESSED);
+        // The per-band leak price is LEAK_CALM / STEADY / STRESSED in Leaks().
 
         // Band edges: 33 is still Calm, 34 is Steady; 66 Steady, 67 Stressed; 100 Broken.
         if (TDOperatorMorale.StateOf(33f) != MoraleState.Calm) f.Add("[BAND] 33 is not Calm");
@@ -130,27 +113,6 @@ public static class TDMoraleValidator
 
     private static void Recovery(List<string> f)
     {
-        var m = new TDOperatorMorale();
-
-        Near(f, "IDLE_RELIEF", m.NetRate(Ctx(0, 2)), -TDConstant.STRESS_IDLE_RELIEF);
-        Near(f, "ALLY_1", m.NetRate(Ctx(6, 2, calmAllies: 1)),
-             TDConstant.STRESS_BASE_RATE + 4f - TDConstant.STRESS_ALLY_CALM_RELIEF);
-
-        // ⭐ The cap exists so a cluster of calm operators cannot out-heal the core loop.
-        Near(f, "ALLY_CAP", m.NetRate(Ctx(6, 2, calmAllies: 5)),
-             TDConstant.STRESS_BASE_RATE + 4f - TDConstant.STRESS_RELIEF_CAP);
-
-        // ⭐ Ally relief may cancel N1+N2 but never the aura: standing beside a calm friend
-        // steadies you, it does not make the boss less frightening.
-        float withAura = m.NetRate(Ctx(1, 2, calmAllies: 5, aura: TDConstant.STRESS_AURA_BOSS));
-        Near(f, "ALLY_CANNOT_EAT_AURA", withAura,
-             TDConstant.STRESS_BASE_RATE + TDConstant.STRESS_AURA_BOSS - TDConstant.STRESS_RELIEF_CAP);
-
-        // Relief must never turn an engagement into net healing.
-        var quiet = new TDOperatorMorale();
-        if (quiet.NetRate(Ctx(1, 5, calmAllies: 5)) < 0f)
-            f.Add("[RELIEF_SIGN] ally relief made an engaged operator recover");
-
         // Wave-clear relief is a flat instant subtraction.
         var cleared = At(50f);
         cleared.OnWaveCleared();
@@ -261,10 +223,10 @@ public static class TDMoraleValidator
         if (!b.IsBroken) f.Add("[BROKEN_FLAG] 100 is not flagged broken");
 
         // Under fire a broken operator is stuck — that is the dead end Rescue exists for.
-        Near(f, "BROKEN_UNDER_FIRE", b.NetRate(Ctx(6, 2, sinceHit: 1f)), 0f);
+        Near(f, "BROKEN_UNDER_FIRE", b.NetRate(Ctx(true, sinceHit: 1f)), 0f);
 
         Near(f, "BROKEN_LEFT_ALONE",
-             b.NetRate(Ctx(0, 2, sinceHit: TDConstant.STRESS_BROKEN_CALM_SECONDS + 1f)),
+             b.NetRate(Ctx(false, sinceHit: TDConstant.STRESS_BROKEN_CALM_SECONDS + 1f)),
              -TDConstant.STRESS_BROKEN_RELIEF);
 
         // ⭐ Collapse LATCHES. As a bare `m_Value >= 100` test the state could not survive its own
@@ -273,7 +235,7 @@ public static class TDMoraleValidator
         // consequence of collapse flickered with it, and §05's "100 -> 66 in 34 quiet seconds"
         // described a state that never lasted 34 seconds.
         var latched = At(TDConstant.STRESS_MAX);
-        latched.Tick(1f, Ctx(0, 2, sinceHit: TDConstant.STRESS_BROKEN_CALM_SECONDS + 1f));
+        latched.Tick(1f, Ctx(false, sinceHit: TDConstant.STRESS_BROKEN_CALM_SECONDS + 1f));
         if (!latched.IsBroken)
             f.Add($"[BROKEN_LATCH] one tick of recovery ({latched.Value:F1}) already lifted the collapse");
 
@@ -281,7 +243,7 @@ public static class TDMoraleValidator
         // worth 50 SP against simply waiting (66 after 39 seconds of standing there useless).
         var waited = At(TDConstant.STRESS_MAX);
         for (int i = 0; i < 400 && waited.IsBroken; i++)
-            waited.Tick(0.1f, Ctx(0, 2, sinceHit: TDConstant.STRESS_BROKEN_CALM_SECONDS + 1f));
+            waited.Tick(0.1f, Ctx(false, sinceHit: TDConstant.STRESS_BROKEN_CALM_SECONDS + 1f));
         Near(f, "BROKEN_EXIT_AT_STEADY", waited.Value, TDConstant.STRESS_STEADY_MAX, 0.2f);
 
         // ⭐ The wave-clear valve must reach the operators who HELD, and must not reach the ones
@@ -332,7 +294,8 @@ public static class TDMoraleValidator
         if (spiked.ConsumeBreak()) f.Add("[EDGE_WHILE_LATCHED] a spike on a broken operator raised a second edge");
 
         var ticked = new TDOperatorMorale();
-        for (int i = 0; i < 2000 && !ticked.IsBroken; i++) ticked.Tick(0.05f, Ctx(1, 2));
+        // The aura is the only time-based source left, so it is what drives a tick-induced break.
+        for (int i = 0; i < 2000 && !ticked.IsBroken; i++) ticked.Tick(0.05f, Ctx(true, aura: TDConstant.STRESS_AURA_BOSS));
         if (!ticked.ConsumeBreak()) f.Add("[EDGE_FROM_TICK] a tick-induced break raised no edge");
 
         // ⭐ An edge nobody handled must not outlive the state it announces — otherwise it fires
@@ -368,28 +331,29 @@ public static class TDMoraleValidator
         Near(f, "NO_FOCUS", TDSpeedControl.ScaleFor(false, TDConstant.SPEED_FAST, false), TDConstant.SPEED_FAST);
     }
 
-    // ── F — the numbers the design doc quotes, in seconds ───────────────────
+    // ── F — leaks: the load source, priced per event (spec §5.2) ────────────
 
-    private static void BreakTimes(List<string> f)
+    private static void Leaks(List<string> f)
     {
-        // §02: "at tolerance, alone → 45 seconds". This is the number tuning happens on;
-        // if the band walk in SecondsToBreak is wrong, this is what catches it.
-        var m = new TDOperatorMorale();
-        Near(f, "BREAK_45S", m.SecondsToBreak(Ctx(1, 2)), 45f, 0.5f);
+        // One leak alone = 10 / 15 / 20 by band.
+        Near(f, "LEAK_CALM", At(10f).OnLeak(1f, 1f), 10f);
+        Near(f, "LEAK_STEADY", At(50f).OnLeak(1f, 1f), 15f);
+        Near(f, "LEAK_STRESSED", At(70f).OnLeak(1f, 1f), 20f);
+        Near(f, "LEAK_AMPLIFIED", At(0f).OnLeak(1f, TDConstant.HERALD_LEAK_MULT), 20f);
+        var broken = At(TDConstant.STRESS_MAX); int sb = broken.Setbacks;
+        Near(f, "LEAK_IGNORED_WHEN_BROKEN", broken.OnLeak(1f, 1f), 0f);
+        if (broken.Setbacks != sb) f.Add("[LEAK_IGNORED_WHEN_BROKEN] a leak on a collapsed operator counted a setback");
 
-        // Same rate reached by integration must agree with the projection.
-        var ticked = new TDOperatorMorale();
-        float elapsed = 0f;
-        while (!ticked.IsBroken && elapsed < 600f)
+        // Spec §5.2 table: 8 / 11 / 25 leaks from zero to collapse.
+        foreach (var (tag, share, want) in new[] { ("LEAKS_ALONE", 1f, 8), ("LEAKS_SUPPORTED", 0.7f, 11), ("LEAKS_RANGED", 0.3f, 25) })
         {
-            ticked.Tick(0.05f, Ctx(1, 2));
-            elapsed += 0.05f;
+            var m = new TDOperatorMorale(); int n = 0;
+            while (!m.IsBroken && n < 100) { m.OnLeak(share, 1f); n++; }
+            if (n != want) f.Add($"[{tag}] {n} leaks to collapse, want {want}");
+            if (new TDOperatorMorale().LeaksToBreak(share) != want) f.Add($"[{tag}_PROJECTION] LeaksToBreak disagrees with the walk");
+            if (!m.ConsumeBreak()) f.Add($"[{tag}_EDGE] a leak-induced collapse raised no edge");
         }
-        Near(f, "BREAK_45S_INTEGRATED", elapsed, 45f, 1.0f);
-
-        // A non-climbing operator never breaks.
-        if (!float.IsPositiveInfinity(m.SecondsToBreak(Ctx(0, 2))))
-            f.Add("[BREAK_IDLE] idle operator reported a finite time to break");
+        if (new TDOperatorMorale().LeaksToBreak(0f) != int.MaxValue) f.Add("[LEAKS_NO_SHARE] share 0 reported a finite count");
     }
 
     // ── G — Resolve is derived, and lands where §07 says ────────────────────
@@ -500,12 +464,12 @@ public static class TDMoraleValidator
         if (tart == null) return;
 
         var m = new TDOperatorMorale();
-        Near(f, "RESOLVE_NO_ADJ", m.ResolveChance(tart, Ctx(1, 4)), tart.baseResolve);
+        Near(f, "RESOLVE_NO_ADJ", m.ResolveChance(tart, Ctx(true)), tart.baseResolve);
 
-        Near(f, "RESOLVE_CALM_ALLY", m.ResolveChance(tart, Ctx(1, 4, calmAllies: 1)),
+        Near(f, "RESOLVE_CALM_ALLY", m.ResolveChance(tart, Ctx(true, calmAllies: 1)),
              tart.baseResolve + TDConstant.RESOLVE_ADJ_CALM_ALLY);
 
-        var withBreak = Ctx(1, 4);
+        var withBreak = Ctx(true);
         withBreak.allyBrokeThisWave = true;
         Near(f, "RESOLVE_ALLY_BROKE", m.ResolveChance(tart, withBreak),
              tart.baseResolve + TDConstant.RESOLVE_ADJ_ALLY_BROKE);
@@ -514,7 +478,7 @@ public static class TDMoraleValidator
         var worn = new TDOperatorMorale();
         worn.OnSetback();
         worn.OnSetback();
-        Near(f, "RESOLVE_SETBACKS", worn.ResolveChance(tart, Ctx(1, 4)),
+        Near(f, "RESOLVE_SETBACKS", worn.ResolveChance(tart, Ctx(true)),
              tart.baseResolve + 2f * TDConstant.RESOLVE_ADJ_PER_SETBACK);
 
         // Clamp holds at both ends however the adjustments stack.
@@ -527,7 +491,7 @@ public static class TDMoraleValidator
         var ginger = roster.Find(o => o.operatorName == "Ginger");
         if (ginger != null)
         {
-            float high = new TDOperatorMorale().ResolveChance(tart, Ctx(1, 4, calmAllies: 9));
+            float high = new TDOperatorMorale().ResolveChance(tart, Ctx(true, calmAllies: 9));
             if (high > TDConstant.RESOLVE_MAX + 0.01f)
                 f.Add($"[RESOLVE_CLAMP_HIGH] {high:F1} rose above {TDConstant.RESOLVE_MAX}");
         }

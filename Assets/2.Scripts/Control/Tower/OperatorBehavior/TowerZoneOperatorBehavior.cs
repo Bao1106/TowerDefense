@@ -48,7 +48,31 @@ public class TowerZoneOperatorBehavior : IOperatorBehavior
 
     public bool TryAttack(Vector2Int cell, Vector3 worldPos, OperatorData data)
     {
-        if (m_RangeDTO == null || TDEnemyRegistry.api == null) return false;
+        var nearest = FindNearestInRange(cell, worldPos);
+        if (nearest == null) return false;
+
+        m_PendingTarget = nearest;
+        TDGameEventBus.OperatorAttacked(worldPos, data.operatorType);
+        return true;
+    }
+
+    // Called from the OnAttackHit animation event on TDOperatorView
+    public void ExecuteHit(Vector2Int cell, Vector3 worldPos, OperatorData data)
+    {
+        if (m_PendingTarget == null) return;
+
+        Vector3 impactPos = m_PendingTarget.transform.position;
+        m_PendingTarget.TakeDamage(data?.damage ?? 0f);
+        TDGameEventBus.OperatorImpacted(impactPos, data?.operatorType ?? OperatorType.Ranger);
+        m_PendingTarget = null;
+    }
+
+    public bool IsEngaged(Vector2Int cell)
+        => m_OperatorTransform != null && FindNearestInRange(cell, m_OperatorTransform.position) != null;
+
+    private TDEnemyView FindNearestInRange(Vector2Int cell, Vector3 worldPos)
+    {
+        if (m_RangeDTO == null || m_OperatorTransform == null || TDEnemyRegistry.api == null) return null;
 
         var validCells = new HashSet<Vector2Int>(
             m_RangeDTO.GetCellsInRange(cell, m_OperatorTransform.rotation));
@@ -66,21 +90,6 @@ public class TowerZoneOperatorBehavior : IOperatorBehavior
             if (dist < nearestDist) { nearestDist = dist; nearest = enemy; }
         }
 
-        if (nearest == null) return false;
-
-        m_PendingTarget = nearest;
-        TDGameEventBus.OperatorAttacked(worldPos, data.operatorType);
-        return true;
-    }
-
-    // Called from the OnAttackHit animation event on TDOperatorView
-    public void ExecuteHit(Vector2Int cell, Vector3 worldPos, OperatorData data)
-    {
-        if (m_PendingTarget == null) return;
-
-        Vector3 impactPos = m_PendingTarget.transform.position;
-        m_PendingTarget.TakeDamage(data?.damage ?? 0f);
-        TDGameEventBus.OperatorImpacted(impactPos, data?.operatorType ?? OperatorType.Ranger);
-        m_PendingTarget = null;
+        return nearest;
     }
 }

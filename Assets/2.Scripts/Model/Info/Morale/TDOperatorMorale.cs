@@ -9,13 +9,10 @@ using UnityEngine;
 /// </summary>
 public struct TDMoraleContext
 {
-    /// <summary>Enemies inside the pressure zone (§03). TDPressureProbe.Count computes it.</summary>
-    public int enemiesInZone;
+    /// <summary>Blocking someone or holding a target in range. Idle relief only runs while false.</summary>
+    public bool engaged;
 
-    /// <summary>Enemies this operator tolerates before N1 charges: 1 + blockCount, or 1 for ranged.</summary>
-    public int tolerance;
-
-    /// <summary>Adjacent allies currently Calm. Each one grants relief, up to a cap.</summary>
+    /// <summary>Adjacent allies currently Calm. Feeds Resolve only — it no longer touches stress.</summary>
     public int calmAlliesAdjacent;
 
     /// <summary>Fear-aura rate from the strongest source in range: boss 2.0, herald 1.5, else 0.</summary>
@@ -29,17 +26,20 @@ public struct TDMoraleContext
 }
 
 /// <summary>
-/// Morale for a single operator: the four stress sources of §04 and the recovery of §05.
+/// Morale for a single operator. Stress comes from leaks (OnLeak), N3 spikes and the N4 boss
+/// aura; recovery is §05. The old N1 / N2 clocks — stress for enemies merely being near — are
+/// gone (spec 2026-10-06 §5.2): holding the line well now costs nothing.
 ///
 /// Plain C#. No MonoBehaviour, no `static api`, no Update — the owner ticks it. That is a
 /// deliberate constraint from the plan and it buys the thing this project has been short
 /// of all along: the whole rule set can be exercised by an editor validator with no scene,
 /// no play mode and no prefab, so the numbers get checked before the UI exists.
 ///
-/// Multiplier discipline (§02): the state multiplier applies to RATES only — N1, N2, N4.
-/// Never to N3 spikes (a 30-point jolt doubled at Stressed almost always kills outright,
-/// which turns a cascade into an automatic wipe) and never to recovery (or the operator
-/// who most needs relief heals slowest — punished twice for the same thing).
+/// Multiplier discipline (§02): the state multiplier applies to the aura rate and to each leak
+/// — a leak is an event, but it keeps the band multiplier so the "point of no return" holds
+/// until Tier 2 decides otherwise (spec §5.2). Never to N3 spikes (a 30-point jolt doubled at
+/// Stressed almost always kills outright, which turns a cascade into an automatic wipe) and
+/// never to recovery (or the operator who most needs relief heals slowest — punished twice).
 /// </summary>
 public sealed class TDOperatorMorale
 {
@@ -112,27 +112,10 @@ public sealed class TDOperatorMorale
                 : 0f;
         }
 
-        bool engaged = ctx.enemiesInZone > 0;
-
-        float n2 = engaged ? TDConstant.STRESS_BASE_RATE : 0f;
-
-        int over = ctx.enemiesInZone - Mathf.Max(0, ctx.tolerance);
-        float n1 = over > 0 ? TDConstant.STRESS_PER_OVERLOAD * over : 0f;
-
-        float n4 = Mathf.Max(0f, ctx.auraRate);
-
-        float gross = (n1 + n2 + n4) * MultiplierOf(State);
-
-        // Ally relief only ever cancels N1+N2 — it cannot touch aura or spikes. Standing
-        // next to a calm friend steadies you; it does not make a boss less frightening.
-        float allyRelief = Mathf.Min(TDConstant.STRESS_RELIEF_CAP,
-                                     TDConstant.STRESS_ALLY_CALM_RELIEF * Mathf.Max(0, ctx.calmAlliesAdjacent));
-        allyRelief = Mathf.Min(allyRelief, (n1 + n2) * MultiplierOf(State));
-
-        // The lull between waves is worth something — but only when nothing is in the zone.
-        float idleRelief = engaged ? 0f : TDConstant.STRESS_IDLE_RELIEF;
-
-        return gross - allyRelief - idleRelief;
+        // The aura is the only time-based source left; leaks arrive through OnLeak. The lull is
+        // worth something — but only while blocking nobody and with no target in range.
+        float n4 = Mathf.Max(0f, ctx.auraRate) * MultiplierOf(State);
+        return n4 - (ctx.engaged ? 0f : TDConstant.STRESS_IDLE_RELIEF);
     }
 
     // ── Tick ─────────────────────────────────────────────────────────────────
@@ -149,6 +132,23 @@ public sealed class TDOperatorMorale
 
     /// <summary>N3 — an ally died or broke nearby. Never multiplied by state (§02).</summary>
     public void AddSpike(float amount) => SetValue(m_Value + Mathf.Max(0f, amount));
+
+    /// <summary>
+    /// An enemy walked past a cell this operator answers for. `share` is this operator's part of
+    /// the leak (TDLeakShare), `amplifier` the Herald multiplier. Returns the points actually
+    /// added after the clamp, so the caller can log and pulse on what really happened.
+    ///
+    /// Ignored while collapsed: the latch already holds them at the top, and a second break
+    /// from the same incident would count a second setback.
+    /// </summary>
+    public float OnLeak(float share, float amplifier)
+    {
+        if (m_Broken || share <= 0f) return 0f;
+
+        float before = m_Value;
+        SetValue(m_Value + TDConstant.STRESS_PER_LEAK * share * amplifier * MultiplierOf(State));
+        return m_Value - before;
+    }
 
     /// <summary>
     /// A wave ended — everyone still STANDING steadies a little. The collapsed get nothing.
@@ -314,45 +314,21 @@ public sealed class TDOperatorMorale
     // ── Projection ───────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Seconds until this operator breaks at the current rate, or infinity if it is not
-    /// climbing. Tuning happens on THIS number, never on points per second — seconds are
-    /// the only unit the player can feel.
+    /// Leaks at this share (amplifier 1, no recovery in between) until this operator breaks —
+    /// the number tuning happens on. 0 if already collapsed, int.MaxValue if share is 0.
+    ///
+    /// Each leak is priced by the band it LANDS in, exactly like OnLeak, so this walks the same
+    /// steps rather than dividing per band: a leak that starts at 32 is a Calm leak even though
+    /// it carries the value deep into Steady.
     /// </summary>
-    public float SecondsToBreak(in TDMoraleContext ctx)
+    public int LeaksToBreak(float share)
     {
-        if (IsBroken) return 0f;
+        if (IsBroken) return 0;
+        if (share <= 0f) return int.MaxValue;
 
-        float rate = NetRate(ctx);
-        if (rate <= 0f) return float.PositiveInfinity;
-
-        // Walk the remaining bands: each is crossed at its own multiplier, so a single
-        // division by the current rate would under-report by up to 2x near the top.
-        //
-        // The multiplier is carried WITH the edge rather than looked up from the cursor.
-        // Deriving it as StateOf(cursor) reads fine and is wrong: at cursor = 33 that
-        // returns Calm, but the stretch from 33 to 66 is crossed at Steady. It cost 10
-        // seconds on a 45-second answer — visible only because the validator measures the
-        // same span a second way, by integrating Tick().
-        float remaining = 0f;
-        float cursor = m_Value;
-        float baseRate = rate / MultiplierOf(State);
-
-        for (int i = 0; i < k_Bands.Length; i++)
-        {
-            float edge = k_Bands[i].edge;
-            if (edge <= cursor) continue;
-            remaining += (edge - cursor) / (baseRate * k_Bands[i].mult);
-            cursor = edge;
-        }
-
-        return remaining;
+        int n = 0;
+        for (float v = m_Value; v < TDConstant.STRESS_MAX; n++)
+            v += TDConstant.STRESS_PER_LEAK * share * MultiplierOf(StateOf(v));
+        return n;
     }
-
-    // (upper edge of the band, multiplier that applies while crossing it)
-    private static readonly (float edge, float mult)[] k_Bands =
-    {
-        (TDConstant.STRESS_CALM_MAX,   TDConstant.STRESS_MULT_CALM),
-        (TDConstant.STRESS_STEADY_MAX, TDConstant.STRESS_MULT_STEADY),
-        (TDConstant.STRESS_MAX,        TDConstant.STRESS_MULT_STRESSED),
-    };
 }

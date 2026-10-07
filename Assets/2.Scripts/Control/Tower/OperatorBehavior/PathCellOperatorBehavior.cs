@@ -120,4 +120,8 @@ public class PathCellOperatorBehavior : IOperatorBehavior
     }
 
     public void ExecuteHit(Vector2Int cell, Vector3 worldPos, OperatorData data) { }
+
+    public bool IsEngaged(Vector2Int cell)
+        => (TDOperatorRegistry.api != null && TDOperatorRegistry.api.GetBlockedEnemies(cell).Count > 0)
+           || FindEnemyInRange(cell) != null;
 }

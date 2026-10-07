@@ -6,7 +6,7 @@ using UnityEngine;
 ///
 /// The four tuning knobs have to be adjusted against READABLE NUMBERS before Phase 4 spends
 /// four or five days on icons, sound and feedback. Shipping the pretty version first and
-/// only then discovering STRESS_BASE_RATE is wrong pays for the work twice.
+/// only then discovering STRESS_PER_LEAK is wrong pays for the work twice.
 ///
 /// Self-installing: no prefab, no scene wiring, nothing to remember to add. Flip
 /// MORALE_DEBUG_OVERLAY off to hide it, delete this file when Phase 4 lands.
@@ -111,11 +111,12 @@ public sealed class TDMoraleDebugOverlay : MonoBehaviour
         // is what made two neighbours overlap into "8.2 CALM CALM".
         string text = $"{morale.Value:F0}";
 
-        // Seconds to break is the number tuning actually happens on — points per second is
-        // not something anyone can feel. Hidden while it is infinite so a quiet operator
-        // does not display an infinity symbol.
-        float seconds = morale.SecondsToBreak(op.MoraleContext);
-        if (!float.IsPositiveInfinity(seconds)) text += $" · {seconds:F0}s";
+        // Leaks to break is the number tuning happens on. Melee priced as holding the cell
+        // alone (share 1), ranged as the single shooter beside a melee (share 0.3).
+        float share = op.Data != null && op.Data.deployZone == DeployZone.TowerZone
+            ? 1f - TDConstant.LEAK_SHARE_MELEE
+            : 1f;
+        text += $" · {morale.LeaksToBreak(share)} leaks→break";
 
         return text;
     }

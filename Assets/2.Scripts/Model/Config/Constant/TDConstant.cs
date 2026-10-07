@@ -352,10 +352,9 @@ public static class TDConstant
     public const float VFX_ARRIVE_THRESHOLD = 0.25f;
     // ── Morale (§02, §04, §05 of MORALE_SYSTEM_DESIGN.md) ────────────────────
     //
-    // Tune by "how many seconds until they break", never by "points per second" —
-    // seconds are the only unit the player can feel. Break time = 72 / R, where R is the
-    // net rate BEFORE the state multiplier (the 72 already folds the three states in:
-    //   33/1.0 + 33/1.5 + 33/2.0 ≈ 33 + 22 + 17).
+    // Load is counted in LEAKS, not seconds (spec 2026-10-06 §5.2): an operator only takes
+    // stress when the line they hold actually fails. Tune by "how many leaks until they
+    // break" — 8 alone, 11 with ranged support, 25 for a ranged operator.
     public const float STRESS_MAX = 100f;
     public const float STRESS_CALM_MAX = 33f;
     public const float STRESS_STEADY_MAX = 66f;
@@ -366,15 +365,15 @@ public static class TDConstant
     public const float STRESS_MULT_STEADY = 1.5f;
     public const float STRESS_MULT_STRESSED = 2.0f;
 
-    // N2 — engagement clock. Zero when the pressure zone is empty, so guarding a quiet
-    // corner is free. Measured as ~96% of all stress accrued in a Normal match.
-    public const float STRESS_BASE_RATE = 1.6f;
+    // Leaks replace N1 / N2. One enemy walking past a full (or collapsed) melee = one leak:
+    // STRESS_PER_LEAK x share x herald amplifier x band multiplier to each operator answerable
+    // for that cell. The melee standing there takes 70%, the ranged covering it split 30%.
+    public const float STRESS_PER_LEAK = 10f;
+    public const float LEAK_SHARE_MELEE = 0.7f;
 
-    // N1 — the line leaking. Charges only the enemies ABOVE tolerance.
-    // 0.5 was the first guess and measurement killed it: at 0.5 a surrounded operator
-    // accrues 1.6x the base rate, under the threshold where anyone notices a change.
-    // At 1.0 it is 2.1x. See §10 for the Nightmare numbers behind this.
-    public const float STRESS_PER_OVERLOAD = 1.0f;
+    // A Herald within HERALD_RADIUS cells (Euclid) of the leak doubles it. Does not stack.
+    public const float HERALD_LEAK_MULT = 2f;
+    public const float HERALD_RADIUS = 4f;
 
     // N3 — instant spikes, NOT multiplied by state. A 30-point jolt doubled at Stressed
     // would almost always kill outright, turning a cascade into an automatic wipe.
@@ -386,11 +385,8 @@ public static class TDConstant
     public const float STRESS_AURA_BOSS = 2.0f;
     public const float STRESS_AURA_HERALD = 1.5f;
 
-    // Recovery. Total relief is capped so a cluster of calm operators parked somewhere
-    // quiet cannot out-heal the core loop.
-    public const float STRESS_ALLY_CALM_RELIEF = 0.40f; // per adjacent Calm ally
-    public const float STRESS_RELIEF_CAP = 0.80f;       // ceiling on ally relief
-    public const float STRESS_IDLE_RELIEF = 0.60f;      // no enemy in the pressure zone
+    // Recovery.
+    public const float STRESS_IDLE_RELIEF = 0.60f;      // not engaged: blocking nobody, no target in range
     public const float STRESS_WAVE_CLEAR_RELIEF = 15f;  // a wave cleared with nobody broken
 
     // Retreat gives -70, not a reset. Pull out at 70 and you are clean; pull out at 90 and
@@ -479,7 +475,7 @@ public static class TDConstant
     // Step 2.5 — raw numbers floating over each operator's head. Deliberately ugly and
     // deliberately first: four knobs have to be tuned on READABLE NUMBERS before 4-5 days
     // go into icons, sounds and feedback. Building the pretty version first and only then
-    // discovering STRESS_BASE_RATE is wrong costs the work twice.
+    // discovering STRESS_PER_LEAK is wrong costs the work twice.
     // Flip to false to hide it; delete the file once Phase 4 ships the real icons.
     public const bool MORALE_DEBUG_OVERLAY = false;
     public const string COLOR_MORALE_CALM = "#A1CD3A";

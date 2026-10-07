@@ -26,6 +26,10 @@ public interface IOperatorBehavior
     /// Called from the OnAttackHit animation event — applies damage and fires the impact VFX at the enemy's position.
     void ExecuteHit(Vector2Int cell, Vector3 worldPos, OperatorData data);
 
+    /// Blocking someone, or an enemy in the cells this operator can hit right now. Idle relief
+    /// only runs while this is false.
+    bool IsEngaged(Vector2Int cell);
+
     /// Cleanup when the operator is removed (killed or retreated).
     void OnRemove(Vector2Int cell, Vector3 worldPos);
 }

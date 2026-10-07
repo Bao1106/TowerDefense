@@ -101,8 +101,8 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
 
     /// <summary>
     /// Feeds morale from what this operator can already see. No new Update() and no new
-    /// singleton: the pressure zone comes from the probe written for step 1.6, the allies
-    /// from the operator registry, the aura from the enemy registry.
+    /// singleton: engagement comes from the behavior, the allies from the operator registry,
+    /// the aura from the enemy registry. Leaks arrive separately, as events (ReceiveLeak).
     /// </summary>
     private void TickMorale(float deltaTime)
     {
@@ -110,8 +110,7 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
 
         var ctx = new TDMoraleContext
         {
-            enemiesInZone = TDPressureProbe.Count(m_MyCell, transform.rotation, m_Data),
-            tolerance = TDPressureProbe.Tolerance(m_Data),
+            engaged = m_Behavior != null && m_Behavior.IsEngaged(m_MyCell),
             calmAlliesAdjacent = TDOperatorRegistry.api?.CountCalmAlliesAdjacent(m_MyCell) ?? 0,
             auraRate = TDPressureProbe.AuraRateAt(m_MyCell),
             secondsSinceHit = Time.time - m_LastHitTime,
