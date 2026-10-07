@@ -24,6 +24,7 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
     private float m_LastAttackTime = -999f;
     private float m_LastHitTime = -999f;
     private TDMoraleIconView m_MoraleIcon;
+    private TDBlockFullMarker m_BlockFullMarker; // melee only
 
     /// <summary>Morale state for this operator (§02). Null before Init.</summary>
     public TDOperatorMorale Morale { get; private set; }
@@ -82,6 +83,7 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         TDOperatorRoster.api?.OnDeployed(m_Data);
 
         m_MoraleIcon = TDMoraleIconView.Attach(transform);
+        if (data != null && data.deployZone == DeployZone.PathCell) m_BlockFullMarker = TDBlockFullMarker.Attach(transform);
 
         m_Initialized = true;
         Debug.Log($"[TDOperatorView] Init cell={m_MyCell}, name={m_Data?.operatorName}, zone={data?.deployZone}, HP={m_CurrentHp}");
@@ -94,6 +96,7 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         if (m_Initialized) TDDeployCap.api?.OnUnitRemoved();
         m_Initialized = false;
         m_Behavior?.OnRemove(m_MyCell, transform.position);
+        m_BlockFullMarker?.SetVisible(false); // Update stops here, so the corpse would keep it
     }
 
     // ── Damage / Death ────────────────────────────────────────────────────────
@@ -146,7 +149,12 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
     public bool IsCollapsed => Morale != null && Morale.IsBroken;
 
     /// <summary>This operator's share of a leak (TDOperatorRegistry.ReportLeak). Returns the points added.</summary>
-    public float ReceiveLeak(float share, float amplifier) => Morale?.OnLeak(share, amplifier) ?? 0f;
+    public float ReceiveLeak(float share, float amplifier)
+    {
+        float added = Morale?.OnLeak(share, amplifier) ?? 0f;
+        if (added > 0f) m_MoraleIcon?.Pulse();
+        return added;
+    }
 
     /// <summary>True if this operator's current range reaches `cell` (ranged only; melee never covers).</summary>
     public bool Covers(Vector2Int cell) => m_Initialized && m_Behavior != null && m_Behavior.Covers(m_MyCell, cell);
@@ -249,6 +257,7 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         if (!m_Initialized || m_Behavior == null) return;
 
         TickMorale(Time.deltaTime);
+        m_BlockFullMarker?.SetVisible(TDOperatorRegistry.api != null && TDOperatorRegistry.api.IsFullAt(m_MyCell));
 
         // SP only accrues on the field, and not while collapsed: an operator who cannot hold or
         // swing is in no state to be banking the resource that rescues someone else.

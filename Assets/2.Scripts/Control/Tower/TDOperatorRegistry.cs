@@ -128,6 +128,10 @@ public class TDOperatorRegistry
         return found;
     }
 
+    /// <summary>A standing melee at `cell` with every block slot taken — the next arrival leaks.</summary>
+    public bool IsFullAt(Vector2Int cell)
+        => m_Operators.TryGetValue(cell, out var info) && info.count >= info.capacity && !IsBrokenAt(cell);
+
     /// <summary>True if the operator standing at `cell` has collapsed.</summary>
     public bool IsBrokenAt(Vector2Int cell)
         => m_OperatorViews.TryGetValue(cell, out var view)

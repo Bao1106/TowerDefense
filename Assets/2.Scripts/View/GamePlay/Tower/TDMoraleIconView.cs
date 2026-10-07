@@ -69,8 +69,14 @@ public sealed class TDMoraleIconView : MonoBehaviour
         (1.00f, 1.00f), // Broken
     };
 
+    // One beat per leak (spec §5.2): +25% and back in 0.2s on top of the band's scale.
+    private const float LEAK_PULSE_GAIN = 0.25f;
+    private const float LEAK_PULSE_SECONDS = 0.2f;
+
     private static Sprite[] s_Sprites;
     private static Sprite s_Disc;
+
+    private float m_LeakPulseStart = float.NegativeInfinity;
 
     private CanvasGroup m_Group;
     private float m_BaseScale;
@@ -212,7 +218,9 @@ public sealed class TDMoraleIconView : MonoBehaviour
         }
 
         var weight = k_Weight[Mathf.Clamp((int)state, 0, k_Weight.Length - 1)];
-        transform.localScale = Vector3.one * (m_BaseScale * weight.scale);
+        float beat = (Time.time - m_LeakPulseStart) / LEAK_PULSE_SECONDS;
+        float leak = beat >= 0f && beat < 1f ? LEAK_PULSE_GAIN * Mathf.Sin(beat * Mathf.PI) : 0f;
+        transform.localScale = Vector3.one * (m_BaseScale * weight.scale * (1f + leak));
         if (m_Group != null) m_Group.alpha = weight.alpha;
 
         Color colour = ColourFor(state);
@@ -264,6 +272,9 @@ public sealed class TDMoraleIconView : MonoBehaviour
             m_Disc.color = new Color(0.05f, 0.05f, 0.07f, 0.72f);
         }
     }
+
+    /// <summary>A leak just landed on this operator. Restarts the beat rather than stacking it.</summary>
+    public void Pulse() => m_LeakPulseStart = Time.time;
 
     /// <summary>0 at the start of the current band, 1 at its top edge.</summary>
     private static float BandProgress(float value, MoraleState state)
