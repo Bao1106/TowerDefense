@@ -34,6 +34,7 @@ public class TDTowerWeaponView : MonoBehaviour, IPlacedUnit
 
     void IPlacedUnit.OnRemove()
     {
+        TDDeployCap.api?.OnUnitRemoved();
         if (TDTowerBehaviorMainControl.api != null)
             TDTowerBehaviorMainControl.api.onGetLastAttackTime -= OnGetLastAttackTime;
     }

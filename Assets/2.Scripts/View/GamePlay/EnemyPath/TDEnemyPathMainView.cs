@@ -156,6 +156,8 @@ public class TDEnemyPathMainView : MonoBehaviour
         LevelConfig config = TDLevelConfigSettings.api?.GetLevel(m_LevelIndex);
         if (config == null) return;
 
+        TDDeployCap.api?.Initialize(TDDeployCap.LimitFor(config));
+
         // BUG-02 fix: use the actual enemy count from the generated wave plans
         var wavePlans = TDEnemyPathMainControl.api.BuildWavePlans(config);
         int actualCount = TDEnemyPathMainControl.api.GetActualEnemyCount(wavePlans);

@@ -30,7 +30,10 @@ public class TDSlotHolderItemView : MonoBehaviour
     /// onClick, but the EventSystem still delivers PointerDown to the EventTrigger on the same
     /// object, so the card stayed fully clickable while looking disabled.
     /// </summary>
-    public bool CanSelect(int gold) => gold >= Cost && IsAvailable;
+    public bool CanSelect(int gold) => gold >= Cost && IsAvailable && !(TDDeployCap.api?.IsFull ?? false);
+
+    /// <summary>Selectable but for the deploy cap — the one refusal the cap counter should flash for.</summary>
+    public bool BlockedOnlyByCap(int gold) => gold >= Cost && IsAvailable && (TDDeployCap.api?.IsFull ?? false);
 
     public void SetupSlot(TDTowerSlotInfo slot)
     {

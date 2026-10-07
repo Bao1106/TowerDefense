@@ -89,6 +89,9 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
 
     void IPlacedUnit.OnRemove()
     {
+        // Die and DoRetreat both route here; the cap frees exactly one slot per unit. Freed the
+        // moment the Die clip starts, not when the corpse is destroyed — same as the cell.
+        if (m_Initialized) TDDeployCap.api?.OnUnitRemoved();
         m_Initialized = false;
         m_Behavior?.OnRemove(m_MyCell, transform.position);
     }

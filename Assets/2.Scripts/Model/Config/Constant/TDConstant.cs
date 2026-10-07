@@ -46,6 +46,7 @@ public static class TDConstant
     public const string PATH_GAMEPLAY_HUD_SPEED_ICON_X2 = "Header/HUDButtonLeft/SpeedButton/SpeedIcon/SpeedX2";
     public const string PATH_GAMEPLAY_HUD_PAUSE_BUTTON = "Header/HUDButtonLeft/PauseButton";
     public const string PATH_GAMEPLAY_HUD_CURRENCY = "Bottom/Currency/TxtValue";
+    public const string PATH_GAMEPLAY_HUD_DEPLOY_CAP = "Bottom/DeployCap/TxtValue";
     public const string PATH_GAMEPLAY_HUD_PAUSE_PANEL = "PausePanel";
     public const string PATH_GAMEPLAY_HUD_RESUME_BUTTON = "PausePanel/ResumeButton";
     // FlashScreen lives under SafeArea (the parent of Container) → use transform.parent.Find()

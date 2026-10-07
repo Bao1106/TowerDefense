@@ -48,6 +48,7 @@ public static class TDMoraleValidator
         BreakEdge(f);
         Leaks(f);
         LeakSplit(f);
+        DeployCap(f);
         Resolve(f);
         FocusScale(f);
 
@@ -374,6 +375,24 @@ public static class TDMoraleValidator
             var s = TDLeakShare.Split(true, k);
             Near(f, $"SPLIT_SUMS_{k}", s.melee + k * s.eachRanged, 1f);
         }
+    }
+
+    // Spec §5.1: one hard per-level cap shared by melee, ranged and turrets.
+    private static void DeployCap(List<string> f)
+    {
+        var cap = new TDDeployCap();
+        cap.Initialize(2);
+        if (cap.OnField != 0 || cap.IsFull) f.Add("[CAP_STARTS_EMPTY]");
+        cap.OnUnitPlaced(); cap.OnUnitPlaced();
+        if (!cap.IsFull) f.Add("[CAP_FULL_AT_LIMIT] 2/2 not full");
+        cap.OnUnitRemoved();
+        if (cap.IsFull || cap.OnField != 1) f.Add("[CAP_FREES] removing one did not free a slot");
+        cap.OnUnitRemoved(); cap.OnUnitRemoved();
+        if (cap.OnField != 0) f.Add($"[CAP_NEVER_NEGATIVE] OnField {cap.OnField}");
+        cap.Initialize(0);
+        if (cap.Limit != TDConstant.CONFIG_MAX_SLOTS) f.Add("[CAP_BAD_LIMIT] limit 0 was accepted");
+        cap.OnUnitPlaced(); cap.Initialize(3);
+        if (cap.OnField != 0) f.Add("[CAP_RESET_ON_INIT] a new match inherited units");
     }
 
     // ── G — Resolve is derived, and lands where §07 says ────────────────────

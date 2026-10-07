@@ -18,6 +18,12 @@ public class TDPlaceTowerControl
         // thrown away. Both gates could be walked straight through.
         if ((TDGoldControl.api?.Gold ?? 0) < slotInfo.cost) return;
 
+        if (TDDeployCap.api != null && TDDeployCap.api.IsFull)
+        {
+            TDDeployCap.api.NotifyRejected();
+            return;
+        }
+
         if (slotInfo.towerType == TowerType.Operator)
             CheckPlaceOperator(position, currentTower, slotInfo);
         else

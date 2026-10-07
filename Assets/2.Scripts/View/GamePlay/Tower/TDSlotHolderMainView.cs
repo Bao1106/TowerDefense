@@ -32,6 +32,9 @@ public class TDSlotHolderMainView : MonoBehaviour
 
         if (TDOperatorRoster.api != null)
             TDOperatorRoster.api.OnAvailabilityChanged += RefreshAvailability;
+
+        if (TDDeployCap.api != null)
+            TDDeployCap.api.OnChanged += RefreshAvailability;
     }
 
     private void OnDestroy()
@@ -41,6 +44,9 @@ public class TDSlotHolderMainView : MonoBehaviour
 
         if (TDOperatorRoster.api != null)
             TDOperatorRoster.api.OnAvailabilityChanged -= RefreshAvailability;
+
+        if (TDDeployCap.api != null)
+            TDDeployCap.api.OnChanged -= RefreshAvailability;
     }
 
     // ── Slot bar ────────────────────────────────────────────────────────────────
@@ -102,7 +108,12 @@ public class TDSlotHolderMainView : MonoBehaviour
                 // tints the graphic; the EventSystem still delivers PointerDown to every handler
                 // on the object, and EventTrigger is a separate one. Without this line the greyed
                 // card is decoration — which is why a deployed operator could be picked again.
-                if (!m_SlotHolders[index].CanSelect(TDGoldControl.api?.Gold ?? 0)) return;
+                int gold = TDGoldControl.api?.Gold ?? 0;
+                if (!m_SlotHolders[index].CanSelect(gold))
+                {
+                    if (m_SlotHolders[index].BlockedOnlyByCap(gold)) TDDeployCap.api.NotifyRejected();
+                    return;
+                }
 
                 m_Deploy.SetSlotIndex(index);
                 TDTowerMainControl.api.OnSelectTowerHolder(index);

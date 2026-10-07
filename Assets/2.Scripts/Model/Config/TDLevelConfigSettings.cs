@@ -12,6 +12,7 @@ public class LevelConfig
     public int waveCount;
     public float waveInterval; // seconds between waves
     public float spawnInterval; // seconds between enemies in same wave
+    public int deployLimit = 5; // units on the field at once — operators and turrets alike (spec §5.1)
 }
 
 [CreateAssetMenu(menuName = "Game Configs/Level Config", fileName = "Level Config", order = 3)]
