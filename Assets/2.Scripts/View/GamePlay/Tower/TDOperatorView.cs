@@ -26,6 +26,10 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
     private TDMoraleIconView m_MoraleIcon;
     private TDBlockFullMarker m_BlockFullMarker; // melee only
 
+    // The current stint — this stay on the field — for TDPressureProbe (spec §7.2).
+    private bool m_StintOpen;
+    private float m_StintStart, m_StintStartHp, m_StintStress, m_LastStress;
+
     /// <summary>Morale state for this operator (§02). Null before Init.</summary>
     public TDOperatorMorale Morale { get; private set; }
 
@@ -86,6 +90,7 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         if (data != null && data.deployZone == DeployZone.PathCell) m_BlockFullMarker = TDBlockFullMarker.Attach(transform);
 
         m_Initialized = true;
+        OpenStint();
         Debug.Log($"[TDOperatorView] Init cell={m_MyCell}, name={m_Data?.operatorName}, zone={data?.deployZone}, HP={m_CurrentHp}");
     }
 
@@ -95,8 +100,50 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         // moment the Die clip starts, not when the corpse is destroyed — same as the cell.
         if (m_Initialized) TDDeployCap.api?.OnUnitRemoved();
         m_Initialized = false;
+        CloseStint();
         m_Behavior?.OnRemove(m_MyCell, transform.position);
         m_BlockFullMarker?.SetVisible(false); // Update stops here, so the corpse would keep it
+    }
+
+    // ── Stint (TDPressureProbe) ───────────────────────────────────────────────
+
+    private void OpenStint()
+    {
+        m_StintOpen = true;
+        m_StintStart = Time.time;
+        m_StintStartHp = m_CurrentHp;
+        m_StintStress = 0f;
+        m_LastStress = Morale.Value;
+        // Still standing when the match ends is a stint ending too.
+        TDGameEventBus.OnVictory += CloseStint;
+        TDGameEventBus.OnGameOver += CloseStint;
+    }
+
+    // Positive rises only: relief must not cancel the pressure it follows. Sampled once a frame
+    // because stress also arrives outside TickMorale (leaks, spikes from allies).
+    private void SampleStress()
+    {
+        float v = Morale.Value;
+        if (v > m_LastStress) m_StintStress += v - m_LastStress;
+        m_LastStress = v;
+    }
+
+    private void CloseStint()
+    {
+        TDGameEventBus.OnVictory -= CloseStint;
+        TDGameEventBus.OnGameOver -= CloseStint;
+        if (!m_StintOpen) return;
+        m_StintOpen = false;
+
+        SampleStress();
+        TDPressureProbe.RecordStint(m_Data?.operatorName, Time.time - m_StintStart,
+                                    Mathf.Max(0f, m_StintStartHp - Mathf.Max(0f, m_CurrentHp)), m_StintStress);
+    }
+
+    private void OnDestroy()
+    {
+        TDGameEventBus.OnVictory -= CloseStint;
+        TDGameEventBus.OnGameOver -= CloseStint;
     }
 
     // ── Damage / Death ────────────────────────────────────────────────────────
@@ -131,6 +178,7 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         if (Morale.ConsumeBreak())
         {
             Debug.Log($"[Morale] {m_Data?.operatorName} suy sụp tại {m_MyCell}");
+            TDPressureProbe.RecordCollapse();
             TDOperatorRegistry.api?.BroadcastSpike(m_MyCell, TDConstant.STRESS_ALLY_BREAK_SPIKE, wasBreak: true);
 
             // Collapse (§06 · 3.1). The one thing that has to happen ON the transition — everyone
@@ -257,6 +305,7 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         if (!m_Initialized || m_Behavior == null) return;
 
         TickMorale(Time.deltaTime);
+        SampleStress();
         m_BlockFullMarker?.SetVisible(TDOperatorRegistry.api != null && TDOperatorRegistry.api.IsFullAt(m_MyCell));
 
         // SP only accrues on the field, and not while collapsed: an operator who cannot hold or

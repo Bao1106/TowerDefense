@@ -50,6 +50,7 @@ public static class TDMoraleValidator
         LeakSplit(f);
         DeployCap(f);
         Targets(f);
+        Pearson(f);
         Resolve(f);
         FocusScale(f);
 
@@ -394,6 +395,15 @@ public static class TDMoraleValidator
         if (cap.Limit != TDConstant.CONFIG_MAX_SLOTS) f.Add("[CAP_BAD_LIMIT] limit 0 was accepted");
         cap.OnUnitPlaced(); cap.Initialize(3);
         if (cap.OnField != 0) f.Add("[CAP_RESET_ON_INIT] a new match inherited units");
+    }
+
+    // Spec §7.2: the HP ↔ stress correlation the probe reports per stint (target r < 0.5).
+    private static void Pearson(List<string> f)
+    {
+        Near(f, "PEARSON_PERFECT", TDPressureProbe.Pearson(new[] { 1f, 2f, 3f }, new[] { 2f, 4f, 6f }), 1f, 0.001f);
+        Near(f, "PEARSON_INVERSE", TDPressureProbe.Pearson(new[] { 1f, 2f, 3f }, new[] { 3f, 2f, 1f }), -1f, 0.001f);
+        if (!float.IsNaN(TDPressureProbe.Pearson(new[] { 1f }, new[] { 1f }))) f.Add("[PEARSON_N1] n<2 gave a number");
+        if (!float.IsNaN(TDPressureProbe.Pearson(new[] { 1f, 2f }, new[] { 5f, 5f }))) f.Add("[PEARSON_FLAT] zero variance gave a number");
     }
 
     // Spec §5.6: blockCount is how many a melee HOLDS, attackType is how many it STRIKES.

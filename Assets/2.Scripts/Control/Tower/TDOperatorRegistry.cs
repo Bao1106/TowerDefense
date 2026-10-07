@@ -215,6 +215,8 @@ public class TDOperatorRegistry
     /// </summary>
     public void ReportLeak(Vector2Int cell)
     {
+        TDPressureProbe.RecordLeak(); // every leak counts, including one nobody is left to feel
+
         var melee = GetOperatorView(cell);
         bool meleeStanding = melee != null && !melee.IsCollapsed;
 
