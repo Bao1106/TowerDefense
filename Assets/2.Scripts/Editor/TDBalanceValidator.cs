@@ -99,6 +99,65 @@ public static class TDBalanceValidator
             }
         }
 
+        Dominance(failures);
         return failures;
+    }
+
+    // ── Dominance — spec 2026-10-06 §5.6: every unit has a role ─────────────
+    //
+    // Within a group (melee / ranged operators / turrets), no unit may be at least as good as
+    // another on every axis and strictly better on one — that other unit would never be worth
+    // a slot. Axes are all "higher is better"; cost is negated. Targets per swing is a COUNT,
+    // not yes/no: as a flag, Catapult (2 targets, 10 gold) would "beat" MissileG02 (3, 12).
+    private static void Dominance(List<string> f)
+    {
+        var ops = LoadConfig<TDFlyweightOperatorDataSettings>()?.GetAllOperators();
+        var towers = LoadConfig<TDFlyweightTowerDataSettings>()?.GetAllTowers();
+        if (ops == null || towers == null) { f.Add("[DOMINANCE_CONFIG] operator or tower config not loadable"); return; }
+
+        float Cells(Vector2Int[] r) => Mathf.Max(1, r?.Length ?? 0);
+        var melee = new List<(string, float[])>();
+        var ranged = new List<(string, float[])>();
+        foreach (var o in ops)
+        {
+            float targets = o.attackType == AttackType.Multiple ? o.blockCount : o.splashRadius > 0 ? 9 : 1;
+            var axes = new[] { o.blockCount, o.damage * o.attackSpeed, o.hp, -o.cost, Cells(o.rangeOffsets), targets };
+            (o.deployZone == DeployZone.PathCell ? melee : ranged).Add((o.operatorName, axes));
+        }
+
+        var turrets = new List<(string, float[])>();
+        foreach (var t in towers)
+        {
+            float targets = t.attackType switch { AttackType.Multiple => t.maxTargets, AttackType.AOE => 99, _ => 1 };
+            turrets.Add((t.type.ToString(), new[] { t.damage * t.attackSpeed, -t.cost, Cells(t.rangeOffsets), targets }));
+        }
+
+        Dominated(f, melee);
+        Dominated(f, ranged);
+        Dominated(f, turrets);
+    }
+
+    private static void Dominated(List<string> f, List<(string name, float[] axes)> group)
+    {
+        for (int a = 0; a < group.Count; a++)
+            for (int b = 0; b < group.Count; b++)
+            {
+                if (a == b) continue;
+                bool allGe = true, anyGt = false;
+                for (int i = 0; i < group[a].axes.Length; i++)
+                {
+                    allGe &= group[a].axes[i] >= group[b].axes[i];
+                    anyGt |= group[a].axes[i] > group[b].axes[i];
+                }
+                if (allGe && anyGt) f.Add($"[DOMINATED] {group[a].name} ≥ {group[b].name} on every axis");
+            }
+    }
+
+    // Straight from the asset database: the configs' .api routes through a scene object and
+    // is null outside play mode (same reason as TDMoraleValidator.LoadOperatorConfig).
+    private static T LoadConfig<T>() where T : ScriptableObject
+    {
+        var guids = AssetDatabase.FindAssets("t:" + typeof(T).Name);
+        return guids.Length == 0 ? null : AssetDatabase.LoadAssetAtPath<T>(AssetDatabase.GUIDToAssetPath(guids[0]));
     }
 }

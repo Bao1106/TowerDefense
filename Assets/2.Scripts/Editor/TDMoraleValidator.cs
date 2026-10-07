@@ -420,13 +420,12 @@ public static class TDMoraleValidator
     // so a stat change is a Resolve change and the doc must not quietly go stale.
     private static readonly (string name, float resolve)[] k_ResolveTable =
     {
-        // Updated when Striker / Ace / Layla were given reach of their own. The three had been
-        // sharing an OperatorType and therefore a stat row; separating them changed each ratio,
-        // and because Resolve is DERIVED, changed each Resolve. This table failing on a config
-        // edit is the feature — the numbers are not allowed to drift away from the design doc
-        // quietly. Striker and Ace now reach ONE cell, Layla four.
-        ("Tart", 43f), ("Defender", 40f), ("Knight", 27f), ("Ace", 26f),
-        ("Striker", 26f), ("Layla", 20f), ("Moon", 15f), ("Ginger", 14f),
+        // 2026-10-07: retuned to spec 2026-10-06 §5.6 — every operator and turret given a role
+        // (Ace sweeps 3 blocked, Moon splashes, Layla is the cheap opener, Tart the sponge).
+        // Resolve is DERIVED, so the retune moved every row; this table failing on a config
+        // edit is the feature — the numbers may not drift away from the design doc quietly.
+        ("Tart", 40.7f), ("Defender", 38.0f), ("Ace", 34.8f), ("Knight", 28.5f),
+        ("Striker", 24.7f), ("Layla", 23.2f), ("Moon", 18.4f), ("Ginger", 13.4f),
     };
 
     /// <summary>
@@ -489,7 +488,7 @@ public static class TDMoraleValidator
 
         // ⭐ Orthogonality — the property the whole ratio approach exists to buy.
         // Defender (20 gold) must out-resolve Striker (18) DESPITE costing barely more, and
-        // Moon (20) must sit below Knight (15) despite costing more. If Resolve ever tracks
+        // Moon (20) must sit below Knight (18) despite costing more. If Resolve ever tracks
         // cost, it has collapsed into "expensive is better" written in different letters.
         var def = roster.Find(o => o.operatorName == "Defender");
         var strk = roster.Find(o => o.operatorName == "Striker");
@@ -499,7 +498,7 @@ public static class TDMoraleValidator
         if (def != null && strk != null && def.baseResolve <= strk.baseResolve)
             f.Add("[RESOLVE_ORTHOGONAL] Defender does not out-resolve Striker");
         if (moon != null && kni != null && moon.baseResolve >= kni.baseResolve)
-            f.Add("[RESOLVE_ORTHOGONAL] Moon (20 gold) out-resolves Knight (15 gold)");
+            f.Add("[RESOLVE_ORTHOGONAL] Moon (20 gold) out-resolves Knight (18 gold)");
 
         // Nobody may pin to either end of the derived band — a roster where everyone reads
         // 10% or 45% carries no information at all.

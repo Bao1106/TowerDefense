@@ -16,9 +16,9 @@ MonoBehaviour:
   - operatorName: Knight
     operatorType: 0
     attackType: 0
-    cost: 15
-    hp: 1000
-    damage: 50
+    cost: 18
+    hp: 1200
+    damage: 40
     attackSpeed: 2
     blockCount: 2
     operatorPrefab: {fileID: 1664552536257148490, guid: d406154b08eacf546a770eb4c8f9fb18, type: 3}
@@ -31,7 +31,7 @@ MonoBehaviour:
     attackType: 0
     cost: 20
     hp: 3000
-    damage: 20
+    damage: 30
     attackSpeed: 1
     blockCount: 3
     operatorPrefab: {fileID: 153204692974087567, guid: 23ae098f6221d604686542bc4fba7f8a, type: 3}
@@ -44,7 +44,7 @@ MonoBehaviour:
     attackType: 0
     cost: 18
     hp: 700
-    damage: 80
+    damage: 100
     attackSpeed: 1.5
     blockCount: 1
     operatorPrefab: {fileID: 7089115756794705728, guid: 0eac88e9c3ebe82498062c1fa3c248ce, type: 3}
@@ -54,11 +54,11 @@ MonoBehaviour:
   - operatorName: Ace
     operatorType: 2
     attackType: 1
-    cost: 18
-    hp: 800
-    damage: 70
-    attackSpeed: 1.8
-    blockCount: 1
+    cost: 20
+    hp: 900
+    damage: 25
+    attackSpeed: 1.5
+    blockCount: 3
     operatorPrefab: {fileID: 3492125622489615178, guid: 5251563a78b19b34a99f0edf8cf1552e, type: 3}
     icon: {fileID: 21300000, guid: 39f87d384a2a9ba47bd2abf64697edaf, type: 3}
     rangeOffsets:
@@ -66,10 +66,10 @@ MonoBehaviour:
   - operatorName: Ginger
     operatorType: 3
     attackType: 0
-    cost: 16
+    cost: 18
     hp: 600
-    damage: 65
-    attackSpeed: 1.2
+    damage: 120
+    attackSpeed: 0.8
     blockCount: 0
     operatorPrefab: {fileID: 906363833354006987, guid: 73e50028a06994b43a20644cf83c1b85, type: 3}
     icon: {fileID: 21300000, guid: 8808f09332ca2a64f9a037d33f0f67a8, type: 3}
@@ -86,9 +86,9 @@ MonoBehaviour:
   - operatorName: Layla
     operatorType: 2
     attackType: 0
-    cost: 18
-    hp: 750
-    damage: 75
+    cost: 10
+    hp: 900
+    damage: 45
     attackSpeed: 1.5
     blockCount: 1
     operatorPrefab: {fileID: 1722776060360692474, guid: 5cbcb92b8a8c88444acff156b64e46a4, type: 3}
@@ -103,7 +103,7 @@ MonoBehaviour:
     attackType: 0
     cost: 20
     hp: 700
-    damage: 80
+    damage: 40
     attackSpeed: 1
     blockCount: 0
     operatorPrefab: {fileID: 9162392577938310639, guid: 61f68b18339f71340bec8bc330508a67, type: 3}
@@ -121,11 +121,11 @@ MonoBehaviour:
   - operatorName: Tart
     operatorType: 1
     attackType: 0
-    cost: 22
-    hp: 4000
-    damage: 15
+    cost: 20
+    hp: 5000
+    damage: 25
     attackSpeed: 0.8
-    blockCount: 3
+    blockCount: 2
     operatorPrefab: {fileID: 5369137215879447857, guid: 26ff77251fa3fa74a83fb57a1859bff9, type: 3}
     icon: {fileID: 21300000, guid: 0534fcde8c4ef934ab08f3187065c0b4, type: 3}
     rangeOffsets:
