@@ -51,13 +51,13 @@ public static class TDPressureProbe
 
     private const float MIN_STINT_SECONDS = 5f; // shorter stays are noise in a per-second rate
 
-    private struct WaveRow { public int wave, onField, limit, goldEarned, leaks, leakedEnemies, collapses; }
+    private struct WaveRow { public int wave, onField, limit, goldEarned, leaks, leakedEnemies, leakedHorde, collapses; }
     public struct Stint { public string op; public bool melee; public float seconds, hpLost, stressGained; }
 
     private static readonly List<WaveRow> s_Waves = new();
     private static readonly List<Stint> s_Stints = new();
     private static readonly List<Stint> s_Pool = new(); // every match since ResetPool
-    private static int s_Wave = -1, s_Leaks, s_LeakedEnemies, s_Collapses, s_TotalCollapses, s_PoolMatches;
+    private static int s_Wave = -1, s_Leaks, s_LeakedEnemies, s_LeakedHorde, s_Collapses, s_TotalCollapses, s_PoolMatches;
     private static string s_Ending, s_Report;
 
     // Subscribed once per play session: the bus is static and outlives scenes, and with domain
@@ -75,8 +75,14 @@ public static class TDPressureProbe
 
     // Leak EVENTS (every full blocker passed — what morale feels) vs leaked ENEMIES (each counted
     // once — what calibration measures: one enemy past a line of four is one failure, not four).
+    // Horde bodies get their own column: a pack overflows the blockers by design, so calibration
+    // counts leaked minus Horde (round 2).
     public static void RecordLeak() => s_Leaks++;
-    public static void RecordLeakedEnemy() => s_LeakedEnemies++;
+    public static void RecordLeakedEnemy(EnemyType type)
+    {
+        s_LeakedEnemies++;
+        if (type == EnemyType.Horde) s_LeakedHorde++;
+    }
 
     public static void RecordCollapse()
     {
@@ -138,7 +144,7 @@ public static class TDPressureProbe
         else CloseWave();
 
         s_Wave = waveIdx;
-        s_Leaks = s_LeakedEnemies = s_Collapses = 0;
+        s_Leaks = s_LeakedEnemies = s_LeakedHorde = s_Collapses = 0;
     }
 
     private static void OnVictory() => End("Victory");
@@ -163,6 +169,7 @@ public static class TDPressureProbe
             goldEarned = TDGoldControl.api?.TotalEarned ?? 0,
             leaks = s_Leaks,
             leakedEnemies = s_LeakedEnemies,
+            leakedHorde = s_LeakedHorde,
             collapses = s_Collapses,
         });
         s_Wave = -1;
@@ -172,10 +179,10 @@ public static class TDPressureProbe
     {
         var sb = new StringBuilder();
         sb.AppendLine($"Pressure report — {s_Ending ?? "in progress"}");
-        sb.AppendLine("wave  onField  limit  goldEarned  leaks  leaked  collapses");
+        sb.AppendLine("wave  onField  limit  goldEarned  leaks  leaked  horde  collapses");
         foreach (var w in s_Waves)
-            sb.AppendLine($"{w.wave,4}  {w.onField,7}  {w.limit,5}  {w.goldEarned,10}  {w.leaks,5}  {w.leakedEnemies,6}  {w.collapses,9}");
-        if (s_Wave >= 0) sb.AppendLine($"{s_Wave + 1,4}  (open)  leaks {s_Leaks}, leaked {s_LeakedEnemies}, collapses {s_Collapses}");
+            sb.AppendLine($"{w.wave,4}  {w.onField,7}  {w.limit,5}  {w.goldEarned,10}  {w.leaks,5}  {w.leakedEnemies,6}  {w.leakedHorde,5}  {w.collapses,9}");
+        if (s_Wave >= 0) sb.AppendLine($"{s_Wave + 1,4}  (open)  leaks {s_Leaks}, leaked {s_LeakedEnemies} ({s_LeakedHorde} Horde), collapses {s_Collapses}");
 
         float r = MeleeR(s_Stints, out int n);
         float pooled = MeleeR(s_Pool, out int pooledN);

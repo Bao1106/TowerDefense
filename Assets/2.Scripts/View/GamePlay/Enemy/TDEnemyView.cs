@@ -228,7 +228,7 @@ public class TDEnemyView : MonoBehaviour
                         if (!m_HasLeaked)
                         {
                             m_HasLeaked = true;
-                            TDPressureProbe.RecordLeakedEnemy();
+                            TDPressureProbe.RecordLeakedEnemy(EnemyType);
                         }
                     }
 

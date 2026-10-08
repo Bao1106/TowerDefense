@@ -453,6 +453,7 @@ public class TDEnemyPathMainControl
         }
 
         DifficultyRatioTable.RatioRow ratio = DifficultyRatioTable.Get(config.difficulty);
+        m_Ratio = ratio;
         Debug.Log($"<color=green>StartWaveLoop: {wavePlans.Count} waves, {groups.Count} groups</color>");
 
         m_Strategy ??= new RoundRobinStrategy();
@@ -509,6 +510,20 @@ public class TDEnemyPathMainControl
             Debug.Log("<color=yellow>StartWaveLoop: cancelled</color>");
         }
     }
+
+    private DifficultyRatioTable.RatioRow m_Ratio; // the running match's row (SpawnForTest reads it)
+
+#if UNITY_EDITOR
+    // Spec §7.2's forced case: spawn outside the wave plan, on the first corridor, through the
+    // same pools and SpawnBatch (so a Horde still comes out as a burst) at the match's difficulty.
+    public void SpawnForTest(EnemyType type, int count, float interval)
+    {
+        var group = Groups?.FirstOrDefault(g => g.Corridors.Count > 0);
+        if (group == null) { Debug.LogWarning("[SpawnForTest] no corridor generated yet"); return; }
+        SpawnBatch(group.SpawnWorldPos, group.Corridors[0], Enumerable.Repeat(type, count).ToList(),
+            m_Ratio, 0, interval, CancellationToken.None).Forget("SpawnForTest");
+    }
+#endif
 
     // ── Wave Planning ─────────────────────────────────────────────────────────
 

@@ -340,17 +340,23 @@ public static class TDMoraleValidator
 
     private static void Leaks(List<string> f)
     {
-        // One leak alone = 10 / 15 / 20 by band.
-        Near(f, "LEAK_CALM", At(10f).OnLeak(1f, 1f), 10f);
-        Near(f, "LEAK_STEADY", At(50f).OnLeak(1f, 1f), 15f);
-        Near(f, "LEAK_STRESSED", At(70f).OnLeak(1f, 1f), 20f);
-        Near(f, "LEAK_AMPLIFIED", At(0f).OnLeak(1f, TDConstant.HERALD_LEAK_MULT), 20f);
+        // One leak alone = 7 / 10.5 / 14 by band (round 2: 10 → 7, Herald ×2 → ×1.5).
+        Near(f, "LEAK_CALM", At(10f).OnLeak(1f, 1f), 7f);
+        Near(f, "LEAK_STEADY", At(50f).OnLeak(1f, 1f), 10.5f);
+        Near(f, "LEAK_STRESSED", At(70f).OnLeak(1f, 1f), 14f);
+        Near(f, "LEAK_AMPLIFIED", At(0f).OnLeak(1f, TDConstant.HERALD_LEAK_MULT), 10.5f);
+
+        // Spec §7.2 forced case: a Calm melee alone, a Herald beside it, a whole pack walks past —
+        // at most 60 stress and still standing (round 2 measured 100 and a collapse at 10 / ×2).
+        var lone = new TDOperatorMorale(); float packGain = 0f;
+        for (int i = 0; i < TDConstant.HORDE_PACK_SIZE; i++) packGain += lone.OnLeak(1f, TDConstant.HERALD_LEAK_MULT);
+        if (packGain > 60f || lone.IsBroken) f.Add($"[NIGHTMARE_PACK] a pack past a lone Calm melee beside a Herald: +{packGain:F1}, broken {lone.IsBroken} (want ≤ 60, standing)");
         var broken = At(TDConstant.STRESS_MAX); int sb = broken.Setbacks;
         Near(f, "LEAK_IGNORED_WHEN_BROKEN", broken.OnLeak(1f, 1f), 0f);
         if (broken.Setbacks != sb) f.Add("[LEAK_IGNORED_WHEN_BROKEN] a leak on a collapsed operator counted a setback");
 
-        // Spec §5.2 table: 8 / 11 / 25 leaks from zero to collapse.
-        foreach (var (tag, share, want) in new[] { ("LEAKS_ALONE", 1f, 8), ("LEAKS_SUPPORTED", 0.7f, 11), ("LEAKS_RANGED", 0.3f, 25) })
+        // Spec §5.2 table: 11 / 15 / 35 leaks from zero to collapse (8 / 11 / 25 before round 2).
+        foreach (var (tag, share, want) in new[] { ("LEAKS_ALONE", 1f, 11), ("LEAKS_SUPPORTED", 0.7f, 15), ("LEAKS_RANGED", 0.3f, 35) })
         {
             var m = new TDOperatorMorale(); int n = 0;
             while (!m.IsBroken && n < 100) { m.OnLeak(share, 1f); n++; }
@@ -398,7 +404,7 @@ public static class TDMoraleValidator
         if (cap.OnField != 0) f.Add("[CAP_RESET_ON_INIT] a new match inherited units");
     }
 
-    // Spec §5.5: a Herald within HERALD_RADIUS cells (Euclid) of a leak doubles it; two do not make it ×4.
+    // Spec §5.5: a Herald within HERALD_RADIUS cells (Euclid) of a leak amplifies it ×HERALD_LEAK_MULT; two do not stack.
     private static void Amplifier(List<string> f)
     {
         var o = new Vector2Int(0, 0);

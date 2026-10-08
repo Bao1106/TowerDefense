@@ -362,7 +362,8 @@ public static class TDConstant
     //
     // Load is counted in LEAKS, not seconds (spec 2026-10-06 §5.2): an operator only takes
     // stress when the line they hold actually fails. Tune by "how many leaks until they
-    // break" — 8 alone, 11 with ranged support, 25 for a ranged operator.
+    // break" — 11 alone, 15 with ranged support, 35 for a ranged operator (8 / 11 / 25 before
+    // round 2: a Horde pack past a lone Calm melee beside a Herald broke it, spec §7.2).
     public const float STRESS_MAX = 100f;
     public const float STRESS_CALM_MAX = 33f;
     public const float STRESS_STEADY_MAX = 66f;
@@ -376,11 +377,11 @@ public static class TDConstant
     // Leaks replace N1 / N2. One enemy walking past a full (or collapsed) melee = one leak:
     // STRESS_PER_LEAK x share x herald amplifier x band multiplier to each operator answerable
     // for that cell. The melee standing there takes 70%, the ranged covering it split 30%.
-    public const float STRESS_PER_LEAK = 10f;
+    public const float STRESS_PER_LEAK = 7f;
     public const float LEAK_SHARE_MELEE = 0.7f;
 
-    // A Herald within HERALD_RADIUS cells (Euclid) of the leak doubles it. Does not stack.
-    public const float HERALD_LEAK_MULT = 2f;
+    // A Herald within HERALD_RADIUS cells (Euclid) of the leak amplifies it ×1.5 (×2 before round 2). Does not stack.
+    public const float HERALD_LEAK_MULT = 1.5f;
     public const float HERALD_RADIUS = 4f;
 
     // N3 — instant spikes, NOT multiplied by state. A 30-point jolt doubled at Stressed

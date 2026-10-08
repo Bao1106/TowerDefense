@@ -250,7 +250,7 @@ public class TDOperatorRegistry
 
     /// <summary>
     /// Spec §5.5: HERALD_LEAK_MULT when any Herald stands within HERALD_RADIUS cells (Euclid) of
-    /// the leak, otherwise 1. Two Heralds in range are still ×2 — it does not stack.
+    /// the leak, otherwise 1. Two Heralds in range amplify no more than one — it does not stack.
     /// </summary>
     public static float LeakAmplifier(Vector2Int leakCell, IReadOnlyList<Vector2Int> heraldCells)
     {
