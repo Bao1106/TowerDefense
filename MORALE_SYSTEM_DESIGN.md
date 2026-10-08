@@ -22,14 +22,14 @@
 
 1. [Vì sao hệ này tồn tại](#01--vì-sao-hệ-này-tồn-tại)
 2. [Thang đo, trạng thái, icon](#02--thang-đo-trạng-thái-icon)
-3. [Vùng áp lực và ngưỡng chịu đựng](#03--vùng-áp-lực-và-ngưỡng-chịu-đựng)
-4. [Bốn nguồn tăng](#04--bốn-nguồn-tăng)
+3. [Vùng áp lực và ngưỡng chịu đựng](#03--vùng-áp-lực-và-ngưỡng-chịu-đựng) — ⚠️ đã thay thế (spec 2026-10-06)
+4. [Bốn nguồn tăng](#04--bốn-nguồn-tăng) — ⚠️ đã thay thế (spec 2026-10-06)
 5. [Nguồn giảm và hồi phục](#05--nguồn-giảm-và-hồi-phục)
 6. [Suy sụp · Rescue · Quyết tử](#06--suy-sụp--rescue--quyết-tử)
 7. [Ý CHÍ — công thức suy ra](#07--ý-chí--công-thức-suy-ra)
 8. [Hai loại địch mới](#08--hai-loại-địch-mới)
 9. [Địa hình — 12 nguyên mẫu xương sống](#09--địa-hình--12-nguyên-mẫu-xương-sống)
-10. [Bảng hằng số đầy đủ](#10--bảng-hằng-số-đầy-đủ)
+10. [Bảng hằng số đầy đủ](#10--bảng-hằng-số-đầy-đủ) — ⚠️ khối hằng số đã thay thế (spec 2026-10-06)
 11. [Bốn sửa đổi bắt buộc trong code hiện có](#11--bốn-sửa-đổi-bắt-buộc-trong-code-hiện-có)
 12. [Điều kiện nghiệm thu](#12--điều-kiện-nghiệm-thu)
 13. [Lộ trình](#13--lộ-trình)
@@ -194,6 +194,9 @@ Không ẩn hẳn Calm: hoạt ảnh rút dần **trong** Calm chính là cảnh
 
 ## 03 · Vùng áp lực và ngưỡng chịu đựng
 
+> ⚠️ Đã thay thế bởi spec 2026-10-06 (mô hình tải), xem §5.2–5.4.
+> [`docs/superpowers/specs/2026-10-06-morale-load-model-design.md`](docs/superpowers/specs/2026-10-06-morale-load-model-design.md)
+
 Định nghĩa này phải chốt trước mọi con số, và nó **khác nhau theo `deployZone`**.
 
 | | Vùng áp lực | Ngưỡng chịu đựng |
@@ -264,6 +267,9 @@ Không ẩn hẳn Calm: hoạt ảnh rút dần **trong** Calm chính là cảnh
 ---
 
 ## 04 · Bốn nguồn tăng
+
+> ⚠️ Đã thay thế bởi spec 2026-10-06 (mô hình tải), xem §5.2–5.4.
+> [`docs/superpowers/specs/2026-10-06-morale-load-model-design.md`](docs/superpowers/specs/2026-10-06-morale-load-model-design.md)
 
 | # | Nguồn | Giá trị | Điều kiện | ×hệ số |
 |:--:|---|:--:|---|:--:|
@@ -778,6 +784,9 @@ generation **nhìn thấy được** (hiện tại người xem demo không hề
 ## 10 · Bảng hằng số đầy đủ
 
 ### Vào `TDConstant`
+
+> ⚠️ Đã thay thế bởi spec 2026-10-06 (mô hình tải), xem §5.2–5.4.
+> [`docs/superpowers/specs/2026-10-06-morale-load-model-design.md`](docs/superpowers/specs/2026-10-06-morale-load-model-design.md)
 
 ```csharp
 STRESS_BASE_RATE            = 1.6f    // N2, điểm/giây
