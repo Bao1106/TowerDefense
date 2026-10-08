@@ -96,7 +96,12 @@ mới gãy một melee đứng một mình. User chọn **7 và Herald ×1,5**:
   xạ thủ).
 - Herald vẫn có nghĩa.
 
-Validator có thêm kiểm `NIGHTMARE_PACK` cho ca xấu nhất là cả 5 thân lọt: tổng **57,75**, không gãy.
+Validator có thêm kiểm `NIGHTMARE_PACK`: cả 5 thân lọt, từ stress 0 cộng **57,75**, không gãy.
+
+**Sửa sau review cuối.** Ca từ stress 0 là điểm *dễ* nhất của band Calm (0–33). Với 7 và ×1,5, một melee bắt đầu
+từ ≥ 23 stress vẫn gãy vì một bầy được khuếch đại (từ 33 lên 117). User chọn: **Kẻ gieo sợ không khuếch đại thân
+Bầy**, vì Bầy vốn đã là mối đe doạ tràn túi. `NIGHTMARE_PACK` giờ chạy cả từ 0 lẫn từ 33: từ 33 bầy cộng 52,5
+(→ 85,5) và không gãy. Có thêm kiểm `AMP_HORDE_EXEMPT`. Số con lọt tới gãy vẫn là 11 / 15 / 35.
 
 ## Bot ở Hard trên data cuối
 

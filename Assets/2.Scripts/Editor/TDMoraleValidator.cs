@@ -348,9 +348,15 @@ public static class TDMoraleValidator
 
         // Spec §7.2 forced case: a Calm melee alone, a Herald beside it, a whole pack walks past —
         // at most 60 stress and still standing (round 2 measured 100 and a collapse at 10 / ×2).
-        var lone = new TDOperatorMorale(); float packGain = 0f;
-        for (int i = 0; i < TDConstant.HORDE_PACK_SIZE; i++) packGain += lone.OnLeak(1f, TDConstant.HERALD_LEAK_MULT);
-        if (packGain > 60f || lone.IsBroken) f.Add($"[NIGHTMARE_PACK] a pack past a lone Calm melee beside a Herald: +{packGain:F1}, broken {lone.IsBroken} (want ≤ 60, standing)");
+        // "Calm" is the whole band, so the case runs from its top as well as from zero: from 0 is
+        // the easiest start, and 7 / ×1.5 broke from 23 up when the Herald amplified the pack.
+        float packMult = TDOperatorRegistry.LeakAmplifier(EnemyType.Horde, Vector2Int.zero, new[] { Vector2Int.right });
+        foreach (float start in new[] { 0f, TDConstant.STRESS_CALM_MAX })
+        {
+            var lone = At(start); float packGain = 0f;
+            for (int i = 0; i < TDConstant.HORDE_PACK_SIZE; i++) packGain += lone.OnLeak(1f, packMult);
+            if (packGain > 60f || lone.IsBroken) f.Add($"[NIGHTMARE_PACK] a pack past a lone melee at {start} beside a Herald: +{packGain:F1}, broken {lone.IsBroken} (want ≤ 60, standing)");
+        }
         var broken = At(TDConstant.STRESS_MAX); int sb = broken.Setbacks;
         Near(f, "LEAK_IGNORED_WHEN_BROKEN", broken.OnLeak(1f, 1f), 0f);
         if (broken.Setbacks != sb) f.Add("[LEAK_IGNORED_WHEN_BROKEN] a leak on a collapsed operator counted a setback");
@@ -405,13 +411,16 @@ public static class TDMoraleValidator
     }
 
     // Spec §5.5: a Herald within HERALD_RADIUS cells (Euclid) of a leak amplifies it ×HERALD_LEAK_MULT; two do not stack.
+    // A Horde body is never amplified (spec §7.2 forced case).
     private static void Amplifier(List<string> f)
     {
         var o = new Vector2Int(0, 0);
-        Near(f, "AMP_NONE", TDOperatorRegistry.LeakAmplifier(o, new Vector2Int[0]), 1f);
-        Near(f, "AMP_INSIDE", TDOperatorRegistry.LeakAmplifier(o, new[] { new Vector2Int(4, 0) }), TDConstant.HERALD_LEAK_MULT);
-        Near(f, "AMP_OUTSIDE", TDOperatorRegistry.LeakAmplifier(o, new[] { new Vector2Int(4, 1) }), 1f); // √17 > 4
-        Near(f, "AMP_NO_STACK", TDOperatorRegistry.LeakAmplifier(o, new[] { new Vector2Int(1, 0), new Vector2Int(0, 1) }), TDConstant.HERALD_LEAK_MULT);
+        var n = EnemyType.Normal;
+        Near(f, "AMP_NONE", TDOperatorRegistry.LeakAmplifier(n, o, new Vector2Int[0]), 1f);
+        Near(f, "AMP_INSIDE", TDOperatorRegistry.LeakAmplifier(n, o, new[] { new Vector2Int(4, 0) }), TDConstant.HERALD_LEAK_MULT);
+        Near(f, "AMP_OUTSIDE", TDOperatorRegistry.LeakAmplifier(n, o, new[] { new Vector2Int(4, 1) }), 1f); // √17 > 4
+        Near(f, "AMP_NO_STACK", TDOperatorRegistry.LeakAmplifier(n, o, new[] { new Vector2Int(1, 0), new Vector2Int(0, 1) }), TDConstant.HERALD_LEAK_MULT);
+        Near(f, "AMP_HORDE_EXEMPT", TDOperatorRegistry.LeakAmplifier(EnemyType.Horde, o, new[] { new Vector2Int(1, 0) }), 1f);
     }
 
     // Spec §7.2: the HP ↔ stress correlation the probe reports per stint (target r < 0.5).

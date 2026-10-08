@@ -107,6 +107,7 @@ public static class TDBalanceValidator
         }
 
         HordeTime(failures);
+        StartingGoldOneWriter(failures);
 
         Density(failures);
         Dominance(failures);
@@ -269,6 +270,31 @@ public static class TDBalanceValidator
         float two = TDEnemyPathMainControl.SliceSeconds(mixed, 2f);
         if (Mathf.Abs(two - (2f + 2f * wantOne + 2f)) > 0.001f)
             f.Add($"[HORDE_PACK_TIME] Normal, two packs, Fast at s=2: {two:F2}s, want {2f + 2f * wantOne + 2f:F2}");
+    }
+
+    // Spec §5.7: the difficulty sets the opening purse, and it is the only writer. The HUD's
+    // Start and the path view's both run at scene load with no defined order, so a HUD that
+    // seeds a default would leave Normal at 30 instead of 40 whenever it happens to run second.
+    private static void StartingGoldOneWriter(List<string> f)
+    {
+        var savedGold = TDGoldControl.api; var savedSpeed = TDSpeedControl.api;
+        var go = new GameObject("StartingGoldOneWriter") { hideFlags = HideFlags.HideAndDontSave };
+        try
+        {
+            TDGoldControl.api = new TDGoldControl(); TDSpeedControl.api = new TDSpeedControl();
+            int purse = DifficultyRatioTable.Get(Difficulty.Normal).startingGold;
+            TDGoldControl.api.Initialize(purse); // the path view ran first
+            var hud = go.AddComponent<TDGameplayHUDView>();
+            typeof(TDGameplayHUDView).GetMethod("InitControls", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                ?.Invoke(hud, null);
+            if (TDGoldControl.api.Gold != purse)
+                f.Add($"[STARTING_GOLD_ONE_WRITER] the HUD's init rewrote Normal's opening purse {purse} → {TDGoldControl.api.Gold}");
+        }
+        finally
+        {
+            TDGoldControl.api = savedGold; TDSpeedControl.api = savedSpeed;
+            Object.DestroyImmediate(go);
+        }
     }
 
     // ── Dominance — spec 2026-10-06 §5.6: every unit has a role ─────────────

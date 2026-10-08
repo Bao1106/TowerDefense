@@ -221,7 +221,7 @@ public class TDEnemyView : MonoBehaviour
                     // it already stepped their path index past it.
                     if (TDOperatorRegistry.api != null && TDOperatorRegistry.api.HasOperatorAt(arrivedCell))
                     {
-                        TDOperatorRegistry.api.ReportLeak(arrivedCell);
+                        TDOperatorRegistry.api.ReportLeak(arrivedCell, EnemyType);
 
                         // Every full blocker passed is a leak for morale; for calibration it is one
                         // enemy that got through, however long the line it walked past.

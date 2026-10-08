@@ -37,6 +37,7 @@
   - `HERALD_RADIUS = 4` ô, đo khoảng cách Euclid, không cộng dồn
   - Hệ số band 1 / 1,5 / 2 nhân vào nhịp lọt
   - `HORDE_PACK_SPAWN_INTERVAL = 0.2`, một bầy 5 con
+  - `SPAWN_INTERVAL_FLOOR = 0.8` s; `mixRamp` 1,0 / 0,8 / 0,4 (D14)
 - Turret và operator đang suy sụp **không bao giờ** nhận phần lọt. Địch được thả (`ForceUnblock`) **không** tính là lọt.
 - Công cụ đo, bot và mô hình ρ chỉ nằm trong `Assets/2.Scripts/Editor/`. Không thêm MonoBehaviour công cụ vào code sản phẩm.
 - File `.cs` dùng CRLF. Nếu `Write` tạo ra LF thì chuyển bằng `sed -i 's/$/\r/'`.
@@ -51,6 +52,8 @@
 3. **Tổng địch nhỏ khi có độ tăng wave:** mọi wave ≥ 1 con, wave boss ≥ `bossPerWave + 1`, tổng luôn đúng với tổng địch từ 8 tới 200. Kiểm bằng `GROWTH_*` ở Task 7.
 4. **Lọt qua melee đang suy sụp mà không có xạ thủ phủ ô:** không ai nhận stress, không có exception, và con địch vẫn đánh người suy sụp một đòn khi đi qua. Kiểm bằng `SPLIT_NOBODY` và bước Play Mode (d) ở Task 2.
 5. **Xạ thủ quay hướng khác, hoặc rời sân giữa wave**, thì không còn nhận phần lọt của ô đó nữa. Kiểm ở Task 2, bước Play Mode (c).
+6. **Khoảng cách sinh ở cấu hình biên:** `spawnInterval` của level đã dưới sàn, `waveGrowth < 1`, level chỉ có 1 wave. Không wave nào được thưa hơn `spawnInterval`, và không bị nâng lên sàn. Kiểm bằng `DENSITY_*` ở Task 9.
+7. **Mô hình ρ và game lệch nhau:** vòng sinh wave và `TDLoadModel` phải lấy khoảng cách sinh từ **cùng** `SpawnIntervalFor`, thành phần từ **cùng** `Distribute`. Kiểm ở Task 9, bước 7.
 
 ---
 
@@ -169,7 +172,7 @@ if (new TDOperatorMorale().LeaksToBreak(0f) != int.MaxValue) f.Add("[LEAKS_NO_SH
 - Produces:
   - `public static (float melee, float eachRanged) TDLeakShare.Split(bool meleeStanding, int rangedCount)`.
   - `public void TDOperatorRegistry.ReportLeak(Vector2Int cell)`.
-  - `private float TDOperatorRegistry.LeakAmplifierAt(Vector2Int cell)`: trả `1f` cho tới Task 12. Đánh dấu `// ponytail:`, trỏ tới Task 12.
+  - `private float TDOperatorRegistry.LeakAmplifierAt(Vector2Int cell)`: trả `1f` cho tới Task 13. Đánh dấu `// ponytail:`, trỏ tới task Kẻ gieo sợ.
   - `public float TDOperatorView.ReceiveLeak(float share, float amplifier)`: trả số điểm đã cộng.
   - `public bool TDOperatorView.Covers(Vector2Int cell)`.
   - `bool IOperatorBehavior.Covers(Vector2Int myCell, Vector2Int target)`:
@@ -454,7 +457,7 @@ Seq(f, "TARGETS_NONE",           PathCellOperatorBehavior.SelectTargets(none, nu
   - `public static int[] Distribute(Difficulty d, int total)`: trả `[Normal, Fast, Tank, Horde, Herald]`, bằng `Apportion(pcts, total)`.
   - `public static List<List<EnemyType>> TDEnemyPathMainControl.BuildWavePlans(Difficulty d, int waveCount, int totalEnemies, float waveGrowth)`. Hàm instance `BuildWavePlans(LevelConfig)` gọi tới nó.
 
-Bảng độ khó cho task này. Bầy đàn và Kẻ gieo sợ chưa tồn tại, nên tỉ lệ Normal / Fast / Tank của spec được chuẩn hoá lại trên ba loại. Task 11 và Task 12 sẽ đặt giá trị cuối.
+Bảng độ khó cho task này. Bầy đàn và Kẻ gieo sợ chưa tồn tại, nên tỉ lệ Normal / Fast / Tank của spec được chuẩn hoá lại trên ba loại. Task 12 và Task 13 sẽ đặt giá trị cuối.
 
 | | normal / fast / tank | horde / herald | hpMult | speedMult | bossWaveCount × bossPerWave, bossWaveMult | deployLimitDelta | startingGold |
 |---|---|---|--:|--:|---|--:|--:|
@@ -486,7 +489,7 @@ for (int i = 1; i < regular.Count; i++)
   - **Trọng số wave `i` (0-based):** `1 + (g − 1) × i / (waveCount − 1)`. Nếu `waveCount = 1` thì trọng số là 1.
   - Wave boss nhân thêm `bossWaveMult`. Wave boss vẫn tính theo công thức cũ `ceil(waveCount × k / bossWaveCount) − 1`.
   - **Cỡ wave** `= Apportion(weights, total)`. Sau đó nâng mọi wave dưới mức tối thiểu (1, hoặc `bossPerWave + 1` với wave boss) bằng cách lấy từ wave lớn nhất. Lặp cho tới khi đủ.
-  - **Thành phần mỗi wave:** `Distribute(d, size − bosses)`, xáo Fisher–Yates, rồi append boss. Chỉ dùng 3 phần tử đầu cho tới Task 11.
+  - **Thành phần mỗi wave:** `Distribute(d, size − bosses)`, xáo Fisher–Yates, rồi append boss. Chỉ dùng 3 phần tử đầu cho tới Task 12. Task 9 thêm tiến độ trận vào `Distribute`.
   - `TDEnemyPathMainView`: đọc `row = DifficultyRatioTable.Get(config.difficulty)`, gọi `TDGoldControl.api?.Initialize(row.startingGold)` **trước** `TDDeployCap.api?.Initialize(...)`.
   - `LimitFor` trả `Mathf.Max(1, level.deployLimit + Get(level.difficulty).deployLimitDelta)`.
   - Log `BuildWavePlans` in danh sách cỡ từng wave.
@@ -512,7 +515,7 @@ public static class TDLoadModel
 {
     public static readonly string[] ReferenceTeam = { "Knight", "Ginger", "Striker", "Defender", "Moon", "Ace" };
     public struct WaveLoad { public int wave; public bool isBoss; public int onField; public float hp; public int bodies; public float seconds; public float rho; }
-    // NaN = not calibrated yet → target assertions are skipped. Task 10 fills these in.
+    // NaN = not calibrated yet → target assertions are skipped. Task 11 fills these in.
     public static float EfficiencyOf(Difficulty d);
     public static List<WaveLoad> Compute(LevelConfig level, Difficulty d,
         IReadOnlyList<OperatorData> roster, IReadOnlyList<EnemyData> enemies);
@@ -552,14 +555,76 @@ static readonly Dictionary<Difficulty, (float, float, float, float)> k_RhoTarget
 - [ ] **Step 3: Cài `TDLoadModel` và menu in bảng.** Menu in mọi level × độ khó, mỗi dòng một wave.
 - [ ] **Step 4: Chạy validator rồi chạy menu in bảng.** Expected: hai dòng PASS, vì assertion mục tiêu đang bị bỏ qua.
   - DEMO-1 Hard phải cho ρ tăng ở các wave thường cuối trận. So với bảng "đường cong hiện tại" ở spec §5.7: đường cong không còn đi ngang 0,33 sau khi chạm trần.
+    **Đã chạy: không đạt** (0,35 / 0,35 / 0,35). Cỡ tăng mà khoảng cách sinh giữ nguyên thì HP/giây không đổi. Spec thêm D14, Task 9 sửa.
   - Chép bảng in ra vào file kết quả của task.
 - [ ] **Step 5: Commit.** Message `tools: load-factor model and table for every level and difficulty`.
+
+### Task 9: Mật độ và thành phần theo tiến độ trận (D14)
+
+**Files:**
+- Modify: `Assets/2.Scripts/Model/Config/TDLevelConfigSettings.cs`: `RatioRow.mixRamp`, bảng, thêm `Shares`, `Distribute` nhận tiến độ
+- Modify: `Assets/2.Scripts/Control/PathControl/TDEnemyPathMainControl.cs`: thêm `GrowthWeight`, `SpawnIntervalFor`. `BuildWavePlans` chia thành phần theo tiến độ. `StartWaveLoop` truyền khoảng cách sinh theo wave
+- Modify: `Assets/2.Scripts/Model/Config/Constant/TDConstant.cs`: `CONFIG_SPAWN_INTERVAL_FLOOR = 0.8f`
+- Modify: `Assets/2.Scripts/Editor/TDLoadModel.cs`: `seconds` dùng khoảng cách sinh của wave
+- Modify: `Assets/2.Scripts/Control/Tower/TDOperatorRegistry.cs`: comment `// ponytail:` trên `LeakAmplifierAt` (dòng ~236) bỏ "Task 12", thay bằng "the Herald task", vì số task đã dời
+- Test: `Assets/2.Scripts/Editor/TDBalanceValidator.cs`
+
+**Interfaces:**
+- Consumes (Task 7, 8): `Apportion`, `BuildWavePlans`, `TDLoadModel.Compute`, `DifficultyRatioTable.Get`.
+- Produces:
+  - `RatioRow.mixRamp` (`float`): Normal **1.0**, Hard **0.8**, Nightmare **0.4**.
+  - `public static float[] DifficultyRatioTable.Shares(Difficulty d, float progress)`: trả `[Normal, Fast, Tank, Horde, Herald]`.
+    - `progress` kẹp vào 0..1.
+    - Loại nặng (Tank, Horde, Herald): `pct × (1 − r + 2r × progress)`, với `r = mixRamp`.
+    - Fast: `fastPct`. Normal: `1 −` tổng bốn loại kia.
+  - `public static int[] DifficultyRatioTable.Distribute(Difficulty d, int total, float progress)` = `Apportion(Shares(d, progress), total)`. **Thay** bản hai tham số.
+  - `public static float TDEnemyPathMainControl.GrowthWeight(int waveIdx, int waveCount, float waveGrowth)`: `1 + (g − 1) × i / (n − 1)`; `n ≤ 1` trả 1. `BuildWavePlans` dùng hàm này thay công thức viết tại chỗ.
+  - `public static float TDEnemyPathMainControl.SpawnIntervalFor(float spawnInterval, int waveIdx, int waveCount, float waveGrowth)`:
+    - `w = GrowthWeight(...)`. `w ≤ 0` thì trả `spawnInterval`.
+    - Ngược lại trả `Mathf.Min(spawnInterval, Mathf.Max(CONFIG_SPAWN_INTERVAL_FLOOR, spawnInterval / w))`.
+
+- [ ] **Step 1: Viết `RHO_RISES` trước**, một mình. Nó chỉ dùng `TDLoadModel` nên compile được với code hiện tại. Luôn chạy, không cần hiệu chỉnh, vì là tỉ số:
+
+```csharp
+// spec §5.7 / D14: load keeps rising after the team reaches the cap
+int limit = Mathf.Max(1, level.deployLimit + DifficultyRatioTable.Get(d).deployLimitDelta);
+var atCap = rows.FirstOrDefault(r => !r.isBoss && r.onField == limit);
+var last = rows.LastOrDefault(r => !r.isBoss);
+if (atCap.wave > 0 && last.wave > atCap.wave && last.rho < 1.1f * atCap.rho)
+    f.Add($"[RHO_RISES] {at}: last regular wave {last.rho:F2} < 1.1 × first at cap {atCap.rho:F2}");
+```
+  Đặt trong vòng level × độ khó của `LoadFactor`, ngay sau `RHO_FINITE`.
+- [ ] **Step 2: Chạy. Xác nhận fail đúng hành vi.** Expected: có `[RHO_RISES] level 0 Hard` (0,35 so với 0,35), `level 0 Normal`, `level 1 Normal`. Không lỗi compile.
+- [ ] **Step 3: Viết các assertion còn lại.**
+  - Vòng `RATIO` / `SUM` / `NEGATIVE` / `DRIFT` chạy thêm với `progress ∈ {0, 0.5, 1}`. Ideal của `DRIFT` = `Shares(d, t)[i] × total`.
+  - `MIX_FEASIBLE`: mọi độ khó, `t ∈ {0, 1}`, mọi share ≥ 0 và tổng = 1 ± 0,001.
+  - `MIX_AVERAGE`: `Shares(d, 0.5)` bằng bảng tỉ lệ ± 0,001.
+  - `MIX_RAMPS`: tổng share nặng ở `t = 1` ≥ ở `t = 0`, và lớn hơn hẳn khi `mixRamp > 0`.
+  - Với `s ∈ {0.5, 1.5, 2}`, `n` 1..10, `g ∈ {0.5, 1, 2.7}`:
+    - `DENSITY_FIRST`: `SpawnIntervalFor(s, 0, n, g) == s`.
+    - `DENSITY_NEVER_SLOWER`: mọi wave ≤ `s`.
+    - `DENSITY_FLOOR`: mọi wave ≥ `min(s, 0.8)`.
+    - `DENSITY_MONOTONE`: `g ≥ 1` thì không tăng theo wave.
+- [ ] **Step 4: Chạy. Xác nhận fail.** Expected: lỗi compile `Shares`, `SpawnIntervalFor`, `mixRamp`, `Distribute` 3 tham số.
+- [ ] **Step 5: Cài.**
+  - `mixRamp`, `Shares`, `Distribute(d, total, progress)`.
+  - `BuildWavePlans`: wave `i` dùng `Distribute(d, size − bosses, n == 1 ? 0 : i / (n − 1))`. Trọng số lấy từ `GrowthWeight`.
+  - `StartWaveLoop`: truyền `SpawnIntervalFor(config.spawnInterval, waveIdx, wavePlans.Count, config.waveGrowth)` vào `SpawnBatch` thay cho `config.spawnInterval`.
+  - Log `BuildWavePlans(LevelConfig)` in thêm khoảng cách sinh từng wave.
+  - `TDLoadModel`: `seconds = bodies × SpawnIntervalFor(level.spawnInterval, i, n, level.waveGrowth)`. Cập nhật comment về T.
+  - Comment `TDOperatorRegistry` như mục Files.
+- [ ] **Step 6: Chạy validator rồi `Print Load Table`.** Expected: hai dòng PASS. DEMO-1 Hard gần bảng dự kiến ở spec §5.7 (± 0,02): `0,54  0,36  0,41  B0,86  0,49  0,54  0,63  B1,30`. Chép bảng vào file kết quả.
+- [ ] **Step 7: Kiểm trong Play Mode**, DEMO-1 Hard:
+  - Log `BuildWavePlans` in khoảng cách giảm dần, từ `2.00` ở wave 1 tới `0.80` ở wave 8.
+  - Ghi thời điểm `OnEnemySpawned` theo **vị trí cổng**. Khoảng giữa hai con liên tiếp ở cùng cổng trong wave 1 và wave 7 khớp khoảng cách đã log, ± 0,1s.
+  - Wave 1 không có Tank.
+- [ ] **Step 8: Commit.** Message `balance: load rises by density and mix, not by wave size (D14)`.
 
 ---
 
 ## Đo lượt 1
 
-### Task 9: `TDPressureProbe` thành máy ghi
+### Task 10: `TDPressureProbe` thành máy ghi
 
 **Files:**
 - Modify: `Assets/2.Scripts/Control/Tower/TDPressureProbe.cs`
@@ -600,12 +665,16 @@ if (!float.IsNaN(TDPressureProbe.Pearson(new[] { 1f, 2f }, new[] { 5f, 5f }))) f
 - [ ] **Step 5: Kiểm trong Play Mode.** Chơi DEMO-1 tới Victory hoặc GameOver. Đọc `TDPressureProbe.LastReport` qua `script-execute`: có đủ bảng wave, có `r`, có số lần suy sụp.
 - [ ] **Step 6: Commit.** Message `tools: the pressure probe now records leaks, stints and gold per wave`.
 
-### Task 10: Bot đo và hiệu chỉnh lượt 1
+### Task 11: Bot đo và hiệu chỉnh lượt 1
 
 **Files:**
 - Create: `Assets/2.Scripts/Editor/TDCalibrationBot.cs`
+- Modify: `Assets/2.Scripts/Control/PathControl/TDEnemyPathMainControl.cs`: property chỉ-đọc `Groups`
+- Modify: `Assets/2.Scripts/View/GamePlay/Enemy/TDEnemyView.cs`, `Assets/2.Scripts/Control/Tower/TDPressureProbe.cs`: đếm con địch đã lọt (mỗi con một lần), cột `leaked` trong `LastReport`
+- Modify: `Assets/2.Scripts/Editor/TDLoadModel.cs`: T chia theo số cổng ra cùng lúc (`GatesFor`, đọc `TDStageConfig`)
 - Modify: `Assets/2.Scripts/Editor/TDLoadModel.cs`: giá trị `EfficiencyOf`
-- Modify: `Assets/1.Assets/Resources/Configs/Level Config.asset`: `totalEnemies`, `waveGrowth`. `Enemy Data Config.asset` chỉ sửa nếu rơi vào luật D11
+- Modify: `Assets/1.Assets/Resources/Configs/Level Config.asset`: `spawnInterval`, `waveGrowth` (`totalEnemies` nếu cần đổi độ dài trận). `Enemy Data Config.asset` chỉ sửa nếu rơi vào luật D11
+- Modify (chỉ khi bước 3 cần): `Assets/2.Scripts/Model/Config/TDLevelConfigSettings.cs`: `mixRamp`, `bossWaveMult` trong bảng độ khó
 - Create: `docs/superpowers/measurements/2026-10-06-load-model-round-1.md`
 
 **Interfaces:**
@@ -636,29 +705,34 @@ public static class TDCalibrationBot
 
 - [ ] **Step 1: Viết bot. Compile. Chạy validator.** Expected: hai dòng PASS.
 - [ ] **Step 2: Đo hiệu suất.** Với mỗi độ khó (tạm đặt `difficulty` của level 0 bằng script như Task 7, bước 5), chạy `StartFull` 3 trận DEMO-1. Mỗi trận:
-  - Tìm **wave thường đầu tiên có ≥ 2 lần lọt** trong `LastReport`.
+  - Tìm **wave thường đầu tiên có ≥ 2 con địch lọt** (cột `leaked` của `LastReport`, mỗi con tính một lần).
+    Không dùng cột `leaks`: bot xếp melee thành hàng, một con qua cả hàng sinh nhiều sự kiện lọt.
   - `e_trận` = ρ mô hình **chưa hiệu chỉnh** của wave đó, lấy từ `Print Load Table`.
-  - Không wave nào đạt 2 lần lọt: ghi `e > ρ lớn nhất`, tăng `totalEnemies` của level 0 lên 25%, chạy lại.
+  - Không wave nào đạt 2 lần lọt: ghi `e > ρ lớn nhất`, giảm `spawnInterval` của level 0 đi 20%, chạy lại.
   - `e` = trung bình 3 trận. Ghi từng trận vào log.
 - [ ] **Step 3: Đặt `EfficiencyOf` = `e` đã đo.** Chạy validator. Các dòng `RHO_*` sẽ chỉ ra giai đoạn nào lệch.
-  - Chỉnh `totalEnemies` khi cả đường cong cao hoặc thấp đều.
-  - Chỉnh `waveGrowth` khi đầu và cuối trận lệch ngược chiều nhau.
-  - Lặp cho tới khi `RHO_*` pass ở **cả 2 level**, cả 3 độ khó.
+  - Chỉnh `spawnInterval` của level khi cả đường cong cao hoặc thấp đều. `totalEnemies` gần như không đổi ρ (T tỉ lệ với số con), chỉ đổi độ dài trận.
+  - Chỉnh `waveGrowth` khi đầu và cuối trận lệch ngược chiều nhau. Từ Task 9 núm này đổi cả mật độ, nên kéo được cuối trận.
+  - Chỉnh `mixRamp` của độ khó khi riêng `RHO_EARLY` lệch.
+  - Chỉnh `bossWaveMult` của độ khó khi riêng `RHO_PEAK` lệch. Mô phỏng ở spec §5.7 cho thấy đỉnh boss đang khoảng 2 lần wave thường cuối, mục tiêu khoảng 1,33.
+  - Lặp cho tới khi `RHO_*` pass ở **cả 2 level**, cả 3 độ khó. `RHO_RISES` (Task 9) phải vẫn pass sau mọi lần chỉnh.
+  - **Kết quả lượt 1 (user chốt):** `EfficiencyOf` = `e` đo được ÷ `BotStrength` 0,58. Bot giữ một hàng cố định, không rút quân, nên được coi là yếu hơn người chơi mà mục tiêu mô tả. `RHO_EARLY` rời validator, chuyển thành phép đo bằng bot ở Step 4 (spec §5.7, §7.2). Mật độ giữ nguyên. Data đổi: `bossWaveMult` 1,2 / 1,3 / 1,15, `mixRamp` 1,0 / 0,65 / 0,3, và DEMO-1 `totalEnemies` 56 → 50 để wave 3 Hard thôi để lọt (Step 4).
 - [ ] **Step 4: Ba phép đo còn lại ở Hard**, với data mới:
 
   | Phép đo | Cách làm | Mục tiêu | Nếu trượt |
   |---|---|---|---|
+  | Đầu trận | Các trận `StartFull` | Ở các wave mô hình coi là chưa đủ trần (`onField < Limit`), mỗi wave lọt < 2 con (cột `leaked`) | Giảm tải đầu trận: `mixRamp` hoặc `waveGrowth` |
   | Morale có xuất hiện không | 1 trận `StartFull` | `LastReport` có ≥ 1 lần suy sụp | Tăng tải hoặc giảm trần |
-  | Tương quan HP ↔ stress | Cùng trận đó | `r < 0,5` | Quay lại spec §5.5, báo user, dừng |
+  | Tương quan HP ↔ stress | 3 trận `StartFull`, `ResetPool` trước trận đầu | `r melee pooled` < 0,5 (chỉ melee, gộp trận; spec §7.2) | Quay lại spec §5.5, báo user, dừng |
   | Thời điểm chạm trần | 1 trận `StartFull` và 1 trận `StartThree`. Từ `TotalEarned` theo wave, tìm wave đầu tiên mà `startingGold + TotalEarned ≥` tổng giá `Limit` người đầu của `ReferenceTeam` | Hai trận lệch ≤ 1 wave | Nhân mọi `goldReward` với 0,75 rồi đo lại (luật D11) |
-- [ ] **Step 5: Ghi log đo**: số từng trận, `e` theo độ khó, các chỉnh sửa data kèm lý do. Đặt lại `difficulty` của level 0 về Hard. Chạy validator. Expected: hai dòng PASS, gồm cả `RHO_*`.
+- [ ] **Step 5: Ghi log đo**: số từng trận, `e` theo độ khó, các chỉnh sửa data kèm lý do. Đặt lại `difficulty` của level 0 về Hard. Chạy validator. Expected: hai dòng PASS, gồm cả `RHO_*` (trừ `RHO_EARLY`, đã chuyển sang Step 4).
 - [ ] **Step 6: Commit** bot, `TDLoadModel.cs`, các asset đã chỉnh và log. Message `balance: calibrate the load model against bot runs (round 1)`.
 
 ---
 
 ## Mốc D — Hai loại địch mới
 
-### Task 11: Bầy đàn
+### Task 12: Bầy đàn
 
 **Files:**
 - Modify: `Assets/2.Scripts/Model/Config/Enum/Enums.cs`: `EnemyType.Horde = 4`
@@ -672,7 +746,7 @@ public static class TDCalibrationBot
 - Modify: `Assets/2.Scripts/Editor/TDLoadModel.cs`: thời gian và số con của bầy
 - Test: `Assets/2.Scripts/Editor/TDBalanceValidator.cs`
 
-Tỉ lệ cho task này: phần của Kẻ gieo sợ tạm gộp vào Normal cho tới Task 12.
+Tỉ lệ cho task này: phần của Kẻ gieo sợ tạm gộp vào Normal cho tới Task 13.
 
 | | normal / fast / tank / horde / herald |
 |---|---|
@@ -695,17 +769,18 @@ Tỉ lệ cho task này: phần của Kẻ gieo sợ tạm gộp vào Normal cho
 - [ ] **Step 3: Cài.**
   - Nở mỗi suất Horde thành 5 phần tử liền nhau **sau** Fisher–Yates, **trước** khi append boss.
   - `GetActualEnemyCount` đếm sau khi nở.
-  - `SpawnBatch`: giữa hai Horde trong cùng một bầy (bộ đếm Horde liên tiếp `% HORDE_PACK_SIZE != HORDE_PACK_SIZE − 1`) chờ `HORDE_PACK_SPAWN_INTERVAL`. Các trường hợp khác chờ `spawnInterval`.
+  - `SpawnBatch`: giữa hai Horde trong cùng một bầy (bộ đếm Horde liên tiếp `% HORDE_PACK_SIZE != HORDE_PACK_SIZE − 1`) chờ `HORDE_PACK_SPAWN_INTERVAL`. Các trường hợp khác chờ khoảng cách sinh của wave đó (`SpawnIntervalFor`, Task 9).
   - `StartWaveLoop` dùng `SliceWave` thay cho phép cắt theo `perGroup`.
-  - `TDLoadModel`: một suất Horde tính 5 con, thời gian `4 × 0,2 + spawnInterval`.
-- [ ] **Step 4: Chạy validator.** Expected: hai dòng PASS. `RHO_*` có thể fail vì tải đã đổi. Nếu fail, ghi lại, và Task 13 sẽ hiệu chỉnh. Riêng bước này chấp nhận `RHO_*` fail.
+  - `TDLoadModel`: một suất Horde tính 5 con, thời gian `4 × 0,2 + s_w`, với `s_w` là khoảng cách sinh của wave đó.
+  - Horde là loại **nặng** trong `Shares` (Task 9): tỉ lệ tăng dần theo tiến độ trận. `MIX_FEASIBLE` phải vẫn pass với bảng dưới.
+- [ ] **Step 4: Chạy validator.** Expected: hai dòng PASS. `RHO_*` có thể fail vì tải đã đổi. Nếu fail, ghi lại, và Task 14 sẽ hiệu chỉnh. Riêng bước này chấp nhận `RHO_*` fail.
 - [ ] **Step 5: Kiểm trong Play Mode.** DEMO-1 Hard với `StartFull`, chơi tới Victory:
   - Mỗi bầy 5 con ra trong khoảng 1 giây.
   - HUD `killed/total` khớp nhau, và Victory có bắn.
   - Bầy không có HP bar, không lỗi Animator trong console.
 - [ ] **Step 6: Commit.** Message `feat(enemy): Horde — packs of five that overflow a buffer`.
 
-### Task 12: Kẻ gieo sợ
+### Task 13: Kẻ gieo sợ
 
 **Files:**
 - Modify: `Enums.cs`: `EnemyType.Herald = 5`
@@ -741,15 +816,15 @@ Near(f, "AMP_OUTSIDE",  TDOperatorRegistry.LeakAmplifier(o, new[] { new Vector2I
 Near(f, "AMP_NO_STACK", TDOperatorRegistry.LeakAmplifier(o, new[] { new Vector2Int(1, 0), new Vector2Int(0, 1) }), TDConstant.HERALD_LEAK_MULT);
 ```
 - [ ] **Step 2: Chạy. Xác nhận fail.** Expected: `CS0117 'LeakAmplifier'`.
-- [ ] **Step 3: Cài.** Thêm Herald vào `Distribute` và kế hoạch wave (một phần tử mỗi suất). `TDPressureProbe.AuraRateAt` để nguyên: Herald **không** có aura.
-- [ ] **Step 4: Chạy validator.** Expected: hai dòng PASS, trừ `RHO_*` như Task 11, bước 4.
+- [ ] **Step 3: Cài.** Thêm Herald vào `Distribute` và kế hoạch wave (một phần tử mỗi suất). Herald là loại **nặng** trong `Shares` (Task 9). Đổi comment `// ponytail:` trên `LeakAmplifierAt` thành mô tả hàm thật. `TDPressureProbe.AuraRateAt` để nguyên: Herald **không** có aura.
+- [ ] **Step 4: Chạy validator.** Expected: hai dòng PASS, trừ `RHO_*` như Task 12, bước 4.
 - [ ] **Step 5: Kiểm trong Play Mode.**
   - Một Herald bị Knight chặn: HP Knight không giảm vì Herald không đánh.
   - Các lần lọt trong vòng 4 ô log ra gấp đôi điểm.
   - Vòng `FearRing` thấy được trong `screenshot-game-view`.
 - [ ] **Step 6: Commit.** Message `feat(enemy): Herald — doubles every leak within four cells`.
 
-### Task 13: Đo lượt 2, ca bắt buộc, hiệu năng
+### Task 14: Đo lượt 2, ca bắt buộc, hiệu năng
 
 **Files:**
 - Modify: `Assets/2.Scripts/Editor/TDCalibrationBot.cs`: thêm `SpawnForTest`
@@ -757,7 +832,7 @@ Near(f, "AMP_NO_STACK", TDOperatorRegistry.LeakAmplifier(o, new[] { new Vector2I
 - Modify: `TDLoadModel.cs`, `Level Config.asset` (hiệu chỉnh)
 - Create: `docs/superpowers/measurements/2026-10-06-load-model-round-2.md`
 
-- [ ] **Step 1: Hiệu chỉnh lại.** Lặp lại Task 10, bước 2–5, với thành phần đầy đủ. Expected: hai dòng PASS gồm `RHO_*`, morale xuất hiện ở Hard, `r < 0,5`.
+- [ ] **Step 1: Hiệu chỉnh lại.** Lặp lại Task 11, bước 2–5, với thành phần đầy đủ. Expected: hai dòng PASS gồm `RHO_*`, morale xuất hiện ở Hard, `r < 0,5`.
 - [ ] **Step 2: Ca ác mộng.**
   - Một Knight Calm đứng một mình chặn đủ 2 Normal (sinh bằng `SpawnForTest`).
   - Sinh 1 Herald, rồi một bầy (`SpawnForTest(Horde, 5, 0.2f)`) trên cùng hành lang.
@@ -771,7 +846,7 @@ Near(f, "AMP_NO_STACK", TDOperatorRegistry.LeakAmplifier(o, new[] { new Vector2I
 
 ---
 
-### Task 14: Đồng bộ tài liệu
+### Task 15: Đồng bộ tài liệu
 
 **Files:**
 - Modify: `MORALE_SYSTEM_DESIGN.md`: §03, §04, §10, mục lục
@@ -789,4 +864,4 @@ Near(f, "AMP_NO_STACK", TDOperatorRegistry.LeakAmplifier(o, new[] { new Vector2I
 
 ---
 
-**Sau Task 14:** cổng người chơi ở spec §7.3 do user tự thực hiện, gồm "không vô hình, không bất khả kháng" và bài test A4. Plan này dừng ở đó.
+**Sau Task 15:** cổng người chơi ở spec §7.3 do user tự thực hiện, gồm "không vô hình, không bất khả kháng" và bài test A4. Plan này dừng ở đó.

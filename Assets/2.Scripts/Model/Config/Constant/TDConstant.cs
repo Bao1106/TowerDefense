@@ -380,7 +380,8 @@ public static class TDConstant
     public const float STRESS_PER_LEAK = 7f;
     public const float LEAK_SHARE_MELEE = 0.7f;
 
-    // A Herald within HERALD_RADIUS cells (Euclid) of the leak amplifies it ×1.5 (×2 before round 2). Does not stack.
+    // A Herald within HERALD_RADIUS cells (Euclid) of the leak amplifies it ×1.5 (×2 before round 2). Does not stack,
+    // and never applies to a Horde body.
     public const float HERALD_LEAK_MULT = 1.5f;
     public const float HERALD_RADIUS = 4f;
 

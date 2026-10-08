@@ -106,7 +106,9 @@ public class TDGameplayHUDView : MonoBehaviour
     // ── Init controls ──────────────────────────────────────────────────────────
     private void InitControls()
     {
-        TDGoldControl.api.Initialize(TDConstant.CONFIG_PLAYER_STARTING_GOLD);
+        // The difficulty sets the opening purse (TDEnemyPathMainView); Start order between the two
+        // is undefined, so the HUD only shows what is there and lets onGoldChanged follow it.
+        OnGoldChanged(TDGoldControl.api.Gold);
         TDSpeedControl.api.Initialize();
     }
 
