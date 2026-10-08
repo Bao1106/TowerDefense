@@ -38,6 +38,7 @@ namespace TDEnums
         Tank, // 900 HP, speed 1.5 — TurtleShell
         Boss, // 3000 HP, speed 1.0 — DragonBoar
         Horde = 4, // 70 HP, speed 4.0 — one wave slot, spawned as a pack of HORDE_PACK_SIZE
+        Herald = 5, // 500 HP, speed 2.0, no attack — doubles every leak within HERALD_RADIUS cells
     }
 
     // Three rungs, not five. Easy was dropped because measurement showed the game was

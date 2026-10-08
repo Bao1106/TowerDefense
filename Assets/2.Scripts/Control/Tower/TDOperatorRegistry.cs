@@ -235,9 +235,30 @@ public class TDOperatorRegistry
         Debug.Log($"[Leak] {cell} → {(parts.Count > 0 ? string.Join(", ", parts) : "nobody")}");
     }
 
-    // ponytail: no Herald yet, so every leak is x1. The Herald task replaces this with the Herald
-    // amplifier (x2 within HERALD_RADIUS of a live Herald).
-    private float LeakAmplifierAt(Vector2Int cell) => 1f;
+    // The live Heralds' cells, from the enemy registry — a dying enemy leaves it at once, so a
+    // Herald stops amplifying the moment it is killed.
+    private float LeakAmplifierAt(Vector2Int cell)
+    {
+        var heralds = new List<Vector2Int>();
+        var enemies = TDEnemyRegistry.api?.GetAll();
+        if (enemies != null && TDGridMainModel.api != null)
+            foreach (var e in enemies)
+                if (e != null && e.EnemyType == TDEnums.EnemyType.Herald)
+                    heralds.Add(TDGridMainModel.api.WorldToCell(e.transform.position));
+        return LeakAmplifier(cell, heralds);
+    }
+
+    /// <summary>
+    /// Spec §5.5: HERALD_LEAK_MULT when any Herald stands within HERALD_RADIUS cells (Euclid) of
+    /// the leak, otherwise 1. Two Heralds in range are still ×2 — it does not stack.
+    /// </summary>
+    public static float LeakAmplifier(Vector2Int leakCell, IReadOnlyList<Vector2Int> heraldCells)
+    {
+        float r2 = TDConstant.HERALD_RADIUS * TDConstant.HERALD_RADIUS;
+        foreach (var h in heraldCells)
+            if ((h - leakCell).sqrMagnitude <= r2) return TDConstant.HERALD_LEAK_MULT;
+        return 1f;
+    }
 
     /// <summary>
     /// A wave finished. Everyone still deployed steadies a little — but only if nobody

@@ -591,7 +591,7 @@ public class TDEnemyPathMainControl
         return Mathf.Min(spawnInterval, Mathf.Max(TDConstant.CONFIG_SPAWN_INTERVAL_FLOOR, spawnInterval / w));
     }
 
-    private static readonly EnemyType[] k_MixTypes = { EnemyType.Normal, EnemyType.Fast, EnemyType.Tank, EnemyType.Horde };
+    private static readonly EnemyType[] k_MixTypes = { EnemyType.Normal, EnemyType.Fast, EnemyType.Tank, EnemyType.Horde, EnemyType.Herald };
 
     // Spec §5.7. Wave i weighs GrowthWeight, boss waves × bossWaveMult on top, and the level's
     // total is apportioned by weight — growth reshapes a match without lengthening it. The mix
@@ -641,7 +641,6 @@ public class TDEnemyPathMainControl
             float progress = waveCount == 1 ? 0f : (float)w / (waveCount - 1);
             int[] mix = DifficultyRatioTable.Distribute(difficulty, sizes[w] - bosses, progress);
 
-            // Herald (mix[4]) has zero share until that enemy type exists.
             var slots = new List<EnemyType>(sizes[w]);
             for (int t = 0; t < k_MixTypes.Length; t++)
                 for (int i = 0; i < mix[t]; i++) slots.Add(k_MixTypes[t]);

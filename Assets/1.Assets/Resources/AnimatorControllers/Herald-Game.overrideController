@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!221 &22100000
+AnimatorOverrideController:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: Herald-Game
+  m_Controller: {fileID: 9100000, guid: 053b9ebe8e4908e4d9ea56adc41acffb, type: 2}
+  m_Clips:
+  - m_OriginalClip: {fileID: 1827226128182048838, guid: f9ac037bacb2422eb183ed814e3a6d1d, type: 3}
+    m_OverrideClip: {fileID: 7400000, guid: 1125a2cce46b489590671831483c9b9f, type: 3}
+  - m_OriginalClip: {fileID: 1827226128182048838, guid: 32eabf87c5874ae2b4a1a0cc8b55b52b, type: 3}
+    m_OverrideClip: {fileID: 7400000, guid: 38b0b6ad62ca4f8fa72ac537c889c8dc, type: 3}
+  - m_OriginalClip: {fileID: 1827226128182048838, guid: 085e31323a6b42248f44aff75446a550, type: 3}
+    m_OverrideClip: {fileID: 7400000, guid: 13049e370384471a857e55bf2ab6c1aa, type: 3}
+  - m_OriginalClip: {fileID: 1827226128182048838, guid: c78e4349565c42a8bc257e2133792c35, type: 3}
+    m_OverrideClip: {fileID: 7400000, guid: 97c47bfed40c4af58abfab0182f75594, type: 3}
+  - m_OriginalClip: {fileID: 1827226128182048838, guid: 162c982447ff467a81c63f0c731aed7a, type: 3}
+    m_OverrideClip: {fileID: 7400000, guid: a5aa3ce397c24155845dba13bc634b36, type: 3}

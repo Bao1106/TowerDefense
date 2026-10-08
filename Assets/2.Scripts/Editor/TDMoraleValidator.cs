@@ -48,6 +48,7 @@ public static class TDMoraleValidator
         BreakEdge(f);
         Leaks(f);
         LeakSplit(f);
+        Amplifier(f);
         DeployCap(f);
         Targets(f);
         Pearson(f);
@@ -395,6 +396,16 @@ public static class TDMoraleValidator
         if (cap.Limit != TDConstant.CONFIG_MAX_SLOTS) f.Add("[CAP_BAD_LIMIT] limit 0 was accepted");
         cap.OnUnitPlaced(); cap.Initialize(3);
         if (cap.OnField != 0) f.Add("[CAP_RESET_ON_INIT] a new match inherited units");
+    }
+
+    // Spec §5.5: a Herald within HERALD_RADIUS cells (Euclid) of a leak doubles it; two do not make it ×4.
+    private static void Amplifier(List<string> f)
+    {
+        var o = new Vector2Int(0, 0);
+        Near(f, "AMP_NONE", TDOperatorRegistry.LeakAmplifier(o, new Vector2Int[0]), 1f);
+        Near(f, "AMP_INSIDE", TDOperatorRegistry.LeakAmplifier(o, new[] { new Vector2Int(4, 0) }), TDConstant.HERALD_LEAK_MULT);
+        Near(f, "AMP_OUTSIDE", TDOperatorRegistry.LeakAmplifier(o, new[] { new Vector2Int(4, 1) }), 1f); // √17 > 4
+        Near(f, "AMP_NO_STACK", TDOperatorRegistry.LeakAmplifier(o, new[] { new Vector2Int(1, 0), new Vector2Int(0, 1) }), TDConstant.HERALD_LEAK_MULT);
     }
 
     // Spec §7.2: the HP ↔ stress correlation the probe reports per stint (target r < 0.5).
