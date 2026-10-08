@@ -404,6 +404,20 @@ public static class TDMoraleValidator
         Near(f, "PEARSON_INVERSE", TDPressureProbe.Pearson(new[] { 1f, 2f, 3f }, new[] { 3f, 2f, 1f }), -1f, 0.001f);
         if (!float.IsNaN(TDPressureProbe.Pearson(new[] { 1f }, new[] { 1f }))) f.Add("[PEARSON_N1] n<2 gave a number");
         if (!float.IsNaN(TDPressureProbe.Pearson(new[] { 1f, 2f }, new[] { 5f, 5f }))) f.Add("[PEARSON_FLAT] zero variance gave a number");
+
+        // Melee stints only: ranged never lose HP, so mixing them in measured front line vs back
+        // line, not HP vs stress (round 1: all stints 0.60–0.77, melee pooled 0.48).
+        var stints = new[]
+        {
+            new TDPressureProbe.Stint { melee = true, seconds = 10f, hpLost = 100f, stressGained = 40f },
+            new TDPressureProbe.Stint { melee = true, seconds = 10f, hpLost = 200f, stressGained = 30f },
+            new TDPressureProbe.Stint { melee = true, seconds = 10f, hpLost = 300f, stressGained = 20f },
+            new TDPressureProbe.Stint { melee = true, seconds = 2f, hpLost = 900f, stressGained = 90f }, // < 5 s: noise
+            new TDPressureProbe.Stint { melee = false, seconds = 10f, hpLost = 0f, stressGained = 5f },
+            new TDPressureProbe.Stint { melee = false, seconds = 10f, hpLost = 0f, stressGained = 6f },
+        };
+        float r = TDPressureProbe.MeleeR(stints);
+        if (!(Mathf.Abs(r + 1f) <= 0.001f)) f.Add($"[STINT_R_MELEE_ONLY] got {r:F3}, want -1 (ranged or short stints counted)");
     }
 
     // Spec §5.6: blockCount is how many a melee HOLDS, attackType is how many it STRIKES.

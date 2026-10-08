@@ -15,7 +15,7 @@ MonoBehaviour:
   levels:
   - levelIndex: 0
     difficulty: 1
-    totalEnemies: 56
+    totalEnemies: 50
     waveCount: 8
     waveInterval: 10
     spawnInterval: 2

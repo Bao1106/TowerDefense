@@ -11,8 +11,10 @@ using UnityEngine;
 ///
 /// The recorder keeps one row per wave (units on the field, cap, gold earned, leaks, collapses)
 /// and one entry per stint — an operator's stay on the field, from deploy to retreat, death or
-/// the end of the match — and reports r = Pearson(HP lost/s, stress gained/s) over the stints:
-/// the check that HP and stress are two pressures, not one (§4.3 rule 4, target r &lt; 0.5).
+/// the end of the match — and reports r = Pearson(HP lost/s, stress gained/s) over the MELEE
+/// stints: the check that HP and stress are two pressures, not one (§4.3 rule 4, target r &lt; 0.5).
+/// One match gives 3–5 melee stints, too few for r, so stints also pool across matches until
+/// ResetPool and the report gives both.
 /// </summary>
 public static class TDPressureProbe
 {
@@ -49,12 +51,13 @@ public static class TDPressureProbe
 
     private const float MIN_STINT_SECONDS = 5f; // shorter stays are noise in a per-second rate
 
-    private struct WaveRow { public int wave, onField, limit, goldEarned, leaks, collapses; }
-    private struct Stint { public string op; public float seconds, hpLost, stressGained; }
+    private struct WaveRow { public int wave, onField, limit, goldEarned, leaks, leakedEnemies, collapses; }
+    public struct Stint { public string op; public bool melee; public float seconds, hpLost, stressGained; }
 
     private static readonly List<WaveRow> s_Waves = new();
     private static readonly List<Stint> s_Stints = new();
-    private static int s_Wave = -1, s_Leaks, s_Collapses, s_TotalCollapses;
+    private static readonly List<Stint> s_Pool = new(); // every match since ResetPool
+    private static int s_Wave = -1, s_Leaks, s_LeakedEnemies, s_Collapses, s_TotalCollapses, s_PoolMatches;
     private static string s_Ending, s_Report;
 
     // Subscribed once per play session: the bus is static and outlives scenes, and with domain
@@ -70,7 +73,10 @@ public static class TDPressureProbe
         TDGameEventBus.OnGameOver += OnGameOver;
     }
 
+    // Leak EVENTS (every full blocker passed — what morale feels) vs leaked ENEMIES (each counted
+    // once — what calibration measures: one enemy past a line of four is one failure, not four).
     public static void RecordLeak() => s_Leaks++;
+    public static void RecordLeakedEnemy() => s_LeakedEnemies++;
 
     public static void RecordCollapse()
     {
@@ -80,8 +86,38 @@ public static class TDPressureProbe
 
     /// <summary>One stay on the field has ended (retreat, death, or the match). `stressGained`
     /// sums the POSITIVE frame-to-frame rises — relief must not cancel the pressure it follows.</summary>
-    public static void RecordStint(string op, float seconds, float hpLost, float stressGained)
-        => s_Stints.Add(new Stint { op = op, seconds = seconds, hpLost = hpLost, stressGained = stressGained });
+    public static void RecordStint(string op, bool melee, float seconds, float hpLost, float stressGained)
+    {
+        var s = new Stint { op = op, melee = melee, seconds = seconds, hpLost = hpLost, stressGained = stressGained };
+        s_Stints.Add(s);
+        s_Pool.Add(s);
+    }
+
+    public static void ResetPool()
+    {
+        s_Pool.Clear();
+        s_PoolMatches = 0;
+    }
+
+    /// <summary>
+    /// r over the melee stints of at least MIN_STINT_SECONDS. Ranged operators never lose HP, so
+    /// counting them made r measure front line vs back line instead of HP vs stress.
+    /// </summary>
+    public static float MeleeR(IReadOnlyList<Stint> stints) => MeleeR(stints, out _);
+
+    private static float MeleeR(IReadOnlyList<Stint> stints, out int n)
+    {
+        var hpRate = new List<float>();
+        var stressRate = new List<float>();
+        foreach (var s in stints)
+        {
+            if (!s.melee || s.seconds < MIN_STINT_SECONDS) continue;
+            hpRate.Add(s.hpLost / s.seconds);
+            stressRate.Add(s.stressGained / s.seconds);
+        }
+        n = hpRate.Count;
+        return Pearson(hpRate, stressRate);
+    }
 
     /// <summary>
     /// The match so far. After Victory or GameOver it is built once, on the first read — not in
@@ -102,7 +138,7 @@ public static class TDPressureProbe
         else CloseWave();
 
         s_Wave = waveIdx;
-        s_Leaks = s_Collapses = 0;
+        s_Leaks = s_LeakedEnemies = s_Collapses = 0;
     }
 
     private static void OnVictory() => End("Victory");
@@ -113,6 +149,7 @@ public static class TDPressureProbe
         if (s_Ending != null) return;
         CloseWave();
         s_Ending = how;
+        s_PoolMatches++;
     }
 
     private static void CloseWave()
@@ -125,6 +162,7 @@ public static class TDPressureProbe
             limit = TDDeployCap.api?.Limit ?? 0,
             goldEarned = TDGoldControl.api?.TotalEarned ?? 0,
             leaks = s_Leaks,
+            leakedEnemies = s_LeakedEnemies,
             collapses = s_Collapses,
         });
         s_Wave = -1;
@@ -134,27 +172,23 @@ public static class TDPressureProbe
     {
         var sb = new StringBuilder();
         sb.AppendLine($"Pressure report — {s_Ending ?? "in progress"}");
-        sb.AppendLine("wave  onField  limit  goldEarned  leaks  collapses");
+        sb.AppendLine("wave  onField  limit  goldEarned  leaks  leaked  collapses");
         foreach (var w in s_Waves)
-            sb.AppendLine($"{w.wave,4}  {w.onField,7}  {w.limit,5}  {w.goldEarned,10}  {w.leaks,5}  {w.collapses,9}");
-        if (s_Wave >= 0) sb.AppendLine($"{s_Wave + 1,4}  (open)  leaks {s_Leaks}, collapses {s_Collapses}");
+            sb.AppendLine($"{w.wave,4}  {w.onField,7}  {w.limit,5}  {w.goldEarned,10}  {w.leaks,5}  {w.leakedEnemies,6}  {w.collapses,9}");
+        if (s_Wave >= 0) sb.AppendLine($"{s_Wave + 1,4}  (open)  leaks {s_Leaks}, leaked {s_LeakedEnemies}, collapses {s_Collapses}");
 
-        var hpRate = new List<float>();
-        var stressRate = new List<float>();
+        float r = MeleeR(s_Stints, out int n);
+        float pooled = MeleeR(s_Pool, out int pooledN);
+        sb.AppendLine($"stints: {s_Stints.Count}");
         foreach (var s in s_Stints)
-        {
-            if (s.seconds < MIN_STINT_SECONDS) continue;
-            hpRate.Add(s.hpLost / s.seconds);
-            stressRate.Add(s.stressGained / s.seconds);
-        }
-        float r = Pearson(hpRate, stressRate);
-        sb.AppendLine($"stints: {s_Stints.Count} ({hpRate.Count} of ≥ {MIN_STINT_SECONDS:F0}s)");
-        foreach (var s in s_Stints)
-            sb.AppendLine($"  {s.op,-9} {s.seconds,6:F1}s  hp −{s.hpLost,6:F0}  stress +{s.stressGained,6:F1}");
-        sb.AppendLine($"r (HP lost/s vs stress gained/s) = {(float.IsNaN(r) ? "n/a" : r.ToString("F2"))}");
+            sb.AppendLine($"  {s.op,-9} {(s.melee ? "melee " : "ranged")} {s.seconds,6:F1}s  hp −{s.hpLost,6:F0}  stress +{s.stressGained,6:F1}");
+        sb.AppendLine($"r melee (HP lost/s vs stress gained/s) = {Format(r)} over {n} stints of ≥ {MIN_STINT_SECONDS:F0}s");
+        sb.AppendLine($"r melee pooled over {s_PoolMatches} matches = {Format(pooled)} over {pooledN} stints");
         sb.AppendLine($"collapses: {s_TotalCollapses}");
         return sb.ToString();
     }
+
+    private static string Format(float r) => float.IsNaN(r) ? "n/a" : r.ToString("F2");
 
     /// <summary>Pearson correlation; NaN when n &lt; 2 or either series has no variance.</summary>
     public static float Pearson(IReadOnlyList<float> xs, IReadOnlyList<float> ys)

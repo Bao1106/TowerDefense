@@ -21,6 +21,7 @@ public class TDEnemyView : MonoBehaviour
 
     // Operator blocking state
     private bool m_IsBlocked;
+    private bool m_HasLeaked; // counted once by TDPressureProbe however many full blockers it passes
     private Vector2Int m_BlockerCell;
 
     public EnemyType EnemyType { get; private set; }
@@ -42,6 +43,7 @@ public class TDEnemyView : MonoBehaviour
         m_HasBeenReturned = false;
         m_HasReachedEnd = false;
         m_IsDying = false;
+        m_HasLeaked = false;
         m_IsBlocked = false;
         m_BlockerCell = Vector2Int.zero;
         m_CurrentPathIndex = 0;
@@ -215,7 +217,17 @@ public class TDEnemyView : MonoBehaviour
                     // (spec §5.2). Enemies released by ForceUnblock never get here for this cell —
                     // it already stepped their path index past it.
                     if (TDOperatorRegistry.api != null && TDOperatorRegistry.api.HasOperatorAt(arrivedCell))
+                    {
                         TDOperatorRegistry.api.ReportLeak(arrivedCell);
+
+                        // Every full blocker passed is a leak for morale; for calibration it is one
+                        // enemy that got through, however long the line it walked past.
+                        if (!m_HasLeaked)
+                        {
+                            m_HasLeaked = true;
+                            TDPressureProbe.RecordLeakedEnemy();
+                        }
+                    }
 
                     // Walking over a collapsed operator earns one blow in passing (§06 · 3.1).
                     //

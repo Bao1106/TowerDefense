@@ -134,9 +134,13 @@ public class TDEnemyPathMainControl
 
     // ── Path Generation ───────────────────────────────────────────────────────
 
+    /// <summary>This match's gates and corridors, once generated (read by the calibration bot).</summary>
+    public IReadOnlyList<TDPathGroup> Groups { get; private set; }
+
     public void GenerateAllPaths(IGridDTO gridDTO, List<TDPathGroup> groups)
     {
         TDMazePathGenerator.api.GenerateForGroups(gridDTO, groups);
+        Groups = groups;
 
         int total = groups.Sum(g => g.Corridors.Count);
         Debug.Log($"<color=cyan>[GenerateAllPaths] {total} corridors across {groups.Count} groups</color>");

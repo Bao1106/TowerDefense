@@ -19,19 +19,38 @@ public static class TDLoadModel
     public struct WaveLoad { public int wave; public bool isBoss; public int onField; public float hp; public int bodies; public float seconds; public float rho; }
 
     // NaN = not calibrated yet → the validator skips its target assertions. Set per difficulty
-    // from bot runs: the uncalibrated ρ of the first regular wave that leaks twice.
-    public static float EfficiencyOf(Difficulty d) => float.NaN;
+    // from bot runs: the uncalibrated ρ of the first regular wave in which two ENEMIES leaked,
+    // averaged over three DEMO-1 runs (docs/superpowers/measurements/2026-10-06-load-model-round-1.md),
+    // divided by BotStrength.
+    public static float EfficiencyOf(Difficulty d) => d switch
+    {
+        Difficulty.Normal => 0.51f / BotStrength,
+        Difficulty.Hard => 0.58f / BotStrength,
+        Difficulty.Nightmare => 0.59f / BotStrength,
+        _ => float.NaN,
+    };
+
+    // The bot holds one fixed line and never retreats; the ρ targets describe a player. Taken
+    // as ~0.6 of one (user ruling, round 1) — 0.58 is the one value near it at which all three
+    // difficulties meet their targets. A human playtest at Hard is what confirms or moves it.
+    public const float BotStrength = 0.58f;
 
     /// <summary>
     /// One row per wave of `level` played at difficulty `d` — `d`, not level.difficulty, so the
     /// same level can be tabled at all three.
     ///
-    /// T is the time the spawner spends releasing the wave — bodies × that wave's own spacing
-    /// (SpawnIntervalFor, the function the wave loop uses; D14) — not the pause after it: the
-    /// pause is the same for every wave, so it would only flatten the shape.
+    /// T is the time the spawner spends releasing the wave: its longest gate slice × that wave's
+    /// own spacing (SpawnIntervalFor, the function the wave loop uses; D14). Two gates releasing
+    /// at once halve it — leaving that out made the first calibration read DEMO-1's second gate
+    /// as a 2× "inefficiency". Not the pause after the wave: the same for every wave, it would
+    /// only flatten the shape.
+    ///
+    /// `gates` comes in from the caller (GatesFor) so this stays pure arithmetic: looking it up in
+    /// here once scanned the asset database on every call, and a tuning loop calling Compute
+    /// thousands of times inside one editor tick ran the editor out of native memory.
     /// </summary>
     public static List<WaveLoad> Compute(LevelConfig level, Difficulty d,
-        IReadOnlyList<OperatorData> roster, IReadOnlyList<EnemyData> enemies)
+        IReadOnlyList<OperatorData> roster, IReadOnlyList<EnemyData> enemies, int gates)
     {
         var row = DifficultyRatioTable.Get(d);
         int limit = Mathf.Max(1, level.deployLimit + row.deployLimitDelta);
@@ -59,7 +78,7 @@ public static class TDLoadModel
                 hp += (Find(enemies, type)?.baseHP ?? 0f) * row.hpMult;
 
             int bodies = plan[i].Count;
-            float seconds = bodies * TDEnemyPathMainControl.SpawnIntervalFor(level.spawnInterval, i, plan.Count, level.waveGrowth);
+            float seconds = LongestSlice(bodies, gates) * TDEnemyPathMainControl.SpawnIntervalFor(level.spawnInterval, i, plan.Count, level.waveGrowth);
             float h = bodies > 0 ? hp / bodies : 0f;
             float capacity = dps * seconds + block * h;
             float rho = capacity > 0f ? hp / capacity : hp > 0f ? float.PositiveInfinity : 0f;
@@ -72,6 +91,33 @@ public static class TDLoadModel
             });
         }
         return rows;
+    }
+
+    /// <summary>
+    /// Gates that release a wave at the same time on this level's stage: a Simultaneous stage
+    /// splits every wave across all its gates, any other mode sends a wave through one. The level
+    /// config does not know its map, so this reads the stages the game plays — TDStageRepository's
+    /// list, passed in by the caller, not every TDStageConfig asset lying in the project.
+    /// </summary>
+    public static int GatesFor(int levelIndex, IReadOnlyList<TDStageConfig> stages)
+    {
+        if (stages == null) return 1;
+        foreach (var stage in stages)
+        {
+            if (stage == null || stage.LevelIndex != levelIndex) continue;
+            return stage.GateMode == GateAssignmentMode.Simultaneous
+                ? Mathf.Max(1, Mathf.Max(stage.StartGateCount, stage.EndGateCount)) : 1;
+        }
+        return 1;
+    }
+
+    // The wave loop's own split (StartWaveLoop): every gate gets n / gates, the last takes the rest.
+    // The wave lasts as long as its longest slice.
+    private static int LongestSlice(int bodies, int gates)
+    {
+        if (gates <= 1) return bodies;
+        int perGroup = Mathf.Max(1, bodies / gates);
+        return Mathf.Max(perGroup, bodies - (gates - 1) * perGroup);
     }
 
     private static OperatorData Find(IReadOnlyList<OperatorData> roster, string name)

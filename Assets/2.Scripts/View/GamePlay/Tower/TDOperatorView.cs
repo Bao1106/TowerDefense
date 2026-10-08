@@ -136,7 +136,8 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         m_StintOpen = false;
 
         SampleStress();
-        TDPressureProbe.RecordStint(m_Data?.operatorName, Time.time - m_StintStart,
+        TDPressureProbe.RecordStint(m_Data?.operatorName, m_Data != null && m_Data.deployZone == DeployZone.PathCell,
+                                    Time.time - m_StintStart,
                                     Mathf.Max(0f, m_StintStartHp - Mathf.Max(0f, m_CurrentHp)), m_StintStress);
     }
 
