@@ -96,6 +96,10 @@ public static class TDConstant
     // D14: later waves spawn denser (spawnInterval / wave weight) but never closer than this — the
     // densest grunt spacing in Arknights 4-4. A level that asks for denser keeps its own value.
     public const float CONFIG_SPAWN_INTERVAL_FLOOR = 0.8f;
+    // Spec §5.5: a Horde slot spawns this many bodies, this far apart — a burst that fills a
+    // blocker's slots at once, so the rest of the pack leaks.
+    public const int HORDE_PACK_SIZE = 5;
+    public const float HORDE_PACK_SPAWN_INTERVAL = 0.2f;
     public const int CONFIG_NUM_PATHS = 3;
     public const int CONFIG_MAX_WAVES = 10;
     public const float CONFIG_PATH_OFFSET_Y = 0.1f;

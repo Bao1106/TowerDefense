@@ -54,20 +54,19 @@ public static class DifficultyRatioTable
         public int deployLimitDelta, startingGold;
     }
 
-    // Horde and Herald do not exist yet, so the spec's Normal/Fast/Tank shares are renormalised
-    // over three types; the Horde and Herald tasks set the final five-way split.
-    // mixRamp is capped by normalPct / heavy shares (Normal must not go negative late):
-    // Nightmare's 55% heavy average leaves room for 0.45 at most.
+    // Herald does not exist yet, so its spec share sits in Normal until the Herald task.
+    // mixRamp is capped by Normal going negative late: 1 − fast − heavy × (1 + r) ≥ 0, so
+    // Nightmare's 42% heavy (Tank + Horde) leaves room for 0.9 at most.
     // mixRamp and bossWaveMult are calibrated against bot runs (round 1): boss waves at 2–2.5×
     // leaked 13–19 enemies, and no setting above ~1.4 meets the ρ targets.
     private static readonly Dictionary<Difficulty, RatioRow> k_Table =
         new Dictionary<Difficulty, RatioRow>
         {
-            { Difficulty.Normal, new RatioRow { normalPct=0.647f, fastPct=0.235f, tankPct=0.118f, mixRamp=1.0f, hpMult=1.0f, speedMult=1.0f,
+            { Difficulty.Normal, new RatioRow { normalPct=0.60f, fastPct=0.20f, tankPct=0.10f, hordePct=0.10f, mixRamp=1.0f, hpMult=1.0f, speedMult=1.0f,
                                                 bossWaveCount=1, bossPerWave=1, bossWaveMult=1.2f, deployLimitDelta=+1, startingGold=40 } },
-            { Difficulty.Hard, new RatioRow { normalPct=0.519f, fastPct=0.286f, tankPct=0.195f, mixRamp=0.65f, hpMult=1.2f, speedMult=1.1f,
+            { Difficulty.Hard, new RatioRow { normalPct=0.48f, fastPct=0.22f, tankPct=0.15f, hordePct=0.15f, mixRamp=0.65f, hpMult=1.2f, speedMult=1.1f,
                                               bossWaveCount=2, bossPerWave=1, bossWaveMult=1.3f, deployLimitDelta=0, startingGold=30 } },
-            { Difficulty.Nightmare, new RatioRow { normalPct=0.373f, fastPct=0.299f, tankPct=0.328f, mixRamp=0.3f, hpMult=1.5f, speedMult=1.25f,
+            { Difficulty.Nightmare, new RatioRow { normalPct=0.38f, fastPct=0.20f, tankPct=0.22f, hordePct=0.20f, mixRamp=0.3f, hpMult=1.5f, speedMult=1.25f,
                                                    bossWaveCount=3, bossPerWave=1, bossWaveMult=1.15f, deployLimitDelta=-1, startingGold=30 } },
         };
 

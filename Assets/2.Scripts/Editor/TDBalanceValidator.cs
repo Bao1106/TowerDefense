@@ -103,7 +103,10 @@ public static class TDBalanceValidator
                 failures.Add($"[STARTING_GOLD_FLOOR] {d}: starts with {row.startingGold} < {TDConstant.CONFIG_PLAYER_STARTING_GOLD}");
 
             Growth(failures, d, row);
+            Horde(failures, d);
         }
+
+        HordeTime(failures);
 
         Density(failures);
         Dominance(failures);
@@ -175,16 +178,17 @@ public static class TDBalanceValidator
                 int floor = waves + Mathf.Min(row.bossWaveCount, waves) * row.bossPerWave;
                 for (int total = waves; total <= MAX_TOTAL; total++)
                 {
+                    // Growth shares out SLOTS: a Horde slot becomes a pack of five afterwards.
                     var plan = TDEnemyPathMainControl.BuildWavePlans(d, waves, total, g);
-                    int sum = plan.Sum(w => w.Count);
+                    int sum = plan.Sum(TDEnemyPathMainControl.Slots);
                     int want = Mathf.Max(total, floor);
                     if (sum != want) f.Add($"[GROWTH_SUM] {d} w={waves} t={total} g={g}: {sum}, want {want}");
                     if (plan.Any(w => w.Count < 1)) f.Add($"[GROWTH_MIN1] {d} w={waves} t={total} g={g}");
                     // boss waves keep room for at least one escort
                     foreach (var w in plan.Where(w => w.Contains(EnemyType.Boss)))
-                        if (w.Count < row.bossPerWave + 1) f.Add($"[GROWTH_BOSS_ROOM] {d} w={waves} t={total}");
+                        if (TDEnemyPathMainControl.Slots(w) < row.bossPerWave + 1) f.Add($"[GROWTH_BOSS_ROOM] {d} w={waves} t={total}");
                     // regular waves never shrink when g >= 1 (one of slack for rounding)
-                    var regular = plan.Where(w => !w.Contains(EnemyType.Boss)).Select(w => w.Count).ToList();
+                    var regular = plan.Where(w => !w.Contains(EnemyType.Boss)).Select(TDEnemyPathMainControl.Slots).ToList();
                     for (int i = 1; i < regular.Count; i++)
                         if (regular[i] < regular[i - 1] - 1) f.Add($"[GROWTH_MONOTONE] {d} w={waves} t={total} g={g}");
 
@@ -193,6 +197,78 @@ public static class TDBalanceValidator
                         f.Add($"[BOSS_PRESENT] {d} w={waves} t={total}: {bosses} bosses, want {row.bossWaveCount * row.bossPerWave}");
                 }
             }
+    }
+
+    // ── Horde — spec 2026-10-06 §5.5: one slot, a pack of five released in a burst ──
+    private static void Horde(List<string> f, Difficulty d)
+    {
+        const int waves = 8;
+        int pack = TDConstant.HORDE_PACK_SIZE;
+        for (int total = 10; total <= MAX_TOTAL; total++)
+        {
+            var plan = TDEnemyPathMainControl.BuildWavePlans(d, waves, total, 2.7f);
+            for (int w = 0; w < plan.Count; w++)
+            {
+                var wave = plan[w];
+                string at = $"{d} t={total} wave {w + 1}";
+
+                for (int i = 0; i <= wave.Count; i++)
+                    if (HordeBefore(wave, i) % pack != 0 && (i == wave.Count || wave[i] != EnemyType.Horde))
+                    {
+                        f.Add($"[HORDE_PACKS_INTACT] {at}: a run of {HordeBefore(wave, i)} Horde");
+                        break;
+                    }
+
+                int bosses = wave.Count(e => e == EnemyType.Boss);
+                if (wave.Skip(wave.Count - bosses).Any(e => e != EnemyType.Boss))
+                    f.Add($"[HORDE_BOSS_LAST] {at}: [{string.Join(",", wave)}]");
+
+                int slots = TDEnemyPathMainControl.Slots(wave);
+                int hordeSlots = DifficultyRatioTable.Distribute(d, slots - bosses, (float)w / (waves - 1))[3];
+                int want = (slots - bosses - hordeSlots) + pack * hordeSlots + bosses;
+                if (wave.Count != want || wave.Count(e => e == EnemyType.Horde) != pack * hordeSlots)
+                    f.Add($"[HORDE_TOTAL_EXPANDED] {at}: {wave.Count} enemies, want {want} ({hordeSlots} Horde slots)");
+
+                for (int groups = 1; groups <= 3; groups++)
+                {
+                    var slices = TDEnemyPathMainControl.SliceWave(wave, groups);
+                    if (slices.Count != groups || !slices.SelectMany(s => s).SequenceEqual(wave))
+                        f.Add($"[HORDE_SLICE_INTACT] {at} groups={groups}: slices do not add back up to the wave");
+                    int start = 0;
+                    foreach (var s in slices)
+                    {
+                        if (start < wave.Count && wave[start] == EnemyType.Horde && HordeBefore(wave, start) % pack != 0)
+                            f.Add($"[HORDE_SLICE_INTACT] {at} groups={groups}: a slice starts inside a pack at {start}");
+                        start += s.Count;
+                    }
+                }
+            }
+        }
+    }
+
+    // Horde immediately before index i — i's position inside the run it belongs to.
+    private static int HordeBefore(List<EnemyType> wave, int i)
+    {
+        int n = 0;
+        while (i - n - 1 >= 0 && wave[i - n - 1] == EnemyType.Horde) n++;
+        return n;
+    }
+
+    // A pack lasts 4 × the pack gap + the wave's spacing; everything else one spacing each.
+    private static void HordeTime(List<string> f)
+    {
+        var pack = Enumerable.Repeat(EnemyType.Horde, TDConstant.HORDE_PACK_SIZE).ToList();
+        float one = TDEnemyPathMainControl.SliceSeconds(pack, 2f);
+        float wantOne = (TDConstant.HORDE_PACK_SIZE - 1) * TDConstant.HORDE_PACK_SPAWN_INTERVAL + 2f;
+        if (Mathf.Abs(one - wantOne) > 0.001f) f.Add($"[HORDE_PACK_TIME] one pack at s=2: {one:F2}s, want {wantOne:F2}");
+
+        var mixed = new List<EnemyType> { EnemyType.Normal };
+        mixed.AddRange(pack);
+        mixed.AddRange(pack);
+        mixed.Add(EnemyType.Fast);
+        float two = TDEnemyPathMainControl.SliceSeconds(mixed, 2f);
+        if (Mathf.Abs(two - (2f + 2f * wantOne + 2f)) > 0.001f)
+            f.Add($"[HORDE_PACK_TIME] Normal, two packs, Fast at s=2: {two:F2}s, want {2f + 2f * wantOne + 2f:F2}");
     }
 
     // ── Dominance — spec 2026-10-06 §5.6: every unit has a role ─────────────
@@ -281,6 +357,16 @@ public static class TDBalanceValidator
                 string at = $"level {level.levelIndex} {d}";
                 foreach (var r in rows)
                     if (float.IsNaN(r.rho) || float.IsInfinity(r.rho)) f.Add($"[RHO_FINITE] {at} wave {r.wave}: ρ = {r.rho}");
+
+                // Wave plans are shuffled; ρ must not depend on the shuffle, or every check below
+                // passes or fails by chance.
+                var again = TDLoadModel.Compute(level, d, ops, enemies, gates);
+                for (int i = 0; i < rows.Count; i++)
+                    if (Mathf.Abs(rows[i].rho - again[i].rho) > 0.0001f)
+                    {
+                        f.Add($"[RHO_DETERMINISTIC] {at} wave {rows[i].wave}: {rows[i].rho:F3} then {again[i].rho:F3}");
+                        break;
+                    }
 
                 // D14: load keeps rising after the team reaches the cap. A ratio, so it holds
                 // calibrated or not — this is the shape the waves exist to produce.

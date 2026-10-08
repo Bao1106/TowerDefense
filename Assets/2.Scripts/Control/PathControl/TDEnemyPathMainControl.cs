@@ -478,10 +478,7 @@ public class TDEnemyPathMainControl
                 TDGameEventBus.WaveStarted(waveIdx);
 
                 var assignments = m_Strategy.SelectForWave(groups, waveIdx);
-
-                // Distribute enemies evenly across each assignment in the wave
-                var batch = wavePlans[waveIdx];
-                int perGroup = Mathf.Max(1, batch.Count / assignments.Count);
+                var slices = SliceWave(wavePlans[waveIdx], assignments.Count);
 
                 var spawnTasks = new List<Task>();
                 float interval = SpawnIntervalFor(config.spawnInterval, waveIdx, wavePlans.Count, config.waveGrowth);
@@ -489,12 +486,8 @@ public class TDEnemyPathMainControl
                 for (int a = 0; a < assignments.Count; a++)
                 {
                     var (group, corridor) = assignments[a];
-                    int start = a * perGroup;
-                    int end = (a == assignments.Count - 1) ? batch.Count : start + perGroup;
-                    var slice = batch.GetRange(start, end - start);
-
                     onWaveGroupStart?.Invoke(waveIdx, groups.IndexOf(group));
-                    spawnTasks.Add(SpawnBatch(group.SpawnWorldPos, corridor, slice, ratio,
+                    spawnTasks.Add(SpawnBatch(group.SpawnWorldPos, corridor, slices[a], ratio,
                         waveIdx, interval, ct));
                 }
 
@@ -522,18 +515,66 @@ public class TDEnemyPathMainControl
     public List<List<EnemyType>> BuildWavePlans(LevelConfig config)
     {
         var plans = BuildWavePlans(config.difficulty, config.waveCount, config.totalEnemies, config.waveGrowth);
-        int actual = plans.Sum(w => w.Count);
-        if (actual != config.totalEnemies)
+        int slots = plans.Sum(Slots);
+        if (slots != config.totalEnemies)
             Debug.LogWarning($"[BuildWavePlans] level {config.levelIndex} asks for {config.totalEnemies} enemies; " +
-                             $"{config.waveCount} waves and their bosses need at least {actual}");
+                             $"{config.waveCount} waves and their bosses need at least {slots}");
         var intervals = plans.Select((_, i) => SpawnIntervalFor(config.spawnInterval, i, plans.Count, config.waveGrowth).ToString("F2"));
-        Debug.Log($"<color=cyan>BuildWavePlans: {plans.Count} waves, {actual} enemies, sizes [{string.Join(", ", plans.Select(w => w.Count))}], " +
-                  $"intervals [{string.Join(", ", intervals)}]</color>");
+        Debug.Log($"<color=cyan>BuildWavePlans: {plans.Count} waves, {slots} slots, {GetActualEnemyCount(plans)} enemies, " +
+                  $"sizes [{string.Join(", ", plans.Select(w => w.Count))}], intervals [{string.Join(", ", intervals)}]</color>");
         return plans;
     }
 
+    // Bodies, after every Horde slot has become its pack — what the HUD counts and Victory waits for.
     public int GetActualEnemyCount(List<List<EnemyType>> wavePlans)
         => wavePlans.Sum(w => w.Count);
+
+    // A wave's slots: what the level's totalEnemies and the growth curve share out. A Horde pack
+    // is one slot, so totalEnemies keeps meaning "how many things the player faces".
+    public static int Slots(List<EnemyType> wave)
+    {
+        int horde = wave.Count(e => e == EnemyType.Horde);
+        return wave.Count - horde + horde / TDConstant.HORDE_PACK_SIZE;
+    }
+
+    // Splits a wave across gates that release at once: every gate gets n / groups, the last the
+    // rest — then each cut moves forward past any Horde run it lands in, so no pack is ever split
+    // between two gates. A slice can come out empty when a run swallows it.
+    public static List<List<EnemyType>> SliceWave(List<EnemyType> wave, int groups)
+    {
+        groups = Mathf.Max(1, groups);
+        int perGroup = Mathf.Max(1, wave.Count / groups);
+        var slices = new List<List<EnemyType>>(groups);
+        int start = 0;
+        for (int a = 0; a < groups; a++)
+        {
+            int end = a == groups - 1 ? wave.Count : Mathf.Clamp((a + 1) * perGroup, start, wave.Count);
+            while (end > 0 && end < wave.Count && wave[end] == EnemyType.Horde && wave[end - 1] == EnemyType.Horde) end++;
+            slices.Add(wave.GetRange(start, end - start));
+            start = end;
+        }
+        return slices;
+    }
+
+    // The wait after spawning an enemy: inside a pack the next one follows almost at once, after
+    // a pack's last body (or any other enemy) the wave's own spacing. `hordeRun` counts the Horde
+    // spawned in a row, this one included. SpawnBatch and TDLoadModel both read this one rule.
+    public static float SpawnDelay(EnemyType type, int hordeRun, float spawnInterval)
+        => type == EnemyType.Horde && hordeRun % TDConstant.HORDE_PACK_SIZE != 0
+            ? TDConstant.HORDE_PACK_SPAWN_INTERVAL : spawnInterval;
+
+    // How long a gate takes to release this slice.
+    public static float SliceSeconds(List<EnemyType> slice, float spawnInterval)
+    {
+        float seconds = 0f;
+        int run = 0;
+        foreach (var type in slice)
+        {
+            run = type == EnemyType.Horde ? run + 1 : 0;
+            seconds += SpawnDelay(type, run, spawnInterval);
+        }
+        return seconds;
+    }
 
     // Spec §5.7: wave i of n weighs 1 + (g − 1)·i/(n − 1) — g is the last wave's weight over the first's.
     public static float GrowthWeight(int waveIdx, int waveCount, float waveGrowth)
@@ -550,7 +591,7 @@ public class TDEnemyPathMainControl
         return Mathf.Min(spawnInterval, Mathf.Max(TDConstant.CONFIG_SPAWN_INTERVAL_FLOOR, spawnInterval / w));
     }
 
-    private static readonly EnemyType[] k_MixTypes = { EnemyType.Normal, EnemyType.Fast, EnemyType.Tank };
+    private static readonly EnemyType[] k_MixTypes = { EnemyType.Normal, EnemyType.Fast, EnemyType.Tank, EnemyType.Horde };
 
     // Spec §5.7. Wave i weighs GrowthWeight, boss waves × bossWaveMult on top, and the level's
     // total is apportioned by weight — growth reshapes a match without lengthening it. The mix
@@ -600,16 +641,21 @@ public class TDEnemyPathMainControl
             float progress = waveCount == 1 ? 0f : (float)w / (waveCount - 1);
             int[] mix = DifficultyRatioTable.Distribute(difficulty, sizes[w] - bosses, progress);
 
-            // Horde and Herald (mix[3], mix[4]) have zero share until those enemy types exist.
-            var wave = new List<EnemyType>(sizes[w]);
+            // Herald (mix[4]) has zero share until that enemy type exists.
+            var slots = new List<EnemyType>(sizes[w]);
             for (int t = 0; t < k_MixTypes.Length; t++)
-                for (int i = 0; i < mix[t]; i++) wave.Add(k_MixTypes[t]);
+                for (int i = 0; i < mix[t]; i++) slots.Add(k_MixTypes[t]);
 
-            for (int i = wave.Count - 1; i > 0; i--)
+            for (int i = slots.Count - 1; i > 0; i--)
             {
                 int rIdx = Random.Range(0, i + 1);
-                (wave[i], wave[rIdx]) = (wave[rIdx], wave[i]);
+                (slots[i], slots[rIdx]) = (slots[rIdx], slots[i]);
             }
+
+            // Shuffled as slots, then each Horde slot hatches into its pack, so packs stay whole.
+            var wave = new List<EnemyType>(slots.Count + mix[3] * (TDConstant.HORDE_PACK_SIZE - 1) + bosses);
+            foreach (var type in slots)
+                for (int i = 0; i < (type == EnemyType.Horde ? TDConstant.HORDE_PACK_SIZE : 1); i++) wave.Add(type);
 
             for (int i = 0; i < bosses; i++) wave.Add(EnemyType.Boss);
             plans.Add(wave);
@@ -623,11 +669,13 @@ public class TDEnemyPathMainControl
         List<EnemyType> batch, DifficultyRatioTable.RatioRow ratio,
         int waveIdx, float spawnInterval, CancellationToken ct)
     {
+        int hordeRun = 0;
         for (int i = 0; i < batch.Count; i++)
         {
             ct.ThrowIfCancellationRequested();
 
             EnemyType type = batch[i];
+            hordeRun = type == EnemyType.Horde ? hordeRun + 1 : 0;
             EnemyData data = m_FlyweightEnemyDataSettings?.GetData(type);
             float hp = (data?.baseHP ?? 300f) * ratio.hpMult;
             float speed = (data?.baseSpeed ?? 3f) * ratio.speedMult;
@@ -649,7 +697,7 @@ public class TDEnemyPathMainControl
             enemy.SetPath(path);
             TDGameEventBus.EnemySpawned(spawnWorldPos, type);
 
-            await PauseAwareDelay(spawnInterval, ct);
+            await PauseAwareDelay(SpawnDelay(type, hordeRun, spawnInterval), ct);
         }
     }
 

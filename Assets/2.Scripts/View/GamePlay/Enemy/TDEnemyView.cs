@@ -34,6 +34,9 @@ public class TDEnemyView : MonoBehaviour
     private void Awake()
     {
         m_Animator = GetComponent<Animator>();
+        // A Horde has no bar. Unity hands an unassigned field over as a fake null that `?.`
+        // does not see, so make it a real one.
+        if (m_HPBarView == null) m_HPBarView = null;
     }
 
     public void Initialize(string key, float hp, float speed,

@@ -39,10 +39,10 @@ public static class TDLoadModel
     /// One row per wave of `level` played at difficulty `d` — `d`, not level.difficulty, so the
     /// same level can be tabled at all three.
     ///
-    /// T is the time the spawner spends releasing the wave: its longest gate slice × that wave's
-    /// own spacing (SpawnIntervalFor, the function the wave loop uses; D14). Two gates releasing
-    /// at once halve it — leaving that out made the first calibration read DEMO-1's second gate
-    /// as a 2× "inefficiency". Not the pause after the wave: the same for every wave, it would
+    /// T is the time the spawner spends releasing the wave: its busiest gate's share, at that
+    /// wave's own spacing (SpawnIntervalFor; D14), a Horde pack in one quick burst (SliceSeconds)
+    /// — the functions the wave loop itself uses. Two gates releasing at once halve it — leaving
+    /// that out made the first calibration read DEMO-1's second gate as a 2× "inefficiency". Not the pause after the wave: the same for every wave, it would
     /// only flatten the shape.
     ///
     /// `gates` comes in from the caller (GatesFor) so this stays pure arithmetic: looking it up in
@@ -78,7 +78,11 @@ public static class TDLoadModel
                 hp += (Find(enemies, type)?.baseHP ?? 0f) * row.hpMult;
 
             int bodies = plan[i].Count;
-            float seconds = LongestSlice(bodies, gates) * TDEnemyPathMainControl.SpawnIntervalFor(level.spawnInterval, i, plan.Count, level.waveGrowth);
+            float spacing = TDEnemyPathMainControl.SpawnIntervalFor(level.spawnInterval, i, plan.Count, level.waveGrowth);
+            // The whole wave's release time, cut to the busiest gate's share of the bodies. Not
+            // SliceWave on this plan: its order is a shuffle, so which gate a pack lands on — and
+            // with it ρ — would change from one call to the next.
+            float seconds = TDEnemyPathMainControl.SliceSeconds(plan[i], spacing) * LongestSlice(bodies, gates) / Mathf.Max(1, bodies);
             float h = bodies > 0 ? hp / bodies : 0f;
             float capacity = dps * seconds + block * h;
             float rho = capacity > 0f ? hp / capacity : hp > 0f ? float.PositiveInfinity : 0f;
@@ -111,8 +115,8 @@ public static class TDLoadModel
         return 1;
     }
 
-    // The wave loop's own split (StartWaveLoop): every gate gets n / gates, the last takes the rest.
-    // The wave lasts as long as its longest slice.
+    // The wave loop's split (SliceWave, before it moves cuts past packs): every gate gets
+    // n / gates, the last takes the rest.
     private static int LongestSlice(int bodies, int gates)
     {
         if (gates <= 1) return bodies;

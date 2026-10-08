@@ -36,7 +36,8 @@ namespace TDEnums
         Normal, // 300 HP, speed 3.0 — Slime
         Fast, // 150 HP, speed 6.0 — Swarm insect
         Tank, // 900 HP, speed 1.5 — TurtleShell
-        Boss // 3000 HP, speed 1.0 — DragonBoar
+        Boss, // 3000 HP, speed 1.0 — DragonBoar
+        Horde = 4, // 70 HP, speed 4.0 — one wave slot, spawned as a pack of HORDE_PACK_SIZE
     }
 
     // Three rungs, not five. Easy was dropped because measurement showed the game was

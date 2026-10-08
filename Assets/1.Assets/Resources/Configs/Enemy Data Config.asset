@@ -45,3 +45,11 @@ MonoBehaviour:
     baseAttackDamage: 50
     baseAttackSpeed: 0.75
     prefab: {fileID: 166316, guid: f652ee825852bc4409e91294b7fe31c5, type: 3}
+  - type: 4
+    baseHP: 70
+    baseSpeed: 4
+    dieDuration: 0.25
+    goldReward: 1
+    baseAttackDamage: 2
+    baseAttackSpeed: 1
+    prefab: {fileID: 6753814133327213367, guid: bbfc7a9c842d44e45a584e5720a9c2e7, type: 3}
