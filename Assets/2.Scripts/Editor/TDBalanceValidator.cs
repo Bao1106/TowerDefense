@@ -109,6 +109,7 @@ public static class TDBalanceValidator
         HordeTime(failures);
         StartingGoldOneWriter(failures);
         ReusedTarget(failures);
+        AuraVisual(failures, LoadConfig<TDFlyweightEnemyDataSettings>()?.GetAllEnemies());
 
         Density(failures);
         Dominance(failures);
@@ -303,6 +304,24 @@ public static class TDBalanceValidator
             if (hp != 90f) f.Add($"[HIT_CONTROL] the shot at its own target left hp {hp}, want 90");
         }
         finally { Object.DestroyImmediate(go); }
+    }
+
+    // A Herald stops amplifying the moment it dies (it leaves the enemy registry). Its fear ring
+    // must go out with it, or the 1 s death clip reads as an aura still at work. The prefab is
+    // read from the enemy data the game spawns from, not found by a project-wide search.
+    private static void AuraVisual(List<string> f, IReadOnlyList<EnemyData> enemies)
+    {
+        var herald = enemies?.FirstOrDefault(e => e.type == EnemyType.Herald)?.prefab;
+        var view = herald != null ? herald.GetComponent<TDEnemyView>() : null;
+        if (view == null) { f.Add("[HERALD_AURA_WIRED] no Herald prefab with a TDEnemyView in the enemy data"); return; }
+
+        var fi = typeof(TDEnemyView).GetField("m_AuraVisual",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        if (fi == null) { f.Add("[REFLECT] TDEnemyView.m_AuraVisual missing"); return; }
+
+        var ring = fi.GetValue(view) as GameObject;
+        if (ring == null || ring.name != "FearRing")
+            f.Add($"[HERALD_AURA_WIRED] m_AuraVisual is {(ring == null ? "unset" : ring.name)}, want FearRing");
     }
 
     // Spec §5.7: the difficulty sets the opening purse, and it is the only writer. The HUD's

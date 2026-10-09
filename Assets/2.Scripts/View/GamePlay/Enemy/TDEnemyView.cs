@@ -6,6 +6,7 @@ using UnityEngine;
 public class TDEnemyView : MonoBehaviour
 {
     [SerializeField] private TDHPBarView m_HPBarView;
+    [SerializeField] private GameObject m_AuraVisual; // Herald's FearRing; none on other enemies
 
     private Animator m_Animator;
     private List<Vector3> m_PathsPosition = new List<Vector3>();
@@ -44,6 +45,7 @@ public class TDEnemyView : MonoBehaviour
         // A Horde has no bar. Unity hands an unassigned field over as a fake null that `?.`
         // does not see, so make it a real one.
         if (m_HPBarView == null) m_HPBarView = null;
+        if (m_AuraVisual == null) m_AuraVisual = null;
     }
 
     public void Initialize(string key, float hp, float speed,
@@ -77,6 +79,7 @@ public class TDEnemyView : MonoBehaviour
             m_Animator.Update(0f);
         }
         m_HPBarView?.ResetBar();
+        m_AuraVisual?.SetActive(true); // back on for a pooled Herald that last went out dying
         TriggerSafe(TDConstant.ANIM_TRIGGER_WALK);
 
         TDEnemyControl.api.onGetEnemyPathPos += OnGetEnemyPathPos;
@@ -143,6 +146,8 @@ public class TDEnemyView : MonoBehaviour
         TDGameEventBus.EnemyDied(transform.position, EnemyType);
 
         TriggerSafe(TDConstant.ANIM_TRIGGER_DIE);
+        // It left the registry above, so it no longer amplifies anything; the ring says so too.
+        m_AuraVisual?.SetActive(false);
 
         if (m_DieDuration > 0f)
             StartCoroutine(ReturnAfterDelay(m_DieDuration));

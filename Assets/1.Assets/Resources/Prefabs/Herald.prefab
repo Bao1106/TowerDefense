@@ -1594,6 +1594,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_HPBarView: {fileID: 5247120607671418641}
+  m_AuraVisual: {fileID: 737431878312910577}
 --- !u!1 &8921433690080336276
 GameObject:
   m_ObjectHideFlags: 0
