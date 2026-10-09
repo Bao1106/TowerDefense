@@ -52,6 +52,7 @@ public static class TDMoraleValidator
         DeployCap(f);
         Targets(f);
         Pearson(f);
+        A4(f);
         Resolve(f);
         FocusScale(f);
 
@@ -444,6 +445,24 @@ public static class TDMoraleValidator
         };
         float r = TDPressureProbe.MeleeR(stints);
         if (!(Mathf.Abs(r + 1f) <= 0.001f)) f.Add($"[STINT_R_MELEE_ONLY] got {r:F3}, want -1 (ranged or short stints counted)");
+    }
+
+    // §7.3 A4: a near-full-HP operator pulled out because stress was red. Death and match end
+    // are not retreats; a Steady retreat is not stress-driven.
+    private static void A4(List<string> f)
+    {
+        TDPressureProbe.Stint S(bool retreated, float hp, MoraleState band)
+            => new TDPressureProbe.Stint { op = "x", melee = true, seconds = 10f, retreated = retreated, hpFrac = hp, band = band };
+        var stints = new List<TDPressureProbe.Stint>
+        {
+            S(true, 1.00f, MoraleState.Stressed),  // counts
+            S(true, 0.80f, MoraleState.Stressed),  // counts: the boundary is inclusive
+            S(true, 0.79f, MoraleState.Stressed),  // HP too low
+            S(true, 1.00f, MoraleState.Steady),    // not red
+            S(false, 1.00f, MoraleState.Stressed), // died / match ended
+        };
+        int got = TDPressureProbe.CountA4(stints);
+        if (got != 2) f.Add($"[A4_COUNT] {got}, want 2");
     }
 
     // Spec §5.6: blockCount is how many a melee HOLDS, attackType is how many it STRIKES.
