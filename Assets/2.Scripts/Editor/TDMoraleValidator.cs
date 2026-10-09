@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Reflection;
 using TDEnums;
 using UnityEditor;
 using UnityEngine;
@@ -52,6 +53,9 @@ public static class TDMoraleValidator
         DeployCap(f);
         Targets(f);
         Pearson(f);
+        A4(f);
+        ZeroDamage(f);
+        LeakLog(f);
         Resolve(f);
         FocusScale(f);
 
@@ -68,6 +72,23 @@ public static class TDMoraleValidator
             auraRate = aura,
             secondsSinceHit = sinceHit,
         };
+
+    // Private-field access for the tests that drive a live component or behavior. A field that
+    // is not there is a failure, not an exception — the run must still report everything else.
+    // Shared with TDBalanceValidator (same Editor assembly).
+    internal static bool SetField(List<string> f, object o, string name, object value)
+    {
+        var fi = o.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+        if (fi == null) { f.Add($"[REFLECT] {o.GetType().Name}.{name} missing"); return false; }
+        fi.SetValue(o, value);
+        return true;
+    }
+
+    internal static T GetField<T>(object o, string name)
+    {
+        var fi = o.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+        return fi == null ? default : (T)fi.GetValue(o);
+    }
 
     private static TDOperatorMorale At(float value)
     {
@@ -444,6 +465,75 @@ public static class TDMoraleValidator
         };
         float r = TDPressureProbe.MeleeR(stints);
         if (!(Mathf.Abs(r + 1f) <= 0.001f)) f.Add($"[STINT_R_MELEE_ONLY] got {r:F3}, want -1 (ranged or short stints counted)");
+    }
+
+    // §7.3 A4: a near-full-HP operator pulled out because stress was red. Death and match end
+    // are not retreats; a Steady retreat is not stress-driven.
+    private static void A4(List<string> f)
+    {
+        TDPressureProbe.Stint S(bool retreated, float hp, MoraleState band)
+            => new TDPressureProbe.Stint { op = "x", melee = true, seconds = 10f, retreated = retreated, hpFrac = hp, band = band };
+        var stints = new List<TDPressureProbe.Stint>
+        {
+            S(true, 1.00f, MoraleState.Stressed),  // counts
+            S(true, 0.80f, MoraleState.Stressed),  // counts: the boundary is inclusive
+            S(true, 0.79f, MoraleState.Stressed),  // HP too low
+            S(true, 1.00f, MoraleState.Steady),    // not red
+            S(false, 1.00f, MoraleState.Stressed), // died / match ended
+        };
+        int got = TDPressureProbe.CountA4(stints);
+        if (got != 2) f.Add($"[A4_COUNT] {got}, want 2");
+    }
+
+    // A pack walking past a full line is a burst of leaks; a Debug.Log for each floods the
+    // console a playtester reads (and costs a stack trace each in the Editor). Opt-in only.
+    private static void LeakLog(List<string> f)
+    {
+        var saved = TDOperatorRegistry.api;
+        int logged = 0;
+        Application.LogCallback count = (msg, _, _) => { if (msg.StartsWith("[Leak]")) logged++; };
+        Application.logMessageReceived += count;
+        try
+        {
+            TDOperatorRegistry.api = new TDOperatorRegistry();
+
+            TDOperatorRegistry.LogLeaks = false;
+            TDOperatorRegistry.api.ReportLeak(Vector2Int.zero, EnemyType.Normal);
+            if (logged != 0) f.Add($"[LEAK_LOG_GATED] {logged} [Leak] line(s) with LogLeaks off");
+
+            logged = 0;
+            TDOperatorRegistry.LogLeaks = true;
+            TDOperatorRegistry.api.ReportLeak(Vector2Int.zero, EnemyType.Normal);
+            if (logged != 1) f.Add($"[LEAK_LOG_ON] {logged} [Leak] line(s) with LogLeaks on, want 1");
+        }
+        finally
+        {
+            TDOperatorRegistry.LogLeaks = false;
+            Application.logMessageReceived -= count;
+            TDOperatorRegistry.api = saved;
+        }
+    }
+
+    // §06 · 3.1: a collapsed operator calms down after STRESS_BROKEN_CALM_SECONDS without a hit.
+    // A 0-damage enemy (a Herald walking past) is not a hit and must not restart that clock.
+    private static void ZeroDamage(List<string> f)
+    {
+        var go = new GameObject("ZeroDamageProbe") { hideFlags = HideFlags.HideAndDontSave };
+        try
+        {
+            var op = go.AddComponent<TDOperatorView>();
+            bool ok = SetField(f, op, "m_Initialized", true) & SetField(f, op, "m_CurrentHp", 100f)
+                    & SetField(f, op, "m_MaxHp", 100f) & SetField(f, op, "m_LastHitTime", -100f)
+                    & SetField(f, op, "m_HPBarView", null);
+            if (!ok) return;
+
+            op.TakeDamage(0f);
+            if (GetField<float>(op, "m_LastHitTime") != -100f) f.Add("[ZERO_DAMAGE_NOT_A_HIT] TakeDamage(0) restarted the calm clock");
+
+            op.TakeDamage(1f);
+            if (GetField<float>(op, "m_LastHitTime") == -100f) f.Add("[ZERO_DAMAGE_CONTROL] a real hit did not register");
+        }
+        finally { Object.DestroyImmediate(go); }
     }
 
     // Spec §5.6: blockCount is how many a melee HOLDS, attackType is how many it STRIKES.

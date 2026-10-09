@@ -393,7 +393,6 @@ public static class TDConstant
 
     // N4 — fear auras. Radius lives on the enemy data so designers can tune it.
     public const float STRESS_AURA_BOSS = 2.0f;
-    public const float STRESS_AURA_HERALD = 1.5f;
 
     // Recovery.
     public const float STRESS_IDLE_RELIEF = 0.60f;      // not engaged: blocking nobody, no target in range

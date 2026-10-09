@@ -6,6 +6,7 @@ using UnityEngine;
 public class TDEnemyView : MonoBehaviour
 {
     [SerializeField] private TDHPBarView m_HPBarView;
+    [SerializeField] private GameObject m_AuraVisual; // Herald's FearRing; none on other enemies
 
     private Animator m_Animator;
     private List<Vector3> m_PathsPosition = new List<Vector3>();
@@ -26,6 +27,13 @@ public class TDEnemyView : MonoBehaviour
 
     public EnemyType EnemyType { get; private set; }
 
+    // Unique per spawn, unlike the object (pooled) or the key (w{wave}-{type}-e{i}-{instanceID}
+    // repeats when the same object is reused for the same index at another gate). Lets a shot
+    // aimed before the hit event tell whether its target is still the enemy it aimed at.
+    private static int s_NextSpawnId;
+    private int m_SpawnId;
+    public int SpawnId => m_SpawnId;
+
     // Progress 0→1 (0 = just spawned, 1 = reached GateEnd)
     // Towers use this to prioritize the enemy closest to the gate
     public float PathProgress => m_PathsPosition.Count == 0 ? 0f
@@ -37,6 +45,7 @@ public class TDEnemyView : MonoBehaviour
         // A Horde has no bar. Unity hands an unassigned field over as a fake null that `?.`
         // does not see, so make it a real one.
         if (m_HPBarView == null) m_HPBarView = null;
+        if (m_AuraVisual == null) m_AuraVisual = null;
     }
 
     public void Initialize(string key, float hp, float speed,
@@ -61,6 +70,7 @@ public class TDEnemyView : MonoBehaviour
         m_GoldReward = goldReward;
         EnemyType = enemyType;
         m_EnemyKey = key;
+        m_SpawnId = ++s_NextSpawnId;
 
         // Reset the animator to Idle (important when reusing from the pool)
         if (m_Animator != null)
@@ -69,6 +79,7 @@ public class TDEnemyView : MonoBehaviour
             m_Animator.Update(0f);
         }
         m_HPBarView?.ResetBar();
+        m_AuraVisual?.SetActive(true); // back on for a pooled Herald that last went out dying
         TriggerSafe(TDConstant.ANIM_TRIGGER_WALK);
 
         TDEnemyControl.api.onGetEnemyPathPos += OnGetEnemyPathPos;
@@ -135,6 +146,8 @@ public class TDEnemyView : MonoBehaviour
         TDGameEventBus.EnemyDied(transform.position, EnemyType);
 
         TriggerSafe(TDConstant.ANIM_TRIGGER_DIE);
+        // It left the registry above, so it no longer amplifies anything; the ring says so too.
+        m_AuraVisual?.SetActive(false);
 
         if (m_DieDuration > 0f)
             StartCoroutine(ReturnAfterDelay(m_DieDuration));
@@ -184,7 +197,7 @@ public class TDEnemyView : MonoBehaviour
         // If currently blocked by a melee operator → counter-attack the operator
         if (m_IsBlocked)
         {
-            if (m_AttackSpeed > 0f && Time.time - m_LastAttackTime >= 1f / m_AttackSpeed)
+            if (m_AttackDamage > 0f && m_AttackSpeed > 0f && Time.time - m_LastAttackTime >= 1f / m_AttackSpeed)
             {
                 TDOperatorRegistry.api?.GetOperatorView(m_BlockerCell)?.TakeDamage(m_AttackDamage);
                 m_LastAttackTime = Time.time;
@@ -244,7 +257,8 @@ public class TDEnemyView : MonoBehaviour
                     // scales with how many are still coming. Collapsing mid-wave is lethal,
                     // collapsing after the last enemy is survivable — which is exactly the
                     // judgement call Rescue asks the player to make.
-                    if (TDOperatorRegistry.api != null && TDOperatorRegistry.api.IsBrokenAt(arrivedCell))
+                    // An enemy that deals no damage (Herald) does not swing at all.
+                    if (m_AttackDamage > 0f && TDOperatorRegistry.api != null && TDOperatorRegistry.api.IsBrokenAt(arrivedCell))
                     {
                         TDOperatorRegistry.api.GetOperatorView(arrivedCell)?.TakeDamage(m_AttackDamage);
                         TriggerSafe(TDConstant.ANIM_TRIGGER_ATTACK);

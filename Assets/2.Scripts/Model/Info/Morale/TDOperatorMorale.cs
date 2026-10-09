@@ -15,7 +15,8 @@ public struct TDMoraleContext
     /// <summary>Adjacent allies currently Calm. Feeds Resolve only — it no longer touches stress.</summary>
     public int calmAlliesAdjacent;
 
-    /// <summary>Fear-aura rate from the strongest source in range: boss 2.0, herald 1.5, else 0.</summary>
+    /// <summary>Fear-aura rate from the strongest source in range: boss 2.0, else 0. A Herald has
+    /// no aura — it amplifies leaks instead (spec 2026-10-06 §5.5).</summary>
     public float auraRate;
 
     /// <summary>Seconds since anything last damaged this operator — gates the broken-state recovery.</summary>

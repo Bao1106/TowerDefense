@@ -29,6 +29,8 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
     // The current stint — this stay on the field — for TDPressureProbe (spec §7.2).
     private bool m_StintOpen;
     private float m_StintStart, m_StintStartHp, m_StintStress, m_LastStress;
+    private bool m_Retreated;            // left by DoRetreat, not by death or the match ending
+    private MoraleState m_RetreatBand;
 
     /// <summary>Morale state for this operator (§02). Null before Init.</summary>
     public TDOperatorMorale Morale { get; private set; }
@@ -138,7 +140,9 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         SampleStress();
         TDPressureProbe.RecordStint(m_Data?.operatorName, m_Data != null && m_Data.deployZone == DeployZone.PathCell,
                                     Time.time - m_StintStart,
-                                    Mathf.Max(0f, m_StintStartHp - Mathf.Max(0f, m_CurrentHp)), m_StintStress);
+                                    Mathf.Max(0f, m_StintStartHp - Mathf.Max(0f, m_CurrentHp)), m_StintStress,
+                                    m_Retreated, m_MaxHp > 0f ? Mathf.Max(0f, m_CurrentHp) / m_MaxHp : 0f,
+                                    m_Retreated ? m_RetreatBand : (Morale?.State ?? MoraleState.Calm));
     }
 
     private void OnDestroy()
@@ -217,7 +221,9 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
 
     public void TakeDamage(float damage)
     {
-        if (!m_Initialized || m_IsDying || m_CurrentHp <= 0) return;
+        // A 0-damage blow (a Herald walking past) is not a hit: it must not restart the
+        // collapsed operator's calm clock (secondsSinceHit, §06 · 3.1).
+        if (!m_Initialized || m_IsDying || m_CurrentHp <= 0 || damage <= 0f) return;
         m_LastHitTime = Time.time;
 
         if (IsCollapsed) damage *= TDConstant.STRESS_BROKEN_DAMAGE_MULT;
@@ -237,6 +243,11 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         // walk off by themselves. Guarded here and not only in the UI: a button is one caller,
         // not the rule.
         if (!CanRetreat) return;
+
+        // For the playtest report (§7.3 A4): the band they left in, read BEFORE OnLeftField's
+        // −70 relief — after it, every red retreat would read Calm.
+        m_Retreated = true;
+        m_RetreatBand = Morale?.State ?? MoraleState.Calm;
 
         // The price of pulling out: -70 stress and 8 seconds before this operator can go back.
         // Leave at 70 and you come back clean; leave at 90 and you never will.

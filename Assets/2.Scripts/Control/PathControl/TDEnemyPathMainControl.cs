@@ -453,7 +453,9 @@ public class TDEnemyPathMainControl
         }
 
         DifficultyRatioTable.RatioRow ratio = DifficultyRatioTable.Get(config.difficulty);
+#if UNITY_EDITOR
         m_Ratio = ratio;
+#endif
         Debug.Log($"<color=green>StartWaveLoop: {wavePlans.Count} waves, {groups.Count} groups</color>");
 
         m_Strategy ??= new RoundRobinStrategy();
@@ -511,9 +513,10 @@ public class TDEnemyPathMainControl
         }
     }
 
+#if UNITY_EDITOR
+    // Editor-only like its one reader: in a player build it would be written and never read (CS0414).
     private DifficultyRatioTable.RatioRow m_Ratio; // the running match's row (SpawnForTest reads it)
 
-#if UNITY_EDITOR
     // Spec §7.2's forced case: spawn outside the wave plan, on the first corridor, through the
     // same pools and SpawnBatch (so a Horde still comes out as a burst) at the match's difficulty.
     public void SpawnForTest(EnemyType type, int count, float interval)

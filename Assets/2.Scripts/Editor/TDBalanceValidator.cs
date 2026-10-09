@@ -51,6 +51,12 @@ public static class TDBalanceValidator
     {
         var failures = new List<string>();
 
+        // Every growth a shipped level uses, plus 1 (no growth). Read once, here — the loops
+        // below call the generator thousands of times and must not touch the AssetDatabase.
+        var levels = LoadConfig<TDLevelConfigSettings>()?.GetAllLevels();
+        if (levels == null || levels.Count == 0) failures.Add("[GROWTH_NO_LEVELS] no level config to read waveGrowth from");
+        var growths = new[] { 1f }.Concat(levels?.Select(l => l.waveGrowth) ?? Enumerable.Empty<float>()).Distinct().ToList();
+
         foreach (Difficulty d in System.Enum.GetValues(typeof(Difficulty)))
         {
             var row = DifficultyRatioTable.Get(d);
@@ -102,12 +108,14 @@ public static class TDBalanceValidator
             if (row.startingGold < TDConstant.CONFIG_PLAYER_STARTING_GOLD)
                 failures.Add($"[STARTING_GOLD_FLOOR] {d}: starts with {row.startingGold} < {TDConstant.CONFIG_PLAYER_STARTING_GOLD}");
 
-            Growth(failures, d, row);
+            Growth(failures, d, row, growths);
             Horde(failures, d);
         }
 
         HordeTime(failures);
         StartingGoldOneWriter(failures);
+        ReusedTarget(failures);
+        AuraVisual(failures, LoadConfig<TDFlyweightEnemyDataSettings>()?.GetAllEnemies());
 
         Density(failures);
         Dominance(failures);
@@ -171,9 +179,9 @@ public static class TDBalanceValidator
     // (it used to be bossPct here and GetBossParams there — two answers to one question).
     // A level asking for fewer enemies than its waves can hold (every wave 1, every boss wave
     // its bosses + 1 escort) gets that minimum instead, so `want` is max(total, floor).
-    private static void Growth(List<string> f, Difficulty d, DifficultyRatioTable.RatioRow row)
+    private static void Growth(List<string> f, Difficulty d, DifficultyRatioTable.RatioRow row, IReadOnlyList<float> growths)
     {
-        foreach (float g in new[] { 1f, 2.7f })
+        foreach (float g in growths)
             for (int waves = 1; waves <= 10; waves++)
             {
                 int floor = waves + Mathf.Min(row.bossWaveCount, waves) * row.bossPerWave;
@@ -270,6 +278,56 @@ public static class TDBalanceValidator
         float two = TDEnemyPathMainControl.SliceSeconds(mixed, 2f);
         if (Mathf.Abs(two - (2f + 2f * wantOne + 2f)) > 0.001f)
             f.Add($"[HORDE_PACK_TIME] Normal, two packs, Fast at s=2: {two:F2}s, want {2f + 2f * wantOne + 2f:F2}");
+    }
+
+    // A ranged shot is aimed in TryAttack and lands on the animation's hit event. Enemies are
+    // pooled: one that dies in between can be handed out again as a NEW enemy before the hit —
+    // the shot must not land on (or splash around) the newcomer. Spawn ids, not object identity.
+    private static void ReusedTarget(List<string> f)
+    {
+        var go = new GameObject("ReusedTargetProbe") { hideFlags = HideFlags.HideAndDontSave };
+        try
+        {
+            var enemy = go.AddComponent<TDEnemyView>();
+            var ranged = new TowerZoneOperatorBehavior();
+            var data = new OperatorData { damage = 10f };
+            bool ok = TDMoraleValidator.SetField(f, enemy, "m_HPBarView", null)
+                    & TDMoraleValidator.SetField(f, enemy, "m_EnemyHealth", 100f)
+                    & TDMoraleValidator.SetField(f, enemy, "m_MaxHealth", 100f)
+                    & TDMoraleValidator.SetField(f, enemy, "m_SpawnId", 2)
+                    & TDMoraleValidator.SetField(f, ranged, "m_PendingTarget", enemy)
+                    & TDMoraleValidator.SetField(f, ranged, "m_PendingSpawnId", 1);
+            if (!ok) return;
+
+            ranged.ExecuteHit(Vector2Int.zero, Vector3.zero, data);
+            float hp = TDMoraleValidator.GetField<float>(enemy, "m_EnemyHealth");
+            if (hp != 100f) f.Add($"[HIT_SKIPS_REUSED_TARGET] the shot aimed at spawn 1 hit spawn 2 (hp {hp})");
+
+            TDMoraleValidator.SetField(f, ranged, "m_PendingTarget", enemy);
+            TDMoraleValidator.SetField(f, ranged, "m_PendingSpawnId", 2);
+            ranged.ExecuteHit(Vector2Int.zero, Vector3.zero, data);
+            hp = TDMoraleValidator.GetField<float>(enemy, "m_EnemyHealth");
+            if (hp != 90f) f.Add($"[HIT_CONTROL] the shot at its own target left hp {hp}, want 90");
+        }
+        finally { Object.DestroyImmediate(go); }
+    }
+
+    // A Herald stops amplifying the moment it dies (it leaves the enemy registry). Its fear ring
+    // must go out with it, or the 1 s death clip reads as an aura still at work. The prefab is
+    // read from the enemy data the game spawns from, not found by a project-wide search.
+    private static void AuraVisual(List<string> f, IReadOnlyList<EnemyData> enemies)
+    {
+        var herald = enemies?.FirstOrDefault(e => e.type == EnemyType.Herald)?.prefab;
+        var view = herald != null ? herald.GetComponent<TDEnemyView>() : null;
+        if (view == null) { f.Add("[HERALD_AURA_WIRED] no Herald prefab with a TDEnemyView in the enemy data"); return; }
+
+        var fi = typeof(TDEnemyView).GetField("m_AuraVisual",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        if (fi == null) { f.Add("[REFLECT] TDEnemyView.m_AuraVisual missing"); return; }
+
+        var ring = fi.GetValue(view) as GameObject;
+        if (ring == null || ring.name != "FearRing")
+            f.Add($"[HERALD_AURA_WIRED] m_AuraVisual is {(ring == null ? "unset" : ring.name)}, want FearRing");
     }
 
     // Spec §5.7: the difficulty sets the opening purse, and it is the only writer. The HUD's
