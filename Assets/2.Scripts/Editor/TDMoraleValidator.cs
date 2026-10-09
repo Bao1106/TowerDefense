@@ -54,6 +54,7 @@ public static class TDMoraleValidator
         Targets(f);
         Pearson(f);
         A4(f);
+        ReportContents(f);
         ZeroDamage(f);
         LeakLog(f);
         Resolve(f);
@@ -512,6 +513,50 @@ public static class TDMoraleValidator
             Application.logMessageReceived -= count;
             TDOperatorRegistry.api = saved;
         }
+    }
+
+    // §7.3 playtest: several reports get compared side by side, so each must say which match it
+    // is, what each wave cost in lives (a leak is not a life), which waves were boss waves, and
+    // how often the player rotated. Driven through the probe's own event handlers.
+    private static void ReportContents(List<string> f)
+    {
+        const BindingFlags S = BindingFlags.Static | BindingFlags.NonPublic;
+        var waveStarted = typeof(TDPressureProbe).GetMethod("OnWaveStarted", S);
+        var lifeLost = typeof(TDPressureProbe).GetMethod("OnLifeLost", S);
+        if (waveStarted == null || lifeLost == null) { f.Add("[REFLECT] TDPressureProbe.OnWaveStarted / OnLifeLost missing"); return; }
+
+        var plans = new List<List<EnemyType>>
+        {
+            new() { EnemyType.Normal },
+            new() { EnemyType.Normal, EnemyType.Boss },
+        };
+        TDPressureProbe.BeginMatch("DEMO-1", 0, Difficulty.Hard, plans);
+        waveStarted.Invoke(null, new object[] { 0 });
+        lifeLost.Invoke(null, new object[] { Vector3.zero });
+        lifeLost.Invoke(null, new object[] { Vector3.zero });
+        waveStarted.Invoke(null, new object[] { 1 });
+        waveStarted.Invoke(null, new object[] { 2 }); // closes wave 2; a wave past the plan is not a boss
+        string report = TDPressureProbe.LastReport;
+
+        string header = report.Split('\n')[0];
+        if (!header.Contains("DEMO-1") || !header.Contains("level 0") || !header.Contains("Hard"))
+            f.Add($"[REPORT_HEADER] '{header.Trim()}' does not name the stage, level and difficulty");
+
+        // wave  boss  onField  limit  goldEarned  leaks  leaked  horde  livesLost  collapses
+        string[] Row(int wave)
+        {
+            foreach (var line in report.Split('\n'))
+            {
+                var t = line.Split((char[])null, System.StringSplitOptions.RemoveEmptyEntries);
+                if (t.Length == 10 && t[0] == wave.ToString()) return t;
+            }
+            return null;
+        }
+        var w1 = Row(1); var w2 = Row(2);
+        if (w1 == null || w2 == null) { f.Add("[REPORT_ROWS] wave rows 1 and 2 not found with 10 columns"); return; }
+        if (w1[1] != "-" || w2[1] != "B") f.Add($"[REPORT_BOSS] boss column: wave 1 '{w1[1]}', wave 2 '{w2[1]}', want '-' and 'B'");
+        if (w1[8] != "2" || w2[8] != "0") f.Add($"[REPORT_LIVES] lives lost: wave 1 {w1[8]}, wave 2 {w2[8]}, want 2 and 0");
+        if (!report.Contains("retreats: 0")) f.Add("[REPORT_RETREATS] no 'retreats: N' line");
     }
 
     // §06 · 3.1: a collapsed operator calms down after STRESS_BROKEN_CALM_SECONDS without a hit.

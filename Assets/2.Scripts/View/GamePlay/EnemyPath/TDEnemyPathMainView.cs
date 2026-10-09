@@ -164,6 +164,7 @@ public class TDEnemyPathMainView : MonoBehaviour
         var wavePlans = TDEnemyPathMainControl.api.BuildWavePlans(config);
         int actualCount = TDEnemyPathMainControl.api.GetActualEnemyCount(wavePlans);
         TDGameStateControl.api?.Initialize(actualCount);
+        TDPressureProbe.BeginMatch(m_ActiveStage?.StageId, config.levelIndex, config.difficulty, wavePlans);
 
         m_WaveCts = new CancellationTokenSource();
         TDEnemyPathMainControl.api.StartWaveLoop(groups, wavePlans, config, m_WaveCts.Token)
