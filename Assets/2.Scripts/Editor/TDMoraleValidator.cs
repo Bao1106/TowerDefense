@@ -55,6 +55,7 @@ public static class TDMoraleValidator
         Pearson(f);
         A4(f);
         ZeroDamage(f);
+        LeakLog(f);
         Resolve(f);
         FocusScale(f);
 
@@ -482,6 +483,35 @@ public static class TDMoraleValidator
         };
         int got = TDPressureProbe.CountA4(stints);
         if (got != 2) f.Add($"[A4_COUNT] {got}, want 2");
+    }
+
+    // A pack walking past a full line is a burst of leaks; a Debug.Log for each floods the
+    // console a playtester reads (and costs a stack trace each in the Editor). Opt-in only.
+    private static void LeakLog(List<string> f)
+    {
+        var saved = TDOperatorRegistry.api;
+        int logged = 0;
+        Application.LogCallback count = (msg, _, _) => { if (msg.StartsWith("[Leak]")) logged++; };
+        Application.logMessageReceived += count;
+        try
+        {
+            TDOperatorRegistry.api = new TDOperatorRegistry();
+
+            TDOperatorRegistry.LogLeaks = false;
+            TDOperatorRegistry.api.ReportLeak(Vector2Int.zero, EnemyType.Normal);
+            if (logged != 0) f.Add($"[LEAK_LOG_GATED] {logged} [Leak] line(s) with LogLeaks off");
+
+            logged = 0;
+            TDOperatorRegistry.LogLeaks = true;
+            TDOperatorRegistry.api.ReportLeak(Vector2Int.zero, EnemyType.Normal);
+            if (logged != 1) f.Add($"[LEAK_LOG_ON] {logged} [Leak] line(s) with LogLeaks on, want 1");
+        }
+        finally
+        {
+            TDOperatorRegistry.LogLeaks = false;
+            Application.logMessageReceived -= count;
+            TDOperatorRegistry.api = saved;
+        }
     }
 
     // §06 · 3.1: a collapsed operator calms down after STRESS_BROKEN_CALM_SECONDS without a hit.

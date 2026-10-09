@@ -14,6 +14,10 @@ public class TDOperatorRegistry
 {
     public static TDOperatorRegistry api;
 
+    /// Off by default: a pack past a full line is a burst of leaks, and a log line each floods
+    /// the console a playtester reads. Measurement scripts switch it on when they need "[Leak]".
+    public static bool LogLeaks;
+
     // Valid path cells where operators can be placed (gate cells excluded)
     private readonly HashSet<Vector2Int> m_ValidOperatorCells = new HashSet<Vector2Int>();
 
@@ -228,6 +232,13 @@ public class TDOperatorRegistry
 
         var (meleeShare, eachRanged) = TDLeakShare.Split(meleeStanding, ranged.Count);
         float amplifier = LeakAmplifierAt(cell, leaker);
+
+        if (!LogLeaks)
+        {
+            if (meleeStanding) melee.ReceiveLeak(meleeShare, amplifier);
+            foreach (var r in ranged) r.ReceiveLeak(eachRanged, amplifier);
+            return;
+        }
 
         var parts = new List<string>();
         if (meleeStanding) parts.Add($"{melee.Data.operatorName} +{melee.ReceiveLeak(meleeShare, amplifier):F1}");
