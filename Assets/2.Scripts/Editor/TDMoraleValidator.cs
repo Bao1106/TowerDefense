@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Reflection;
 using TDEnums;
 using UnityEditor;
 using UnityEngine;
@@ -53,6 +54,7 @@ public static class TDMoraleValidator
         Targets(f);
         Pearson(f);
         A4(f);
+        ZeroDamage(f);
         Resolve(f);
         FocusScale(f);
 
@@ -69,6 +71,23 @@ public static class TDMoraleValidator
             auraRate = aura,
             secondsSinceHit = sinceHit,
         };
+
+    // Private-field access for the tests that drive a live component or behavior. A field that
+    // is not there is a failure, not an exception — the run must still report everything else.
+    // Shared with TDBalanceValidator (same Editor assembly).
+    internal static bool SetField(List<string> f, object o, string name, object value)
+    {
+        var fi = o.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+        if (fi == null) { f.Add($"[REFLECT] {o.GetType().Name}.{name} missing"); return false; }
+        fi.SetValue(o, value);
+        return true;
+    }
+
+    internal static T GetField<T>(object o, string name)
+    {
+        var fi = o.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+        return fi == null ? default : (T)fi.GetValue(o);
+    }
 
     private static TDOperatorMorale At(float value)
     {
@@ -463,6 +482,28 @@ public static class TDMoraleValidator
         };
         int got = TDPressureProbe.CountA4(stints);
         if (got != 2) f.Add($"[A4_COUNT] {got}, want 2");
+    }
+
+    // §06 · 3.1: a collapsed operator calms down after STRESS_BROKEN_CALM_SECONDS without a hit.
+    // A 0-damage enemy (a Herald walking past) is not a hit and must not restart that clock.
+    private static void ZeroDamage(List<string> f)
+    {
+        var go = new GameObject("ZeroDamageProbe") { hideFlags = HideFlags.HideAndDontSave };
+        try
+        {
+            var op = go.AddComponent<TDOperatorView>();
+            bool ok = SetField(f, op, "m_Initialized", true) & SetField(f, op, "m_CurrentHp", 100f)
+                    & SetField(f, op, "m_MaxHp", 100f) & SetField(f, op, "m_LastHitTime", -100f)
+                    & SetField(f, op, "m_HPBarView", null);
+            if (!ok) return;
+
+            op.TakeDamage(0f);
+            if (GetField<float>(op, "m_LastHitTime") != -100f) f.Add("[ZERO_DAMAGE_NOT_A_HIT] TakeDamage(0) restarted the calm clock");
+
+            op.TakeDamage(1f);
+            if (GetField<float>(op, "m_LastHitTime") == -100f) f.Add("[ZERO_DAMAGE_CONTROL] a real hit did not register");
+        }
+        finally { Object.DestroyImmediate(go); }
     }
 
     // Spec §5.6: blockCount is how many a melee HOLDS, attackType is how many it STRIKES.

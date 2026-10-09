@@ -184,7 +184,7 @@ public class TDEnemyView : MonoBehaviour
         // If currently blocked by a melee operator → counter-attack the operator
         if (m_IsBlocked)
         {
-            if (m_AttackSpeed > 0f && Time.time - m_LastAttackTime >= 1f / m_AttackSpeed)
+            if (m_AttackDamage > 0f && m_AttackSpeed > 0f && Time.time - m_LastAttackTime >= 1f / m_AttackSpeed)
             {
                 TDOperatorRegistry.api?.GetOperatorView(m_BlockerCell)?.TakeDamage(m_AttackDamage);
                 m_LastAttackTime = Time.time;
@@ -244,7 +244,8 @@ public class TDEnemyView : MonoBehaviour
                     // scales with how many are still coming. Collapsing mid-wave is lethal,
                     // collapsing after the last enemy is survivable — which is exactly the
                     // judgement call Rescue asks the player to make.
-                    if (TDOperatorRegistry.api != null && TDOperatorRegistry.api.IsBrokenAt(arrivedCell))
+                    // An enemy that deals no damage (Herald) does not swing at all.
+                    if (m_AttackDamage > 0f && TDOperatorRegistry.api != null && TDOperatorRegistry.api.IsBrokenAt(arrivedCell))
                     {
                         TDOperatorRegistry.api.GetOperatorView(arrivedCell)?.TakeDamage(m_AttackDamage);
                         TriggerSafe(TDConstant.ANIM_TRIGGER_ATTACK);

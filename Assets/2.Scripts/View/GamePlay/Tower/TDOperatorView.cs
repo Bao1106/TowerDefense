@@ -221,7 +221,9 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
 
     public void TakeDamage(float damage)
     {
-        if (!m_Initialized || m_IsDying || m_CurrentHp <= 0) return;
+        // A 0-damage blow (a Herald walking past) is not a hit: it must not restart the
+        // collapsed operator's calm clock (secondsSinceHit, §06 · 3.1).
+        if (!m_Initialized || m_IsDying || m_CurrentHp <= 0 || damage <= 0f) return;
         m_LastHitTime = Time.time;
 
         if (IsCollapsed) damage *= TDConstant.STRESS_BROKEN_DAMAGE_MULT;
