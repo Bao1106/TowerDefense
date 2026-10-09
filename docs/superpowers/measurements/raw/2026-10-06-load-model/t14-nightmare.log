@@ -1,0 +1,12 @@
+=== nightmare case · Hard · start 12:20:08; reflection ok True
+wave loop cancelled at 557.5s; bot placing one unit
+Knight at (17, 2), corridor index 15 (30 units from the gate); stress 0.0; Herald 2.2 u/s, Horde 4.4 u/s → Herald at t+2.0s, pack at t+9.3s
+t+9.3s pack spawned; Knight blocking 1, stress 0.0
+pack passed at t+17.7s: Knight stress 0.0 → 100.0 (max 100.0), gained 100.0 during the pack; collapsed True; state Broken
+  t+16.4s [pack window] [Leak] (17, 2) → Knight +20.0
+  t+16.6s [pack window] [Leak] (17, 2) → Knight +20.0
+  t+16.9s [pack window] [Leak] (17, 2) → Knight +30.0
+  t+17.1s [pack window] [Leak] (17, 2) → Knight +30.0
+  t+17.3s [pack window] [Leak] (17, 2) → nobody
+result: gained 100.0 (target ≤ 60), collapsed True
+stop: done, level 0 back to Hard

@@ -1,0 +1,183 @@
+=== run 1 · Normal · start 11:31:34
+Pressure report — Victory
+wave  onField  limit  goldEarned  leaks  leaked  collapses
+   1        2      6          14      0       0          0
+   2        3      6          28      0       0          0
+   3        4      6          41      1       1          0
+   4        5      6          65      0       0          0
+   5        6      6          91      0       0          0
+   6        6      6         109      3       3          0
+   7        6      6         161      6       6          0
+   8        6      6         254      5       4          6
+stints: 7
+  Ace       melee    37.8s  hp −   900  stress +  91.0
+  Knight    melee   157.3s  hp −   170  stress + 100.0
+  Ginger    ranged  156.8s  hp −     0  stress + 119.9
+  Striker   melee   133.0s  hp −   162  stress + 122.6
+  Defender  melee   114.5s  hp −   942  stress + 130.6
+  Moon      ranged   97.0s  hp −     0  stress + 142.0
+  Ace       melee    27.8s  hp −   800  stress +  49.3
+r melee (HP lost/s vs stress gained/s) = 0.89 over 5 stints of ≥ 5s
+r melee pooled over 1 matches = 0.89 over 5 stints
+collapses: 6
+
+=== run 2 · Normal · start 11:33:02
+Pressure report — GameOver
+wave  onField  limit  goldEarned  leaks  leaked  collapses
+   1        2      6          14      0       0          0
+   2        3      6          30      0       0          0
+   3        4      6          41      0       0          0
+   4        5      6          61      1       1          0
+   5        6      6          74     22      11          3
+   6        6      6          79     37      11          1
+   7        6      6          81     10       2          0
+stints: 6
+  Knight    melee   104.4s  hp −   580  stress + 100.0
+  Ginger    ranged  103.7s  hp −     0  stress +   0.0
+  Striker   melee    79.4s  hp −   560  stress + 107.0
+  Defender  melee    59.0s  hp −  1012  stress + 118.2
+  Moon      ranged   44.7s  hp −     0  stress +   0.0
+  Ace       melee    22.9s  hp −   220  stress + 100.0
+r melee (HP lost/s vs stress gained/s) = 0.25 over 4 stints of ≥ 5s
+r melee pooled over 2 matches = 0.38 over 9 stints
+collapses: 4
+
+=== run 3 · Normal · start 11:34:02
+Pressure report — GameOver
+wave  onField  limit  goldEarned  leaks  leaked  collapses
+   1        2      6          14      0       0          0
+   2        3      6          28      0       0          0
+   3        4      6          43      1       1          0
+   4        5      6          63      1       1          0
+   5        6      6          78     11       7          0
+   6        6      6         101     27      10          4
+   7        6      6         106     47      12          0
+   8        6      6         106      0       0          0
+stints: 6
+  Knight    melee   111.7s  hp −   722  stress + 100.0
+  Ginger    ranged  111.0s  hp −     0  stress +  60.0
+  Striker   melee    86.8s  hp −   574  stress + 122.5
+  Defender  melee    67.3s  hp −  1272  stress + 135.0
+  Moon      ranged   49.8s  hp −     0  stress +  30.0
+  Ace       melee    31.3s  hp −   526  stress + 100.0
+r melee (HP lost/s vs stress gained/s) = 0.78 over 4 stints of ≥ 5s
+r melee pooled over 3 matches = 0.45 over 13 stints
+collapses: 4
+
+=== run 4 · Hard · start 11:35:04
+Pressure report — GameOver
+wave  onField  limit  goldEarned  leaks  leaked  collapses
+   1        2      5          16      0       0          0
+   2        3      5          26      0       0          0
+   3        3      5          38      2       2          0
+   4        4      5          64     10       7          0
+   5        5      5          92     11       7          5
+   6        5      5          97     35      11          0
+   7        5      5         102     26      11          0
+stints: 6
+  Striker   melee    68.0s  hp −   700  stress + 142.5
+  Knight    melee   109.5s  hp −   872  stress + 100.9
+  Ginger    ranged   90.7s  hp −     0  stress + 119.9
+  Defender  melee    59.0s  hp −  1194  stress + 116.3
+  Moon      ranged   43.5s  hp −     0  stress + 120.0
+  Ace       melee     4.3s  hp −    74  stress +  40.0
+r melee (HP lost/s vs stress gained/s) = 0.57 over 3 stints of ≥ 5s
+r melee pooled over 4 matches = 0.45 over 16 stints
+collapses: 5
+
+=== run 5 · Hard · start 11:36:06
+Pressure report — GameOver
+wave  onField  limit  goldEarned  leaks  leaked  collapses
+   1        2      5          14      0       0          0
+   2        3      5          26      0       0          0
+   3        4      5          48      1       1          0
+   4        5      5          64      9       6          0
+   5        5      5          89     18       9          5
+   6        5      5         100     25      10          0
+   7        5      5         104     26      11          1
+stints: 6
+  Striker   melee    50.5s  hp −   700  stress + 132.7
+  Knight    melee   109.0s  hp −  1000  stress + 107.7
+  Ginger    ranged   91.0s  hp −     0  stress + 127.9
+  Defender  melee    61.3s  hp −  1462  stress + 118.9
+  Moon      ranged   43.7s  hp −     0  stress + 128.4
+  Ace       melee    21.8s  hp −   136  stress + 118.3
+r melee (HP lost/s vs stress gained/s) = -0.46 over 4 stints of ≥ 5s
+r melee pooled over 5 matches = 0.21 over 20 stints
+collapses: 6
+
+=== run 6 · Hard · start 11:37:08
+Pressure report — GameOver
+wave  onField  limit  goldEarned  leaks  leaked  collapses
+   1        2      5          14      0       0          0
+   2        3      5          24      1       1          0
+   3        4      5          44      0       0          0
+   4        4      5          62      9       6          0
+   5        5      5          90     10       7          4
+   6        5      5         107     32      12          1
+   7        5      5         114     27      11          0
+   8        5      5         121     11       5          1
+stints: 6
+  Striker   melee    66.8s  hp −   700  stress + 128.1
+  Knight    melee   117.2s  hp −   820  stress + 119.1
+  Ginger    ranged   98.3s  hp −     0  stress + 150.1
+  Defender  melee    69.0s  hp −  1670  stress + 115.5
+  Moon      ranged   50.5s  hp −     0  stress + 138.7
+  Ace       melee    13.2s  hp −   172  stress + 115.0
+r melee (HP lost/s vs stress gained/s) = -0.01 over 4 stints of ≥ 5s
+r melee pooled over 6 matches = 0.14 over 24 stints
+collapses: 6
+
+=== run 7 · Nightmare · start 11:38:14
+Pressure report — GameOver
+wave  onField  limit  goldEarned  leaks  leaked  collapses
+   1        2      4          14      0       0          0
+   2        2      4          23      5       5          0
+   3        4      4          53      6       3          0
+   4        4      4          61     22      11          3
+   5        4      4          65     26       8          0
+stints: 5
+  Striker   melee    42.1s  hp −   700  stress + 119.8
+  Knight    melee    84.9s  hp −  1146  stress + 131.7
+  Ginger    ranged   68.0s  hp −     0  stress + 100.2
+  Defender  melee    33.3s  hp −   492  stress + 116.2
+  Moon      ranged    0.4s  hp −     0  stress +   0.0
+r melee (HP lost/s vs stress gained/s) = 0.58 over 3 stints of ≥ 5s
+r melee pooled over 7 matches = 0.15 over 27 stints
+collapses: 3
+
+=== run 8 · Nightmare · start 11:39:03
+Pressure report — GameOver
+wave  onField  limit  goldEarned  leaks  leaked  collapses
+   1        2      4          14      0       0          0
+   2        3      4          36      7       5          0
+   3        4      4          55      9       6          1
+   4        4      4          61     23      10          3
+   5        4      4          65     24       9          0
+stints: 4
+  Knight    melee    81.5s  hp −  1036  stress + 131.5
+  Ginger    ranged   63.4s  hp −     0  stress + 124.7
+  Striker   melee    47.0s  hp −   672  stress + 130.9
+  Defender  melee    30.5s  hp −   642  stress + 119.3
+r melee (HP lost/s vs stress gained/s) = 0.94 over 3 stints of ≥ 5s
+r melee pooled over 8 matches = 0.19 over 30 stints
+collapses: 4
+
+=== run 9 · Nightmare · start 11:39:51
+Pressure report — GameOver
+wave  onField  limit  goldEarned  leaks  leaked  collapses
+   1        2      4          14      0       0          0
+   2        2      4          23      5       5          0
+   3        4      4          45      7       5          0
+   4        4      4          50     29      11          3
+   5        4      4          52      5       2          0
+stints: 4
+  Knight    melee    75.3s  hp −  1102  stress + 131.6
+  Ginger    ranged   57.5s  hp −     0  stress +  48.1
+  Striker   melee    33.0s  hp −   546  stress + 120.8
+  Defender  melee    21.6s  hp −   604  stress + 100.0
+r melee (HP lost/s vs stress gained/s) = 0.84 over 3 stints of ≥ 5s
+r melee pooled over 9 matches = 0.26 over 33 stints
+collapses: 3
+
+stop: all runs done, level 0 back to Hard

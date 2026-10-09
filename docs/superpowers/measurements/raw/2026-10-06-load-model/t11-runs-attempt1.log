@@ -1,0 +1,190 @@
+=== run 1 · Normal · start 16:10:20
+Pressure report — Victory
+wave  onField  limit  goldEarned  leaks  collapses
+   1        2      6          14      0          0
+   2        3      6          26      1          0
+   3        4      6          41      0          0
+   4        5      6          57      0          0
+   5        5      6          72      1          0
+   6        6      6         100      2          0
+   7        6      6         131      3          0
+   8        6      6         242     14          6
+stints: 7 (7 of ≥ 5s)
+  Ace         36.6s  hp −   900  stress +  28.0
+  Knight     157.6s  hp −   370  stress + 100.9
+  Ginger     156.8s  hp −     0  stress + 122.1
+  Striker    133.1s  hp −   312  stress + 134.7
+  Defender   113.7s  hp −  1710  stress + 125.0
+  Moon        95.1s  hp −     0  stress + 131.7
+  Ace         25.6s  hp −   550  stress + 100.0
+r (HP lost/s vs stress gained/s) = 0.45
+collapses: 6
+
+=== run 2 · Normal · start 16:11:48
+Pressure report — Victory
+wave  onField  limit  goldEarned  leaks  collapses
+   1        3      6          16      0          0
+   2        3      6          26      1          0
+   3        4      6          41      0          0
+   4        5      6          57      1          0
+   5        5      6          72      1          0
+   6        6      6         102      3          0
+   7        6      6         133      2          0
+   8        6      6         243     13          6
+stints: 7 (7 of ≥ 5s)
+  Ace         36.8s  hp −   900  stress +  42.0
+  Knight     159.4s  hp −   302  stress +  99.9
+  Ginger     158.7s  hp −     0  stress + 119.9
+  Striker    135.5s  hp −   374  stress + 135.8
+  Defender   116.1s  hp −  1850  stress + 143.5
+  Moon        95.6s  hp −     0  stress + 136.4
+  Ace         27.1s  hp −   300  stress +  95.7
+r (HP lost/s vs stress gained/s) = 0.23
+collapses: 6
+
+=== run 3 · Normal · start 16:13:15
+Pressure report — Victory
+wave  onField  limit  goldEarned  leaks  collapses
+   1        3      6          16      0          0
+   2        3      6          26      1          0
+   3        4      6          41      1          0
+   4        5      6          59      0          0
+   5        5      6          74      3          0
+   6        6      6         104      2          0
+   7        6      6         129      2          0
+   8        4      6         184     39          6
+stints: 8 (8 of ≥ 5s)
+  Ace         34.7s  hp −   900  stress +  28.0
+  Striker    107.2s  hp −   700  stress + 119.5
+  Ace         20.6s  hp −   900  stress +  63.0
+  Knight     155.5s  hp −  1200  stress + 115.9
+  Ginger     156.8s  hp −     0  stress + 137.9
+  Defender   111.3s  hp −  1864  stress + 142.4
+  Moon        96.9s  hp −     0  stress + 156.3
+  Striker      9.8s  hp −   300  stress +  15.6
+r (HP lost/s vs stress gained/s) = 0.67
+collapses: 6
+
+=== run 4 · Hard · start 16:14:41
+Pressure report — GameOver
+wave  onField  limit  goldEarned  leaks  collapses
+   1        2      5          14      0          0
+   2        3      5          26      0          0
+   3        3      5          38      0          0
+   4        5      5          68      4          0
+   5        5      5          92      1          0
+   6        5      5         121      3          0
+   7        5      5         137     11          5
+   8        4      5         153     45          2
+stints: 7 (6 of ≥ 5s)
+  Striker     80.4s  hp −   700  stress + 121.9
+  Defender    71.7s  hp −  3000  stress + 146.6
+  Knight     133.0s  hp −  1200  stress + 117.9
+  Ginger     117.4s  hp −     0  stress + 152.4
+  Moon        70.4s  hp −     0  stress + 151.3
+  Ace         18.7s  hp −   600  stress + 110.0
+  Striker      3.4s  hp −   600  stress +  11.5
+r (HP lost/s vs stress gained/s) = 0.53
+collapses: 7
+
+=== run 5 · Hard · start 16:15:56
+Pressure report — GameOver
+wave  onField  limit  goldEarned  leaks  collapses
+   1        2      5          14      0          0
+   2        3      5          26      0          0
+   3        3      5          38      1          0
+   4        4      5          58      6          0
+   5        5      5          88      6          0
+   6        5      5          95     23          3
+   7        4      5         109      8          0
+   8        5      5         116     22          2
+stints: 7 (7 of ≥ 5s)
+  Knight      91.8s  hp −  1200  stress + 109.9
+  Striker     63.1s  hp −   700  stress + 143.6
+  Ginger      97.7s  hp −     0  stress +  22.5
+  Defender    58.0s  hp −  1226  stress + 131.7
+  Moon        42.5s  hp −     0  stress +   3.5
+  Ace         24.8s  hp −   408  stress + 115.0
+  Knight       8.5s  hp −   290  stress +   9.8
+r (HP lost/s vs stress gained/s) = 0.38
+collapses: 5
+
+=== run 6 · Hard · start 16:17:01
+Pressure report — GameOver
+wave  onField  limit  goldEarned  leaks  collapses
+   1        2      5          14      0          0
+   2        3      5          26      0          0
+   3        3      5          38      0          0
+   4        4      5          60      5          0
+   5        5      5          76      9          1
+   6        4      5          81     27          2
+   7        5      5          85      8          0
+   8        5      5          90      9          0
+stints: 6 (6 of ≥ 5s)
+  Striker     52.8s  hp −   700  stress + 127.2
+  Knight     115.8s  hp −  1160  stress + 115.0
+  Ginger      97.1s  hp −     0  stress +  27.5
+  Defender    60.2s  hp −  1880  stress + 116.8
+  Moon        45.3s  hp −     0  stress +  14.3
+  Ace         13.3s  hp −   600  stress +  30.0
+r (HP lost/s vs stress gained/s) = 0.78
+collapses: 3
+
+=== run 7 · Nightmare · start 16:18:06
+Pressure report — GameOver
+wave  onField  limit  goldEarned  leaks  collapses
+   1        2      4          11      0          0
+   2        2      4          21      0          0
+   3        3      4          38      3          0
+   4        4      4          65      1          0
+   5        4      4          69     11          2
+   6        3      4          75     12          0
+   7        3      4          75      2          0
+stints: 5 (5 of ≥ 5s)
+  Knight      72.2s  hp −  1200  stress +  42.5
+  Striker     43.0s  hp −   700  stress + 134.2
+  Ginger      78.5s  hp −     0  stress + 118.9
+  Defender    40.9s  hp −  1832  stress + 111.1
+  Moon        22.4s  hp −     0  stress +  36.3
+r (HP lost/s vs stress gained/s) = 0.45
+collapses: 2
+
+=== run 8 · Nightmare · start 16:19:01
+Pressure report — GameOver
+wave  onField  limit  goldEarned  leaks  collapses
+   1        2      4          11      0          0
+   2        2      4          23      0          0
+   3        4      4          44      5          0
+   4        4      4          55      4          0
+   5        4      4          65     14          3
+   6        3      4          70     13          0
+   7        3      4          72      3          0
+stints: 5 (5 of ≥ 5s)
+  Striker     37.2s  hp −   700  stress + 136.1
+  Knight      81.3s  hp −  1200  stress + 114.6
+  Ginger      79.7s  hp −     0  stress +  57.3
+  Defender    48.0s  hp −  2348  stress + 114.9
+  Moon        22.5s  hp −     0  stress +   0.0
+r (HP lost/s vs stress gained/s) = 0.62
+collapses: 3
+
+=== run 9 · Nightmare · start 16:19:56
+Pressure report — GameOver
+wave  onField  limit  goldEarned  leaks  collapses
+   1        2      4          11      0          0
+   2        2      4          21      0          0
+   3        4      4          46      4          0
+   4        4      4          57      4          0
+   5        4      4          67     14          3
+   6        3      4          72     10          0
+   7        3      4          74      6          0
+stints: 5 (5 of ≥ 5s)
+  Striker     36.7s  hp −   700  stress + 136.4
+  Knight      81.5s  hp −  1200  stress + 104.6
+  Ginger      80.3s  hp −     0  stress +  19.2
+  Defender    49.8s  hp −  2356  stress + 115.5
+  Moon        24.0s  hp −     0  stress +   3.6
+r (HP lost/s vs stress gained/s) = 0.64
+collapses: 3
+
+stop: all runs done, level 0 back to Hard

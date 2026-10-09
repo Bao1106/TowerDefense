@@ -2,6 +2,7 @@
 
 Plan `docs/superpowers/plans/2026-10-06-morale-load-model.md`, Task 14. Spec §5.2, §5.7, §7.2. Lượt 1:
 `2026-10-06-load-model-round-1.md`.
+Log thô và ledger (rulings, minor còn nợ): `raw/2026-10-06-load-model/`.
 
 ## Cách đo
 
@@ -12,7 +13,7 @@ Giống lượt 1: map DEMO-1, bot `TDCalibrationBot` (đội chuẩn, không xo
 
 ## Lần đo đầu — đếm cả thân bầy
 
-`e` = ρ chưa hiệu chỉnh của wave thường đầu tiên có ≥ 2 con lọt (`t14-runs.log` trong workspace).
+`e` = ρ chưa hiệu chỉnh của wave thường đầu tiên có ≥ 2 con lọt (`t14-runs.log`).
 
 | Độ khó | Wave đầu ≥ 2 con lọt | ρ thô | `e` | Kết quả |
 |---|---|---|--:|---|

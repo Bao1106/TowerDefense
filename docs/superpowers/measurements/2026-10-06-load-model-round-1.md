@@ -1,6 +1,7 @@
 # Hiệu chỉnh mô hình tải — lượt 1
 
 Plan `docs/superpowers/plans/2026-10-06-morale-load-model.md`, Task 11. Spec §4.2, §5.7, §7.2.
+Log thô và ledger (rulings, minor còn nợ): `raw/2026-10-06-load-model/`.
 
 ## Cách đo
 
@@ -21,8 +22,7 @@ tức game thưa gấp 3–4 lần. Có hai lỗi đo làm `e` thấp giả:
 - T tính theo một luồng sinh, trong khi DEMO-1 sinh ở 2 cổng cùng lúc.
 
 Đã sửa: đếm mỗi con lọt một lần (`TDEnemyView` → `TDPressureProbe.RecordLeakedEnemy`), và T chia theo số cổng
-(`TDLoadModel.GatesFor`, đọc từ `TDStageRepository`). Số từng trận nằm trong `t11-runs-attempt1.log` của
-workspace.
+(`TDLoadModel.GatesFor`, đọc từ `TDStageRepository`). Số từng trận nằm trong `t11-runs-attempt1.log`.
 
 ## Lần đo 2
 
