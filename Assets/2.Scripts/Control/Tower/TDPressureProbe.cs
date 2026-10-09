@@ -23,9 +23,9 @@ public static class TDPressureProbe
     /// stack with themselves; the worst one in range wins, so two bosses are frightening
     /// rather than lethal-by-arithmetic.
     ///
-    /// ponytail: radius and rate are hardcoded per enemy type here. §08 moves both onto
-    /// EnemyData as `fearAuraRadius` / `fearAuraRate` when Herald arrives in Phase 5 — at
-    /// that point this reads the fields and the type switch disappears.
+    /// ponytail: radius and rate are hardcoded for the boss, the only aura there is — the
+    /// Herald amplifies leaks instead (spec 2026-10-06 §5.5). Move both onto EnemyData as
+    /// `fearAuraRadius` / `fearAuraRate` when a second aura source appears.
     /// </summary>
     public static float AuraRateAt(Vector2Int cell)
     {

@@ -51,6 +51,12 @@ public static class TDBalanceValidator
     {
         var failures = new List<string>();
 
+        // Every growth a shipped level uses, plus 1 (no growth). Read once, here — the loops
+        // below call the generator thousands of times and must not touch the AssetDatabase.
+        var levels = LoadConfig<TDLevelConfigSettings>()?.GetAllLevels();
+        if (levels == null || levels.Count == 0) failures.Add("[GROWTH_NO_LEVELS] no level config to read waveGrowth from");
+        var growths = new[] { 1f }.Concat(levels?.Select(l => l.waveGrowth) ?? Enumerable.Empty<float>()).Distinct().ToList();
+
         foreach (Difficulty d in System.Enum.GetValues(typeof(Difficulty)))
         {
             var row = DifficultyRatioTable.Get(d);
@@ -102,7 +108,7 @@ public static class TDBalanceValidator
             if (row.startingGold < TDConstant.CONFIG_PLAYER_STARTING_GOLD)
                 failures.Add($"[STARTING_GOLD_FLOOR] {d}: starts with {row.startingGold} < {TDConstant.CONFIG_PLAYER_STARTING_GOLD}");
 
-            Growth(failures, d, row);
+            Growth(failures, d, row, growths);
             Horde(failures, d);
         }
 
@@ -173,9 +179,9 @@ public static class TDBalanceValidator
     // (it used to be bossPct here and GetBossParams there — two answers to one question).
     // A level asking for fewer enemies than its waves can hold (every wave 1, every boss wave
     // its bosses + 1 escort) gets that minimum instead, so `want` is max(total, floor).
-    private static void Growth(List<string> f, Difficulty d, DifficultyRatioTable.RatioRow row)
+    private static void Growth(List<string> f, Difficulty d, DifficultyRatioTable.RatioRow row, IReadOnlyList<float> growths)
     {
-        foreach (float g in new[] { 1f, 2.7f })
+        foreach (float g in growths)
             for (int waves = 1; waves <= 10; waves++)
             {
                 int floor = waves + Mathf.Min(row.bossWaveCount, waves) * row.bossPerWave;

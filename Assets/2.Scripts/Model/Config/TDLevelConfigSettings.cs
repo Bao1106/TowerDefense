@@ -59,7 +59,7 @@ public static class DifficultyRatioTable
     // mixRamp and bossWaveMult are calibrated against bot runs (round 1): boss waves at 2–2.5×
     // leaked 13–19 enemies, and no setting above ~1.4 meets the ρ targets. Round 2 (Horde and
     // Herald in) lowered hpMult and mixRamp: the load model cannot see a pack overflowing the
-    // blockers or a Herald's ×2, so the extra pressure is paid for here, checked by bot outcomes.
+    // blockers or a Herald's ×1.5, so the extra pressure is paid for here, checked by bot outcomes.
     private static readonly Dictionary<Difficulty, RatioRow> k_Table =
         new Dictionary<Difficulty, RatioRow>
         {
