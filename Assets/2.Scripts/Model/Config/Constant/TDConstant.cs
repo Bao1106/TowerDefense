@@ -391,7 +391,8 @@ public static class TDConstant
     public const float STRESS_ALLY_BREAK_SPIKE = 30f;   // worse than death: they are still there
     public const float STRESS_SPIKE_RADIUS = 2f;        // cells
 
-    // N4 — fear auras. Radius lives on the enemy data so designers can tune it.
+    // N4 — fear aura, boss only (a Herald amplifies leaks instead). Radius is hardcoded in
+    // TDPressureProbe.AuraRateAt.
     public const float STRESS_AURA_BOSS = 2.0f;
 
     // Recovery.

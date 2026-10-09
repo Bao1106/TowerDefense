@@ -10,6 +10,7 @@ public class TDAttackVFX : MonoBehaviour
     public TowerType OwnerType { get; set; }
 
     private TDEnemyView m_Target;
+    private int m_TargetSpawnId; // the spawn fired at — the pooled object may come back as another enemy
     private Vector3 m_TargetPos;
     private float m_Damage;
     private AttackType m_AttackType;
@@ -20,6 +21,7 @@ public class TDAttackVFX : MonoBehaviour
     public void Init(TDEnemyView target, float damage, AttackType attackType, ITowerRangeDTO rangeDTO, Quaternion towerRotation)
     {
         m_Target = target;
+        m_TargetSpawnId = target.SpawnId;
         m_TargetPos = target.transform.position;
         m_Damage = damage;
         m_AttackType = attackType;
@@ -32,7 +34,11 @@ public class TDAttackVFX : MonoBehaviour
     {
         if (m_HasImpacted) return;
 
-        // Track target if still alive → homing behavior; if dead → keep last known position
+        // Home on the target while it is still the enemy we fired at. Enemies are pooled, so the
+        // object never turns null: once it is handed out again as a new enemy (after dying or
+        // reaching the gate), let go of it and finish at the last known position.
+        if (m_Target != null && m_Target.SpawnId != m_TargetSpawnId)
+            m_Target = null;
         if (m_Target != null)
             m_TargetPos = m_Target.transform.position;
 
