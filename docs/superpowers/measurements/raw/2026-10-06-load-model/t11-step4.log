@@ -1,0 +1,83 @@
+=== run 1 · Hard · StartFull · start 17:12:38
+Pressure report — GameOver
+wave  onField  limit  goldEarned  leaks  leaked  collapses
+   1        2      5          12      1       1          0
+   2        3      5          27      0       0          0
+   3        4      5          49      2       2          0
+   4        4      5          60      5       3          0
+   5        4      5          73     23      10          3
+   6        3      5          78     15       8          0
+   7        3      5          80      5       5          0
+stints: 5 (5 of ≥ 5s)
+  Striker     44.1s  hp −   700  stress + 139.0
+  Knight      95.6s  hp −  1200  stress + 110.0
+  Ginger      85.8s  hp −     0  stress +  60.8
+  Defender    53.8s  hp −  1476  stress + 115.0
+  Moon        32.0s  hp −     0  stress +  17.6
+r (HP lost/s vs stress gained/s) = 0.73
+collapses: 3
+
+=== run 2 · Hard · StartFull · start 17:13:42
+Pressure report — Victory
+wave  onField  limit  goldEarned  leaks  leaked  collapses
+   1        2      5          14      0       0          0
+   2        3      5          33      0       0          0
+   3        4      5          53      1       1          0
+   4        5      5          68      2       2          0
+   5        5      5         107      1       1          0
+   6        5      5         130      5       4          0
+   7        5      5         140     24      11          5
+   8        3      5         165     24      12          1
+stints: 7 (7 of ≥ 5s)
+  Striker     76.8s  hp −   700  stress + 128.9
+  Defender    80.6s  hp −  3000  stress + 144.7
+  Ace         26.0s  hp −   900  stress +  75.0
+  Knight     134.3s  hp −  1200  stress + 126.3
+  Ginger     130.3s  hp −     0  stress + 152.6
+  Moon        81.2s  hp −     0  stress + 158.6
+  Striker     15.0s  hp −   150  stress +  16.7
+r (HP lost/s vs stress gained/s) = 0.60
+collapses: 6
+
+=== run 3 · Hard · StartFull · start 17:15:03
+Pressure report — GameOver
+wave  onField  limit  goldEarned  leaks  leaked  collapses
+   1        2      5          14      0       0          0
+   2        3      5          29      0       0          0
+   3        4      5          51      4       3          0
+   4        4      5          62      4       3          0
+   5        5      5          95     14       8          3
+   6        5      5          99     18       8          0
+   7        5      5         118     17       9          0
+   8        5      5         132     19       8          2
+stints: 7 (7 of ≥ 5s)
+  Striker     56.1s  hp −   700  stress + 139.1
+  Knight     115.0s  hp −  1200  stress + 113.1
+  Ginger     104.4s  hp −     0  stress +  23.2
+  Defender    70.7s  hp −  1930  stress + 116.6
+  Moon        52.1s  hp −     0  stress +  14.9
+  Ace         30.6s  hp −   736  stress + 125.0
+  Striker      5.9s  hp −   204  stress +  17.2
+r (HP lost/s vs stress gained/s) = 0.77
+collapses: 5
+
+=== run 4 · Hard · StartThree · start 17:16:10
+Pressure report — GameOver
+wave  onField  limit  goldEarned  leaks  leaked  collapses
+   1        2      5          14      0       0          0
+   2        3      5          33      1       1          0
+   3        3      5          43      2       2          0
+   4        3      5          68      4       3          0
+   5        3      5         103      3       3          0
+   6        3      5         121      9       6          3
+   7        2      5         126     13       9          0
+   8        1      5         129      1       1          0
+stints: 3 (3 of ≥ 5s)
+  Striker     72.8s  hp −   700  stress + 153.9
+  Knight     116.3s  hp −  1200  stress + 111.2
+  Ginger     100.1s  hp −     0  stress + 127.0
+r (HP lost/s vs stress gained/s) = 0.20
+collapses: 3
+
+team cost (first 5 of ReferenceTeam) = 94; startingGold 30; cap reachable once goldEarned ≥ 64
+stop: all runs done, level 0 back to Hard

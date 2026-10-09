@@ -23,6 +23,7 @@ public class TDTowerFactoryControl : ITowerFactoryControl
 
         string key = $"{Random.Range(1000, 9999)}-{prefab.name}";
         unit.Init(key, slotInfo);
+        TDDeployCap.api?.OnUnitPlaced();
 
         onCreateUnitSuccess?.Invoke(unit);
 

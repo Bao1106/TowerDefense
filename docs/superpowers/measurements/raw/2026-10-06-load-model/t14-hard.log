@@ -1,0 +1,83 @@
+=== run 1 · Hard · StartFull · start 12:14:30
+Pressure report — GameOver
+wave  onField  limit  goldEarned  leaks  leaked  horde  collapses
+   1        2      5          16      0       0      0          0
+   2        3      5          28      0       0      0          0
+   3        4      5          54      5       5      2          0
+   4        4      5          63      0       0      0          0
+   5        5      5         101      0       0      0          0
+   6        5      5         141      9       8      3          4
+   7        5      5         146     35      11      5          1
+   8        5      5         149     27       9      5          0
+stints: 5
+  Knight    melee   122.7s  hp −   704  stress + 119.8
+  Ginger    ranged  104.7s  hp −     0  stress + 129.0
+  Striker   melee    88.0s  hp −   676  stress + 141.6
+  Defender  melee    71.3s  hp −  1676  stress + 114.8
+  Moon      ranged   53.3s  hp −     0  stress + 117.6
+r melee (HP lost/s vs stress gained/s) = 0.59 over 3 stints of ≥ 5s
+r melee pooled over 1 matches = 0.59 over 3 stints
+collapses: 5
+
+=== run 2 · Hard · StartFull · start 12:15:42
+Pressure report — GameOver
+wave  onField  limit  goldEarned  leaks  leaked  horde  collapses
+   1        2      5          14      0       0      0          0
+   2        3      5          26      0       0      0          0
+   3        4      5          50      9       6      5          0
+   4        5      5          69      1       1      0          0
+   5        5      5          87      9       6      3          0
+   6        5      5          93     36      15      6          3
+   7        5      5          99     23       9      5          1
+stints: 6
+  Striker   melee    54.8s  hp −   700  stress + 161.8
+  Knight    melee   105.7s  hp −   642  stress + 140.6
+  Ginger    ranged   88.6s  hp −     0  stress +  23.2
+  Defender  melee    57.4s  hp −  1266  stress + 125.6
+  Moon      ranged   41.3s  hp −     0  stress +  17.1
+  Ace       melee    13.9s  hp −   208  stress + 100.0
+r melee (HP lost/s vs stress gained/s) = 0.21 over 4 stints of ≥ 5s
+r melee pooled over 2 matches = 0.22 over 7 stints
+collapses: 4
+
+=== run 3 · Hard · StartFull · start 12:16:42
+Pressure report — GameOver
+wave  onField  limit  goldEarned  leaks  leaked  horde  collapses
+   1        2      5          14      0       0      0          0
+   2        3      5          24      0       0      0          0
+   3        4      5          50      8       6      5          0
+   4        4      5          60      0       0      0          0
+   5        5      5          87      7       5      4          0
+   6        5      5          93     37      13      5          3
+   7        5      5         101     28      12      5          1
+stints: 6
+  Striker   melee    56.5s  hp −   700  stress + 160.3
+  Knight    melee   105.9s  hp −   730  stress + 125.9
+  Ginger    ranged   87.8s  hp −     0  stress +  55.4
+  Defender  melee    56.7s  hp −  1378  stress + 114.8
+  Moon      ranged   40.0s  hp −     0  stress +  21.8
+  Ace       melee    12.7s  hp −   242  stress + 100.0
+r melee (HP lost/s vs stress gained/s) = 0.36 over 4 stints of ≥ 5s
+r melee pooled over 3 matches = 0.30 over 11 stints
+collapses: 4
+
+=== run 4 · Hard · StartThree · start 12:17:39
+Pressure report — GameOver
+wave  onField  limit  goldEarned  leaks  leaked  horde  collapses
+   1        2      5          14      0       0      0          0
+   2        3      5          26      0       0      0          0
+   3        3      5          44      4       4      2          0
+   4        3      5          71      4       3      0          0
+   5        3      5          91     12       8      5          2
+   6        2      5          96     17      11      5          0
+   7        2      5          97      1       1      0          0
+stints: 3
+  Striker   melee    56.3s  hp −   700  stress + 142.4
+  Knight    melee   100.1s  hp −  1092  stress + 110.0
+  Ginger    ranged   84.3s  hp −     0  stress +  22.5
+r melee (HP lost/s vs stress gained/s) = 1.00 over 2 stints of ≥ 5s
+r melee pooled over 4 matches = 0.32 over 13 stints
+collapses: 2
+
+team cost (first 5) = 94; startingGold 30; cap reachable once goldEarned ≥ 64
+stop: all runs done, level 0 back to Hard

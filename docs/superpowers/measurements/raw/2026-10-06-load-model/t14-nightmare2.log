@@ -1,0 +1,11 @@
+=== nightmare case (after the fix) · Hard · start 12:48:59
+wave loop cancelled at 40.5s; bot placing one unit
+Knight at (17, 2), corridor index 15; stress 0.0; STRESS_PER_LEAK 7, HERALD_LEAK_MULT 1.5; pack at t+9.3s
+t+9.3s pack spawned; Knight blocking 1, stress 0.0
+pack passed at t+22.0s: Knight stress 0.0 → 41.7 (max 42.0), gained 42.0 during the pack; collapsed False; state Steady
+  t+16.4s [pack window] [Leak] (17, 2) → Knight +10.5
+  t+16.6s [pack window] [Leak] (17, 2) → Knight +10.5
+  t+16.8s [pack window] [Leak] (17, 2) → Knight +10.5
+  t+17.0s [pack window] [Leak] (17, 2) → Knight +10.5
+result: gained 42.0 (target ≤ 60), collapsed False
+stop: done, level 0 back to Hard

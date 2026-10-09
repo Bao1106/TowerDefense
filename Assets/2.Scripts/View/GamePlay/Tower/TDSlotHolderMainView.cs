@@ -29,12 +29,24 @@ public class TDSlotHolderMainView : MonoBehaviour
         gameObject.AddComponent<TDTutorialView>();
 
         TDGoldControl.api.onGoldChanged += RefreshHolderInteractability;
+
+        if (TDOperatorRoster.api != null)
+            TDOperatorRoster.api.OnAvailabilityChanged += RefreshAvailability;
+
+        if (TDDeployCap.api != null)
+            TDDeployCap.api.OnChanged += RefreshAvailability;
     }
 
     private void OnDestroy()
     {
         if (TDGoldControl.api != null)
             TDGoldControl.api.onGoldChanged -= RefreshHolderInteractability;
+
+        if (TDOperatorRoster.api != null)
+            TDOperatorRoster.api.OnAvailabilityChanged -= RefreshAvailability;
+
+        if (TDDeployCap.api != null)
+            TDDeployCap.api.OnChanged -= RefreshAvailability;
     }
 
     // ── Slot bar ────────────────────────────────────────────────────────────────
@@ -60,8 +72,7 @@ public class TDSlotHolderMainView : MonoBehaviour
             var go = Instantiate(m_TowerHolderPrefab, m_TowerHolderContainer);
             var holder = go.GetComponent<TDSlotHolderItemView>();
             holder.SetupSlotHolderVariables();
-            holder.SetupSlotCost(slot.cost);
-            holder.SetupIcon(slot.icon);
+            holder.SetupSlot(slot);
             m_SlotHolders.Add(holder);
         }
 
@@ -72,8 +83,12 @@ public class TDSlotHolderMainView : MonoBehaviour
     private void RefreshHolderInteractability(int gold)
     {
         foreach (var holder in m_SlotHolders)
-            holder.SetInteractable(gold >= holder.Cost);
+            holder.SetInteractable(holder.CanSelect(gold));
     }
+
+    /// <summary>An operator deployed, retreated, died, or came off cooldown — re-read every card.</summary>
+    private void RefreshAvailability()
+        => RefreshHolderInteractability(TDGoldControl.api != null ? TDGoldControl.api.Gold : 0);
 
     private void SetupOnSelectSlot()
     {
@@ -89,6 +104,17 @@ public class TDSlotHolderMainView : MonoBehaviour
             var entry = new EventTrigger.Entry { eventID = EventTriggerType.PointerDown };
             entry.callback.AddListener(_ =>
             {
+                // Button.interactable does NOT reach this. It gates the Button's own onClick and
+                // tints the graphic; the EventSystem still delivers PointerDown to every handler
+                // on the object, and EventTrigger is a separate one. Without this line the greyed
+                // card is decoration — which is why a deployed operator could be picked again.
+                int gold = TDGoldControl.api?.Gold ?? 0;
+                if (!m_SlotHolders[index].CanSelect(gold))
+                {
+                    if (m_SlotHolders[index].BlockedOnlyByCap(gold)) TDDeployCap.api.NotifyRejected();
+                    return;
+                }
+
                 m_Deploy.SetSlotIndex(index);
                 TDTowerMainControl.api.OnSelectTowerHolder(index);
             });

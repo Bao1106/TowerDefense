@@ -16,6 +16,8 @@ public class TDGameplayHUDView : MonoBehaviour
     private TextMeshProUGUI m_EnemyCountText;
     private TextMeshProUGUI m_LifeText;
     private TextMeshProUGUI m_CurrencyText;
+    private TextMeshProUGUI m_DeployCapText;
+    private Color m_DeployCapColorNormal;
     private TextMeshProUGUI m_SpeedText;
 
     private Button m_BackButton;
@@ -70,6 +72,8 @@ public class TDGameplayHUDView : MonoBehaviour
         m_EnemyCountText = transform.Find(TDConstant.PATH_GAMEPLAY_HUD_ENEMY_COUNT) ?.GetComponent<TextMeshProUGUI>();
         m_LifeText = transform.Find(TDConstant.PATH_GAMEPLAY_HUD_LIFE_POINT) ?.GetComponent<TextMeshProUGUI>();
         m_CurrencyText = transform.Find(TDConstant.PATH_GAMEPLAY_HUD_CURRENCY) ?.GetComponent<TextMeshProUGUI>();
+        m_DeployCapText = transform.Find(TDConstant.PATH_GAMEPLAY_HUD_DEPLOY_CAP) ?.GetComponent<TextMeshProUGUI>();
+        if (m_DeployCapText != null) m_DeployCapColorNormal = m_DeployCapText.color;
         m_SpeedText = transform.Find(TDConstant.PATH_GAMEPLAY_HUD_SPEED_VALUE) ?.GetComponent<TextMeshProUGUI>();
 
         m_BackButton = transform.Find(TDConstant.PATH_GAMEPLAY_HUD_BACK_BUTTON) ?.GetComponent<Button>();
@@ -102,7 +106,9 @@ public class TDGameplayHUDView : MonoBehaviour
     // ── Init controls ──────────────────────────────────────────────────────────
     private void InitControls()
     {
-        TDGoldControl.api.Initialize(TDConstant.CONFIG_PLAYER_STARTING_GOLD);
+        // The difficulty sets the opening purse (TDEnemyPathMainView); Start order between the two
+        // is undefined, so the HUD only shows what is there and lets onGoldChanged follow it.
+        OnGoldChanged(TDGoldControl.api.Gold);
         TDSpeedControl.api.Initialize();
     }
 
@@ -116,6 +122,12 @@ public class TDGameplayHUDView : MonoBehaviour
         TDGameStateControl.api.onVictory += OnVictory;
         TDPauseControl.api.onPauseChanged += OnPauseChanged;
         TDSpeedControl.api.onSpeedChanged += OnSpeedChanged;
+        if (TDDeployCap.api != null)
+        {
+            TDDeployCap.api.OnChanged += OnDeployCapChanged;
+            TDDeployCap.api.OnRejected += OnDeployCapRejected;
+            OnDeployCapChanged(); // the level may have initialised the cap before this Start
+        }
     }
 
     private void UnsubscribeEvents()
@@ -133,6 +145,11 @@ public class TDGameplayHUDView : MonoBehaviour
         }
         if (TDPauseControl.api != null) TDPauseControl.api.onPauseChanged -= OnPauseChanged;
         if (TDSpeedControl.api != null) TDSpeedControl.api.onSpeedChanged -= OnSpeedChanged;
+        if (TDDeployCap.api != null)
+        {
+            TDDeployCap.api.OnChanged -= OnDeployCapChanged;
+            TDDeployCap.api.OnRejected -= OnDeployCapRejected;
+        }
     }
 
     // ── Button wiring ─────────────────────────────────────────────────────────
@@ -204,6 +221,23 @@ public class TDGameplayHUDView : MonoBehaviour
         if (m_CurrencyText == null) return;
         m_CurrencyText.text = gold.ToString();
         SafePunch(m_CurrencyText.transform, TDConstant.HUD_PUNCH_GOLD, TDConstant.HUD_PUNCH_VIBRATO);
+    }
+
+    private void OnDeployCapChanged()
+    {
+        if (m_DeployCapText == null || TDDeployCap.api == null) return;
+        m_DeployCapText.text = $"{TDDeployCap.api.OnField}/{TDDeployCap.api.Limit}";
+    }
+
+    // A refused placement says WHY on the counter itself: punch it and flash it red.
+    private void OnDeployCapRejected()
+    {
+        if (m_DeployCapText == null) return;
+        SafePunch(m_DeployCapText.transform, TDConstant.HUD_PUNCH_LIFE, TDConstant.HUD_PUNCH_VIBRATO);
+        DOTween.Kill(m_DeployCapText);
+        ColorUtility.TryParseHtmlString(TDConstant.COLOR_MORALE_STRESSED, out var red);
+        m_DeployCapText.color = red;
+        m_DeployCapText.DOColor(m_DeployCapColorNormal, 0.3f).SetTarget(m_DeployCapText).SetUpdate(true);
     }
 
     private void OnEnemyCountChanged(int killed, int total)

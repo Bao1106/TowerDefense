@@ -26,6 +26,14 @@ public interface IOperatorBehavior
     /// Called from the OnAttackHit animation event — applies damage and fires the impact VFX at the enemy's position.
     void ExecuteHit(Vector2Int cell, Vector3 worldPos, OperatorData data);
 
+    /// Blocking someone, or an enemy in the cells this operator can hit right now. Idle relief
+    /// only runs while this is false.
+    bool IsEngaged(Vector2Int cell);
+
+    /// True if `target` is one of the cells this operator can shoot from `myCell` right now —
+    /// the same cells TryAttack searches. Melee never covers: it answers for its own cell directly.
+    bool Covers(Vector2Int myCell, Vector2Int target);
+
     /// Cleanup when the operator is removed (killed or retreated).
     void OnRemove(Vector2Int cell, Vector3 worldPos);
 }

@@ -1,0 +1,30 @@
+=== perf · DEMO-1 Nightmare · StartFull · timeScale 1 · Editor (Game view) · start 15:36:52
+Pressure report — GameOver
+wave  onField  limit  goldEarned  leaks  leaked  horde  collapses
+   1        2      4          14      0       0      0          0
+   2        3      4          34      3       3      3          0
+   3        4      4          58      3       3      1          0
+   4        4      4          74     11       9      4          1
+   5        4      4         100     25      10      5          3
+   6        4      4         104     23       8      5          0
+stints: 4
+  Knight    melee    93.5s  hp −   970  stress + 129.5
+  Ginger    ranged   75.2s  hp −     0  stress + 123.1
+  Striker   melee    58.0s  hp −   548  stress + 119.6
+  Defender  melee    47.5s  hp −   812  stress + 117.0
+r melee (HP lost/s vs stress gained/s) = 0.71 over 3 stints of ≥ 5s
+r melee pooled over 1 matches = 0.71 over 3 stints
+collapses: 4
+
+whole match: 22 fps mean, worst frame 178.0 ms, p95 76.1 ms over 1846 frames; enemies max 12
+  wave 1: enemies max   3, mean   2.3 — 30 fps mean, worst frame 134.2 ms, p95 62.9 ms over 416 frames
+  wave 2: enemies max   9, mean   6.5 — 22 fps mean, worst frame 175.2 ms, p95 76.8 ms over 316 frames
+  wave 3: enemies max  10, mean   6.4 — 21 fps mean, worst frame 129.8 ms, p95 79.6 ms over 316 frames
+  wave 4: enemies max  11, mean   8.4 — 18 fps mean, worst frame 178.0 ms, p95 89.5 ms over 271 frames
+  wave 5: enemies max  12, mean   7.6 — 19 fps mean, worst frame 109.3 ms, p95 73.9 ms over 295 frames
+  wave 6: enemies max  12, mean   9.5 — 19 fps mean, worst frame 110.2 ms, p95 80.5 ms over 232 frames
+capture 1: t+62.3s, wave 5, enemies mean 12.0 max 12 — 19 fps mean, worst frame 69.2 ms, p95 65.5 ms over 20 frames
+capture 2: t+64.3s, wave 5, enemies mean 12.0 max 12 — 15 fps mean, worst frame 102.7 ms, p95 102.7 ms over 15 frames
+capture 3: t+76.8s, wave 6, enemies mean 12.0 max 12 — 21 fps mean, worst frame 63.1 ms, p95 61.7 ms over 21 frames
+memory: total allocated 515 MB, mono heap used 1044 MB
+stop (match ended): level 0 back to Hard

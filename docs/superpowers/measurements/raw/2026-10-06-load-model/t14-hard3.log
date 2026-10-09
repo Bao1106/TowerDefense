@@ -1,0 +1,70 @@
+experiment (in memory): Hard N/F/T/H/He 0.45/0.22/0.15/0.12/0.06
+=== run 1 · Hard · StartFull · start 15:31:24
+Pressure report — GameOver
+wave  onField  limit  goldEarned  leaks  leaked  horde  collapses
+   1        2      5          16      0       0      0          0
+   2        3      5          26      0       0      0          0
+   3        4      5          55      4       4      2          0
+   4        5      5          69      1       1      0          0
+   5        5      5         101      3       3      3          0
+   6        5      5         125      7       6      3          0
+   7        5      5         138     29      13      5          5
+   8        5      5         168     32      14      5          0
+stints: 7
+  Striker   melee    82.3s  hp −   700  stress + 132.8
+  Ace       melee    29.7s  hp −   900  stress +  83.4
+  Knight    melee   153.6s  hp −  1162  stress + 136.3
+  Ginger    ranged  136.4s  hp −     0  stress + 155.6
+  Defender  melee   105.3s  hp −  2644  stress + 160.5
+  Moon      ranged   85.6s  hp −     0  stress + 164.7
+  Striker   melee     3.7s  hp −     0  stress +  13.2
+r melee (HP lost/s vs stress gained/s) = 0.78 over 4 stints of ≥ 5s
+r melee pooled over 1 matches = 0.78 over 4 stints
+collapses: 5
+
+=== run 2 · Hard · StartFull · start 15:32:48
+Pressure report — GameOver
+wave  onField  limit  goldEarned  leaks  leaked  horde  collapses
+   1        2      5          14      0       0      0          0
+   2        3      5          26      0       0      0          0
+   3        4      5          55      2       2      1          0
+   4        5      5          67      0       0      0          0
+   5        5      5          90      9       7      4          0
+   6        5      5         107     36      14      6          3
+   7        5      5         118     23      12      5          0
+   8        5      5         124      5       2      0          0
+stints: 6
+  Striker   melee    66.6s  hp −   700  stress + 122.1
+  Knight    melee   119.8s  hp −   746  stress + 105.1
+  Ginger    ranged  102.6s  hp −     0  stress +  22.6
+  Defender  melee    72.1s  hp −  1474  stress + 124.6
+  Moon      ranged   54.7s  hp −     0  stress +  18.4
+  Ace       melee    17.1s  hp −   290  stress +  45.5
+r melee (HP lost/s vs stress gained/s) = 0.65 over 4 stints of ≥ 5s
+r melee pooled over 2 matches = 0.68 over 8 stints
+collapses: 3
+
+=== run 3 · Hard · StartFull · start 15:33:55
+Pressure report — GameOver
+wave  onField  limit  goldEarned  leaks  leaked  horde  collapses
+   1        2      5          14      0       0      0          0
+   2        3      5          28      0       0      0          0
+   3        4      5          50      9       6      4          0
+   4        5      5          64      1       1      0          0
+   5        5      5          99      3       3      2          0
+   6        5      5         121     15      10      5          5
+   7        5      5         126     33      11      5          0
+   8        5      5         129     10       4      0          0
+stints: 5
+  Knight    melee   120.6s  hp −   704  stress + 120.4
+  Ginger    ranged  103.2s  hp −     0  stress + 118.0
+  Striker   melee    85.9s  hp −   660  stress + 152.7
+  Defender  melee    70.5s  hp −  1648  stress + 121.9
+  Moon      ranged   55.1s  hp −     0  stress + 114.9
+r melee (HP lost/s vs stress gained/s) = 0.53 over 3 stints of ≥ 5s
+r melee pooled over 3 matches = 0.65 over 11 stints
+collapses: 5
+
+Hard row restored: horde 0.15
+team cost (first 5) = 94; startingGold 30; cap reachable once goldEarned ≥ 64
+stop: all runs done, level 0 back to Hard

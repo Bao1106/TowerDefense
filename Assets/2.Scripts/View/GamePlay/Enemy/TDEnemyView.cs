@@ -21,6 +21,7 @@ public class TDEnemyView : MonoBehaviour
 
     // Operator blocking state
     private bool m_IsBlocked;
+    private bool m_HasLeaked; // counted once by TDPressureProbe however many full blockers it passes
     private Vector2Int m_BlockerCell;
 
     public EnemyType EnemyType { get; private set; }
@@ -33,6 +34,9 @@ public class TDEnemyView : MonoBehaviour
     private void Awake()
     {
         m_Animator = GetComponent<Animator>();
+        // A Horde has no bar. Unity hands an unassigned field over as a fake null that `?.`
+        // does not see, so make it a real one.
+        if (m_HPBarView == null) m_HPBarView = null;
     }
 
     public void Initialize(string key, float hp, float speed,
@@ -42,6 +46,7 @@ public class TDEnemyView : MonoBehaviour
         m_HasBeenReturned = false;
         m_HasReachedEnd = false;
         m_IsDying = false;
+        m_HasLeaked = false;
         m_IsBlocked = false;
         m_BlockerCell = Vector2Int.zero;
         m_CurrentPathIndex = 0;
@@ -211,6 +216,40 @@ public class TDEnemyView : MonoBehaviour
                 }
                 else
                 {
+                    // A melee stands here but cannot hold this enemy (full, or collapsed): a leak
+                    // (spec §5.2). Enemies released by ForceUnblock never get here for this cell —
+                    // it already stepped their path index past it.
+                    if (TDOperatorRegistry.api != null && TDOperatorRegistry.api.HasOperatorAt(arrivedCell))
+                    {
+                        TDOperatorRegistry.api.ReportLeak(arrivedCell, EnemyType);
+
+                        // Every full blocker passed is a leak for morale; for calibration it is one
+                        // enemy that got through, however long the line it walked past.
+                        if (!m_HasLeaked)
+                        {
+                            m_HasLeaked = true;
+                            TDPressureProbe.RecordLeakedEnemy(EnemyType);
+                        }
+                    }
+
+                    // Walking over a collapsed operator earns one blow in passing (§06 · 3.1).
+                    //
+                    // Without this the collapsed state is perfectly safe: this is the ONLY place
+                    // in the game that damages an operator, and it is gated on blocking — so an
+                    // operator who has stopped blocking can never be hit, and the x3 multiplier
+                    // had nothing to multiply. Collapse was meant to be a dead end worth spending
+                    // a Rescue on; it was a rest.
+                    //
+                    // One blow per enemy passing through, not a damage-per-second: the threat
+                    // scales with how many are still coming. Collapsing mid-wave is lethal,
+                    // collapsing after the last enemy is survivable — which is exactly the
+                    // judgement call Rescue asks the player to make.
+                    if (TDOperatorRegistry.api != null && TDOperatorRegistry.api.IsBrokenAt(arrivedCell))
+                    {
+                        TDOperatorRegistry.api.GetOperatorView(arrivedCell)?.TakeDamage(m_AttackDamage);
+                        TriggerSafe(TDConstant.ANIM_TRIGGER_ATTACK);
+                    }
+
                     m_CurrentPathIndex++;
                 }
             }

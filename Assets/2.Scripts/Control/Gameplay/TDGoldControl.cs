@@ -6,6 +6,10 @@ public class TDGoldControl
 
     public int Gold { get; private set; }
 
+    // Everything AddGold has paid out this match: passive income, kill rewards — and retreat
+    // refunds, which is fine for what reads it (the calibration bot never retreats).
+    public int TotalEarned { get; private set; }
+
     public Action<int> onGoldChanged;
 
     private float m_PassiveAccumulator;
@@ -13,6 +17,7 @@ public class TDGoldControl
     public void Initialize(int startingGold)
     {
         Gold = startingGold;
+        TotalEarned = 0;
         m_PassiveAccumulator = 0f;
         onGoldChanged?.Invoke(Gold);
     }
@@ -34,6 +39,7 @@ public class TDGoldControl
     {
         if (amount <= 0) return;
         Gold += amount;
+        TotalEarned += amount;
         onGoldChanged?.Invoke(Gold);
     }
 

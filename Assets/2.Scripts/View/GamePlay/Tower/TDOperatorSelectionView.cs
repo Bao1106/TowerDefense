@@ -28,6 +28,22 @@ public class TDOperatorSelectionView : MonoBehaviour
 
     private bool HasSelected => m_SelectedOperator != null || m_SelectedTower != null;
 
+    // ── Rescue targeting (§06 · 3.3) ──────────────────────────────────────────
+    //
+    // Only reached when there are TWO OR MORE collapsed neighbours. One target rescues straight
+    // away with no picking step, because a confirmation screen for a decision with one possible
+    // answer is a tax on the player's attention at the exact moment they have none to spare.
+    private TDOperatorView m_RescuePayer;
+    private readonly List<TDOperatorView> m_RescueCandidates = new List<TDOperatorView>();
+    private bool IsPickingRescue => m_RescuePayer != null;
+
+    // Unscaled: the blink has to read the same at x1 and x2, and it is a UI rhythm, not an
+    // in-world event. 0.5s is fast enough to say "choose" without becoming a strobe.
+    private const float RESCUE_BLINK_PERIOD = 0.5f;
+
+    // What the Retreat corner says when it refuses a collapsed operator (§06: they cannot walk off).
+    private const string RETREAT_BLOCKED_LABEL = "BROKEN";
+
     private void Start()
     {
         EnhancedTouchSupport.Enable();
@@ -58,9 +74,30 @@ public class TDOperatorSelectionView : MonoBehaviour
 
     private void Update()
     {
+        // Time slows while something is selected. Derived every frame rather than switched on and
+        // off at each path — pause, victory, a new deploy, a cancelled pick — so no exit can leave
+        // the game stuck slowed. Before the game-ended check: the end-of-match deselect must land.
+        TDSpeedControl.api?.SetFocus(HasSelected);
+
         if (TDGameStateControl.api != null && TDGameStateControl.api.IsGameEnded) return;
         HandleTapInput();
+
+        if (IsPickingRescue) { BlinkRescueCandidates(); return; }
+
+        // The panel is built once on selection, but everything it describes keeps moving —
+        // a neighbour collapses, SP crosses 50, someone else gets there first. Re-push it while
+        // it is open, silently: eight dictionary lookups, and only while something is selected.
+        if (m_SelectedOperator != null)
+        {
+            TDDiamondPanelView.Instance?.UpdateRescue(BuildRescueOption(m_SelectedOperator, log: false));
+
+            // Same reason, other corner: they can collapse — or be rescued — while the panel is open.
+            TDDiamondPanelView.Instance?.SetRetreatBlocked(RetreatBlockReason(m_SelectedOperator));
+        }
     }
+
+    private static string RetreatBlockReason(TDOperatorView op)
+        => op != null && op.IsCollapsed ? RETREAT_BLOCKED_LABEL : null;
 
     // ── Input ─────────────────────────────────────────────────────────────────
 
@@ -85,6 +122,12 @@ public class TDOperatorSelectionView : MonoBehaviour
 
         if (!tapped) return;
         if (TDDeployController.IsPlacingUnit) return;
+
+        // Picking a rescue target owns the next tap outright — including taps on UI, which cancel.
+        // Checked BEFORE IsPointerOverUI so a stray press on a leftover button cannot leave the
+        // player stuck in a mode with blinking operators and no visible way out.
+        if (IsPickingRescue) { ResolveRescueTap(screenPos); return; }
+
         if (IsPointerOverUI(screenPos)) return;
 
         Ray ray = MainCam.ScreenPointToRay(screenPos);
@@ -110,7 +153,185 @@ public class TDOperatorSelectionView : MonoBehaviour
         // The diamond panel IS the selection indicator now — the operator's own gold
         // SelectionIndicator quad is no longer needed and would visually clash with the diamond.
         ShowOperatorRange(op);
-        TDDiamondPanelView.Instance?.ShowRetreat(op.transform.position, OnRetreatClicked);
+        TDDiamondPanelView.Instance?.ShowRetreat(op.transform.position, OnRetreatClicked, BuildRescueOption(op, log: true));
+        TDDiamondPanelView.Instance?.SetRetreatBlocked(RetreatBlockReason(op));
+    }
+
+    /// <summary>
+    /// The Rescue corner for whoever is selected (§06 · 3.2), or null to hide it outright.
+    ///
+    /// Three rules, and the first is the one that matters most: with no collapsed neighbour the
+    /// button does not exist. A control that is permanently greyed out trains the player to stop
+    /// looking at that corner of the panel, and then they miss it on the one occasion it appears.
+    /// When it CAN'T be used but could be, it stays visible and says why — "35/50" is a plan; a
+    /// dead button is not.
+    /// </summary>
+    private TDDiamondPanelView.RescueOption? BuildRescueOption(TDOperatorView rescuer, bool log = true)
+    {
+        if (rescuer == null || TDOperatorRegistry.api == null || TDGridMainModel.api == null) return null;
+
+        // A collapsed operator cannot rescue anyone — they cannot even walk off by themselves.
+        // Worth logging rather than silently hiding: tapping the operator who NEEDS rescuing is
+        // the obvious thing to try, and the button appearing on the NEIGHBOUR instead is the
+        // least discoverable rule in this whole panel.
+        if (rescuer.IsCollapsed)
+        {
+            if (log) Debug.Log($"<color=cyan>[Rescue] {rescuer.Data?.operatorName} đang suy sụp — " +
+                      "bấm vào ĐỒNG ĐỘI TỈNH TÁO đứng kề, không phải vào chính nó</color>");
+            return null;
+        }
+
+        var cell = TDGridMainModel.api.WorldToCell(rescuer.transform.position);
+        var targets = TDOperatorRegistry.api.GetRescueTargetsAround(cell);
+        if (targets.Count == 0)
+        {
+            if (log) Debug.Log($"<color=cyan>[Rescue] {rescuer.Data?.operatorName} tại {cell} — " +
+                      "không có ai suy sụp ở 8 ô kề → nút ẩn</color>");
+            return null;
+        }
+
+        var sp = rescuer.Sp;
+        bool ready = sp != null && sp.CanAfford(TDConstant.RESCUE_SP_COST);
+
+        if (log) Debug.Log($"<color=cyan>[Rescue] {rescuer.Data?.operatorName} · {targets.Count} mục tiêu · " +
+                  $"SP {sp?.Current ?? 0f:F1}/{TDConstant.RESCUE_SP_COST:F0} → " +
+                  $"{(ready ? "SẴN SÀNG" : "chưa đủ SP, nút mờ")}</color>");
+
+        return new TDDiamondPanelView.RescueOption
+        {
+            ready = ready,
+            // Counts toward the RESCUE cost, not toward SP_MAX: at this moment the player is
+            // deciding whether they can save someone, not how close a skill is.
+            //
+            // FLOORED, not rounded. SP accumulates in deltaTime slices, so it sits at 49.99997
+            // for a frame — which rounds to "50/50" on a button that is still greyed out. The
+            // display must never claim a threshold the gate has not actually accepted.
+            label = ready ? "RESCUE"
+                          : $"{Mathf.FloorToInt(sp?.Current ?? 0f)}/{TDConstant.RESCUE_SP_COST:F0}",
+            onRescue = () => OnRescuePressed(rescuer),
+
+            // Read live, not captured: SP keeps charging while the panel sits open, so the fill
+            // rises under the player's thumb and they can see how long the wait actually is.
+            progress = () => (rescuer.Sp?.Current ?? 0f) / TDConstant.RESCUE_SP_COST,
+        };
+    }
+
+    /// <summary>
+    /// Rescue pressed (§06 · 3.3). One valid target rescues immediately; two or more hand the
+    /// choice to the player, because which teammate you save is the decision — picking it for
+    /// them would quietly make the most interesting moment in the system automatic.
+    /// </summary>
+    private void OnRescuePressed(TDOperatorView rescuer)
+    {
+        if (rescuer == null || TDOperatorRegistry.api == null || TDGridMainModel.api == null) return;
+
+        var cell = TDGridMainModel.api.WorldToCell(rescuer.transform.position);
+        var targets = TDOperatorRegistry.api.GetRescueTargetsAround(cell);
+
+        if (targets.Count == 0) return;
+        if (targets.Count == 1) { PerformRescue(rescuer, targets[0]); return; }
+
+        BeginRescuePick(rescuer, targets);
+    }
+
+    private void PerformRescue(TDOperatorView rescuer, TDOperatorView target)
+    {
+        if (rescuer == null || target == null) return;
+        if (rescuer.Sp == null || rescuer.Morale == null || target.Morale == null) return;
+        if (!target.IsCollapsed) return;
+
+        // Spend() is the gate, not a separate affordability check followed by a deduction — one
+        // call that either takes the SP or refuses, so the two can never disagree.
+        if (!rescuer.Sp.Spend(TDConstant.RESCUE_SP_COST)) return;
+
+        rescuer.Morale.PayRescueStress();
+        target.Morale.OnRescue();
+
+        Debug.Log($"<color=cyan>[Rescue] {rescuer.Data?.operatorName} cứu {target.Data?.operatorName} — " +
+                  $"người cứu {rescuer.Morale.Value:F0} stress / {rescuer.Sp.Current:F0} SP · " +
+                  $"người được cứu {target.Morale.Value:F0}</color>");
+
+        Deselect();
+    }
+
+    // ── Target picking ────────────────────────────────────────────────────────
+
+    private void BeginRescuePick(TDOperatorView rescuer, List<TDOperatorView> targets)
+    {
+        m_RescuePayer = rescuer;
+        m_RescueCandidates.Clear();
+        m_RescueCandidates.AddRange(targets);
+
+        // The diamond goes away for the duration. Its two buttons sit roughly where the adjacent
+        // operators are on screen, so leaving it up would put the panel on top of the very
+        // candidates the player now has to tap.
+        TDDiamondPanelView.Instance?.Hide();
+        HideRangeHighlights();
+
+        Debug.Log($"<color=cyan>[Rescue] {targets.Count} người cần cứu quanh " +
+                  $"{rescuer.Data?.operatorName} — chọn một</color>");
+    }
+
+    /// <summary>
+    /// Blinks the candidates, and quietly drops any that stop being valid — one dies, one recovers
+    /// on its own, or the rescuer itself collapses while the player is deciding. The world does not
+    /// pause for this choice, so the offer has to keep matching it.
+    /// </summary>
+    private void BlinkRescueCandidates()
+    {
+        if (m_RescuePayer == null || m_RescuePayer.IsCollapsed) { Deselect(); return; }
+
+        bool on = Mathf.Repeat(Time.unscaledTime, RESCUE_BLINK_PERIOD) < RESCUE_BLINK_PERIOD * 0.5f;
+
+        for (int i = m_RescueCandidates.Count - 1; i >= 0; i--)
+        {
+            var c = m_RescueCandidates[i];
+            // `== null` and not `?.` — a destroyed Unity object is not real null, so the
+            // null-conditional operator would sail straight past it and throw.
+            if (c == null || !c.IsCollapsed)
+            {
+                c?.SetSelected(false);
+                m_RescueCandidates.RemoveAt(i);
+                continue;
+            }
+            c.SetSelected(on);
+        }
+
+        if (m_RescueCandidates.Count == 0) Deselect();
+    }
+
+    private void ResolveRescueTap(Vector2 screenPos)
+    {
+        var payer = m_RescuePayer;
+
+        Ray ray = MainCam.ScreenPointToRay(screenPos);
+        if (Physics.Raycast(ray, out RaycastHit hit))
+        {
+            var op = hit.collider.GetComponentInParent<TDOperatorView>();
+            if (op != null && m_RescueCandidates.Contains(op))
+            {
+                EndRescuePick();
+                PerformRescue(payer, op);
+                return;
+            }
+        }
+
+        // Anything else backs out. Tapping away from a decision must always be an exit, or the
+        // player who opened this by accident is trapped in it while the wave keeps coming.
+        //
+        // A full Deselect, not just EndRescuePick: the pick hides the diamond but leaves the rescuer
+        // selected, and SelectOperator ignores a tap on the operator already selected — so the next
+        // tap on that same rescuer opened nothing, and with focus slow-mo the game stayed slowed.
+        Deselect();
+    }
+
+    private void EndRescuePick()
+    {
+        foreach (var c in m_RescueCandidates)
+            if (c != null) c.SetSelected(false);
+
+        m_RescueCandidates.Clear();
+        m_RescuePayer = null;
     }
 
     private void SelectTower(TDTowerWeaponView tower)
@@ -123,6 +344,11 @@ public class TDOperatorSelectionView : MonoBehaviour
 
     public void Deselect()
     {
+        // Also ends any target pick in progress. Deselect is what pause, victory, game over and
+        // starting a new deploy all call, and every one of those must clear the blinking
+        // indicators — otherwise they keep flashing over a paused game with no way to stop them.
+        EndRescuePick();
+
         m_SelectedOperator = null;
         m_SelectedTower = null;
         TDDiamondPanelView.Instance?.Hide();
@@ -156,7 +382,9 @@ public class TDOperatorSelectionView : MonoBehaviour
         HideRangeHighlights();
         if (m_RangeHighlightPrefab == null || TDGridMainModel.api == null) return;
 
-        var data = TDFlyweightOperatorDataSettings.api.GetData(op.OperatorType);
+        // The deployed operator's own row, not one resolved from their archetype — otherwise
+        // this panel draws Striker's reach over Ace and the player is shown a lie.
+        var data = op.Data;
         if (data?.rangeOffsets == null || data.rangeOffsets.Length == 0) return;
 
         var rangeDto = new TDOffsetRangeDTO(data.rangeOffsets);

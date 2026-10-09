@@ -46,6 +46,7 @@ public static class TDConstant
     public const string PATH_GAMEPLAY_HUD_SPEED_ICON_X2 = "Header/HUDButtonLeft/SpeedButton/SpeedIcon/SpeedX2";
     public const string PATH_GAMEPLAY_HUD_PAUSE_BUTTON = "Header/HUDButtonLeft/PauseButton";
     public const string PATH_GAMEPLAY_HUD_CURRENCY = "Bottom/Currency/TxtValue";
+    public const string PATH_GAMEPLAY_HUD_DEPLOY_CAP = "Bottom/DeployCap/TxtValue";
     public const string PATH_GAMEPLAY_HUD_PAUSE_PANEL = "PausePanel";
     public const string PATH_GAMEPLAY_HUD_RESUME_BUTTON = "PausePanel/ResumeButton";
     // FlashScreen lives under SafeArea (the parent of Container) → use transform.parent.Find()
@@ -86,12 +87,19 @@ public static class TDConstant
     // Remaining (1 - ratio) = tower zone tiles (towers can be placed here)
     public const float CONFIG_MAZE_OBSTACLE_WALL_RATIO = 0.15f;
     public const int CONFIG_PLAYER_STARTING_LIVES = 20;
-    public const int CONFIG_PLAYER_STARTING_GOLD = 30;
+    public const int CONFIG_PLAYER_STARTING_GOLD = 30; // the floor the maze generator checks wave-1 affordability against; each difficulty starts at or above it (RatioRow.startingGold)
     public const float CONFIG_GOLD_PASSIVE_RATE = 3f; // seconds per +1 passive gold tick
     public const int CONFIG_LIFE_LOW_THRESHOLD = 5; // <= 5 lives → life text turns red
     public const int CONFIG_ENEMIES_NUMBER = 5;
     public const int CONFIG_ENEMY_SPAWN_DELAY_MS = 2000;
     public const int CONFIG_WAVE_INTERVAL_MS = 10000;
+    // D14: later waves spawn denser (spawnInterval / wave weight) but never closer than this — the
+    // densest grunt spacing in Arknights 4-4. A level that asks for denser keeps its own value.
+    public const float CONFIG_SPAWN_INTERVAL_FLOOR = 0.8f;
+    // Spec §5.5: a Horde slot spawns this many bodies, this far apart — a burst that fills a
+    // blocker's slots at once, so the rest of the pack leaks.
+    public const int HORDE_PACK_SIZE = 5;
+    public const float HORDE_PACK_SPAWN_INTERVAL = 0.2f;
     public const int CONFIG_NUM_PATHS = 3;
     public const int CONFIG_MAX_WAVES = 10;
     public const float CONFIG_PATH_OFFSET_Y = 0.1f;
@@ -170,11 +178,139 @@ public static class TDConstant
     // Game speed (TDSpeedControl)
     public const float SPEED_NORMAL = 1f;
     public const float SPEED_FAST = 2f;
+
+    // Time slows to this fraction while an operator is selected (Arknights convention). Morale makes
+    // the player act on individual operators mid-wave — retreat, rescue, pick a target — and on a
+    // phone that needs a beat to aim. A tuning knob: lower reads calmer, higher keeps the pressure.
+    public const float SPEED_FOCUS = 0.25f;
     // Path/maze generation
     public const int CONFIG_GATE_BUFFER = 2;
     public const int MAZE_MAX_ATTEMPTS = 10;
+
+    // ── Spine (convergent topology) ──────────────────────────────────────────
+    // Which macro-shape the generator builds. Swap this to eyeball each archetype.
+    // ponytail: a constant, not stage config — move it onto TDStageConfig at step 7.2
+    // when archetypes get spread across stages as the difficulty curve.
+    public const string CONFIG_SPINE_ARCHETYPE = TDSpineLibrary.CASCADE;
+
+    // Width of the passages linking chokepoints and feeding gates in.
+    //
+    // Was 2, on the reasoning that a 1-cell passage can be sealed by a single blocker.
+    // That reasoning belonged to the Living Maze direction, where a blocker made enemies
+    // re-path — and that direction was dropped. Here a blocker makes enemies STOP AND
+    // FIGHT, so a 1-cell passage is simply an Arknights lane, which is correct.
+    //
+    // Width 2 also doubled the footprint of every gate feed, and those are by far the
+    // longest part of the spine: at width 2 the spine ate ~51% of the grid, leaving too
+    // little wall for towers and ranged operators.
+    //
+    // Narrow passages + wide nodes is also the better read: the node is visibly where
+    // you are meant to stand and fight.
+    public const int SPINE_CORRIDOR_WIDTH = 1;
+
+    // Share of the grid that should end up walkable. Melee operators need road; towers
+    // and ranged operators need wall. Outside this band the generator logs a warning —
+    // tune the archetype's node widths and SPINE_CORRIDOR_WIDTH against the number it
+    // prints rather than by eye.
+    public const float ROAD_RATIO_MIN = 0.20f;
+    public const float ROAD_RATIO_MAX = 0.40f;
+
+    // ── UI-safe band ─────────────────────────────────────────────────────────
+    // Grid rows the HUD (top) and the deploy bar (bottom) cover. The camera is fixed
+    // ortho and never moves, so this is a hard input to generation, not a nuisance:
+    // "scrolling maps are the enemy of focus" — the whole board has to be visible.
+    //
+    // Gates used to be placed on the outermost ring, which is exactly the band the UI
+    // hides — that is why the start gate kept disappearing.
+    public const int UI_SAFE_TOP_ROWS = 1;
+    public const int UI_SAFE_BOTTOM_ROWS = 2;
+
+    // The left and right columns are clipped by the viewport too — the first attempt at
+    // this assumed the full width was on screen and the start gate stayed half off the
+    // left edge. Gates snap to even cells, so an inset of 1 lands them on column 2.
+    public const int UI_SAFE_SIDE_COLS = 1;
+
+    // ── Tower slot budget ────────────────────────────────────────────────────
+    // Kingdom Rush restricts building to a handful of authored slots: "if you spam
+    // cheap buildings, you will run out of locations." Scarcity of position IS the
+    // decision. Letting every wall cell be a tower spot gave ~110 options against ~8
+    // affordable units, so position cost nothing and no placement mattered.
+    //
+    //   slots = clamp(chambers * PER_CHAMBER * frontFactor * modeFactor * diffFactor,
+    //                 MIN, MAX)
+    //
+    // Melee stays unrestricted on path cells — Arknights does the same: ground tiles
+    // are plentiful, high ground is scarce. Only one side of it needs to be rationed.
+    public const int TOWER_SLOTS_PER_CHAMBER = 3;  // a chokepoint needs ~3 towers to be held
+    public const int TOWER_SLOTS_MIN = 8;
+    public const int TOWER_SLOTS_MAX = 20;         // hard ceiling: past this scarcity is gone again
+    public const float TOWER_SLOT_FRONT_BONUS = 0.35f;        // per extra front to cover
+    public const float TOWER_SLOT_SIMULTANEOUS_BONUS = 1.15f; // all gates at once = cannot concentrate
+    // How far a platform is treated as reaching. Was 3, which made every slot cover a 7x7
+    // box of 49 cells — 9 slots blanketed a 38-cell route and "100% covered" stopped
+    // discriminating between good and bad placements. 2 matches the operators' real reach
+    // (Layla is 3 cells in a line, not a 7x7 square).
+    public const int TOWER_SLOT_COVERAGE_RADIUS = 2;
+
+    // ── Generator acceptance (step 1.5) ──────────────────────────────────────
+    // Share of the roster the map may demand at its widest point. Above this the player
+    // cannot give ground anywhere — and "trade space for lives" is the whole reason the
+    // topology was made convergent. Chốt A cannot be answered without it.
+    public const float ACCEPT_MAX_FRONT_ROSTER_RATIO = 0.6f;
+
+    // Seconds of runway an enemy needs from the last chokepoint to the goal: the window
+    // to get a REPLACEMENT down after pulling a defender off that node.
+    //
+    // Was 12 (= 1.5 x STRESS_RETREAT_COUNTDOWN) and it failed every map — 4.0s against a
+    // 12s bar on a 21-cell grid, unreachable without a map half again as wide. The bar was
+    // wrong, not the map: the countdown only locks the operator you just withdrew, and the
+    // player still has seven other slots to drop something into immediately. What actually
+    // has to fit in the window is one drag-and-drop, ~2-3s.
+    //
+    // Derived from what it gates, not from whichever number happened to be nearby — the
+    // mistake worth remembering here.
+    public const float ACCEPT_MIN_GOAL_RUNWAY_SECONDS = 4f;
+
+    // Cells per platform. Buildable ground is placed as PLATFORMS, the same way obstacles
+    // are placed as props whose footprint then claims cells. A 2x2 block of high ground
+    // reads as "a rooftop to put archers on"; twelve scattered single cells read as noise.
+    public const int TOWER_PLATFORM_MIN_CELLS = 2;
+    public const int TOWER_PLATFORM_MAX_CELLS = 4;
+
+    // Keep scenery props out of this many cells around a slot. Blocking only the slot
+    // cell itself was not enough: a rock or tree model is wider than one cell, so it
+    // still covered the zone tile even when the cell underneath stayed free.
+    public const int TOWER_SLOT_CLEARANCE = 1;
+
+    // TOWER_SLOT_MIN_SPACING and TOWER_SLOT_MAX_PATH_DISTANCE used to live here. Both were
+    // patches, and the pipeline inversion — grid → enemy path → tower zones, iterating the
+    // ROUTE instead of wall cells — removed the need for either: route samples are spaced
+    // by construction, and a search that starts at the road never strands a platform in
+    // the scenery. Arknights contradicts both rules anyway: its high ground sits in
+    // adjacent blocks, at the map edge and deep inside alike.
+
+    // Share of the non-slot wall cells that get scenery on them.
+    //
+    // CONFIG_MAZE_OBSTACLE_WALL_RATIO (0.15) was set when EVERY wall cell was a tower
+    // zone, so 15% obstacles against 85% buildable read fine. With buildable rationed to
+    // ~12, that same 15% leaves ~58 cells bare and the map looks unfinished — and worse,
+    // an empty cell is ambiguous: the player cannot tell it apart from a slot they have
+    // not noticed. Scenery is what says "nothing happens here".
+    public const float DECOR_FILL_RATIO = 0.45f;
     // Tower slots (TDTowerMainControl)
-    public const int CONFIG_MAX_SLOTS = 8;
+    // The deploy bar's composition, not just its size. Shuffling one pool of towers + operators
+    // and taking the first 8 gave a melee/ranged split that changed every match — sometimes eight
+    // characters, sometimes half turrets. A player cannot build a habit against a bar that
+    // reshuffles what it offers, and the two halves are not interchangeable: melee stands ON the
+    // path and holds, ranged stands beside it and does not.
+    //
+    // "Melee" is DeployZone.PathCell; everything else (tower-zone operators and turrets) is ranged.
+    // Deploy surface, not weapon type — that is the distinction the player actually plays against.
+    public const int CONFIG_SLOTS_MELEE = 5;
+    public const int CONFIG_SLOTS_RANGED = 3;
+
+    // Derived, so the two can never drift out of step with the bar they fill.
+    public const int CONFIG_MAX_SLOTS = CONFIG_SLOTS_MELEE + CONFIG_SLOTS_RANGED;
     // Audio (TDAudioPrefs / TDBGMPlayer / TDSFXPlayer)
     public const string AUDIO_KEY_BGM = "audio_bgm_muted";
     public const string AUDIO_KEY_SFX = "audio_sfx_muted";
@@ -222,7 +358,180 @@ public static class TDConstant
     // Attack VFX (TDAttackVFX)
     public const float VFX_MOVE_SPEED = 15f;
     public const float VFX_ARRIVE_THRESHOLD = 0.25f;
+    // ── Morale (§02, §04, §05 of MORALE_SYSTEM_DESIGN.md) ────────────────────
+    //
+    // Load is counted in LEAKS, not seconds (spec 2026-10-06 §5.2): an operator only takes
+    // stress when the line they hold actually fails. Tune by "how many leaks until they
+    // break" — 11 alone, 15 with ranged support, 35 for a ranged operator (8 / 11 / 25 before
+    // round 2: a Horde pack past a lone Calm melee beside a Herald broke it, spec §7.2).
+    public const float STRESS_MAX = 100f;
+    public const float STRESS_CALM_MAX = 33f;
+    public const float STRESS_STEADY_MAX = 66f;
+
+    // Accelerating, not linear: hesitating late costs more than hesitating early, and the
+    // icon changing shape IS the tell that the clock just sped up.
+    public const float STRESS_MULT_CALM = 1.0f;
+    public const float STRESS_MULT_STEADY = 1.5f;
+    public const float STRESS_MULT_STRESSED = 2.0f;
+
+    // Leaks replace N1 / N2. One enemy walking past a full (or collapsed) melee = one leak:
+    // STRESS_PER_LEAK x share x herald amplifier x band multiplier to each operator answerable
+    // for that cell. The melee standing there takes 70%, the ranged covering it split 30%.
+    public const float STRESS_PER_LEAK = 7f;
+    public const float LEAK_SHARE_MELEE = 0.7f;
+
+    // A Herald within HERALD_RADIUS cells (Euclid) of the leak amplifies it ×1.5 (×2 before round 2). Does not stack,
+    // and never applies to a Horde body.
+    public const float HERALD_LEAK_MULT = 1.5f;
+    public const float HERALD_RADIUS = 4f;
+
+    // N3 — instant spikes, NOT multiplied by state. A 30-point jolt doubled at Stressed
+    // would almost always kill outright, turning a cascade into an automatic wipe.
+    public const float STRESS_ALLY_DEATH_SPIKE = 20f;
+    public const float STRESS_ALLY_BREAK_SPIKE = 30f;   // worse than death: they are still there
+    public const float STRESS_SPIKE_RADIUS = 2f;        // cells
+
+    // N4 — fear auras. Radius lives on the enemy data so designers can tune it.
+    public const float STRESS_AURA_BOSS = 2.0f;
+    public const float STRESS_AURA_HERALD = 1.5f;
+
+    // Recovery.
+    public const float STRESS_IDLE_RELIEF = 0.60f;      // not engaged: blocking nobody, no target in range
+    public const float STRESS_WAVE_CLEAR_RELIEF = 15f;  // a wave cleared with nobody broken
+
+    // Retreat gives -70, not a reset. Pull out at 70 and you are clean; pull out at 90 and
+    // you never are again. One number that teaches "retreating early is a reset, retreating
+    // late is a postponement" without a line of tutorial.
+    public const float STRESS_RETREAT_RELIEF = 70f;
+    public const float STRESS_RETREAT_COUNTDOWN = 8.0f; // forced by waveInterval = 10
+
+    // Death has to be WORSE than a retreat on every axis, or the player is rewarded for letting
+    // someone fall instead of pulling them out. Keeping the stress (§06) only punishes an
+    // operator who died stressed — one killed at 5 points paid nothing at all, and came back
+    // instantly while the retreated one waited 8 seconds. Dying was the faster exit.
+    //
+    // 2x retreat, so losing someone costs more than a whole wave interval without them. A
+    // placeholder for the permadeath of step 3.6, shaped like the thing it will become.
+    public const float STRESS_DEATH_COUNTDOWN = 16.0f;
+
+    public const float STRESS_RESCUE_RELIEF = 50f;
+
+    // ── Rescue (§06 · 3.2) ───────────────────────────────────────────────────
+    //
+    // SP is the SKILL resource (Arknights), not a rescue currency. It caps at a normal skill's
+    // cost and a rescue spends half of it — so saving a teammate is always paid for out of an
+    // activation you would otherwise have fired. Charges only while deployed, which stops "park
+    // the squad at home and bank SP": the resource that saves a life is earned by risking one.
+    public const float SP_MAX = 100f;
+    public const float SP_PER_SECOND = 1f;
+    public const float RESCUE_SP_COST = 50f;
+
+    // What an operator walks onto the field carrying, the FIRST time they are deployed.
+    //
+    // Measured need, not a guess. A real match ran 85 seconds; at 1/s from zero the first rescue
+    // costs 50 of them, and the log showed every reinforcement arriving too late to ever afford
+    // one — Tart was deployed at t+55s and died at 23 SP. Reinforcements are sent when things
+    // have already gone wrong, which is exactly when the squad needs a rescuer, so the resource
+    // was structurally unavailable at the only moment it mattered.
+    //
+    // 20 puts the first rescue at 30 seconds instead of 50. Granted once, at construction, so
+    // retreating and redeploying cannot farm it.
+    public const float SP_INITIAL = 20f;
+
+    // The rescuer pays in stress too, or pulling someone out of collapse is free and the player
+    // never has to weigh who can afford to spend the nerve.
+    public const float RESCUE_RESCUER_STRESS = 15f;
+
+    // ...but that cost may never itself break the rescuer. Cascading collapses started BY the
+    // act of preventing one would punish the only correct play in the game.
+    public const float RESCUE_RESCUER_CEILING = 90f;
+
+    // A broken operator recovers only while nothing has hit them for a while.
+    public const float STRESS_BROKEN_RELIEF = 1.0f;
+    public const float STRESS_BROKEN_CALM_SECONDS = 5.0f;
+
+    // Collapsed operators take triple damage (§06) — NOT a chance-to-die roll.
+    //
+    // The whole system's credibility rests on one unspoken contract: if you lose, it was your
+    // fault. A dice throw that removes an operator permanently tears that up — a player who
+    // loses someone to randomness says "this game is unfair", and once they say it once they
+    // say it forever. x3 reaches nearly the same outcome (they die fast once hit) while staying
+    // COUNTABLE: look at the HP bar and you know how many seconds are left. Never arbitrary.
+    public const float STRESS_BROKEN_DAMAGE_MULT = 3.0f;
+
+    // ── Resolve (§07) — the chance LAST STAND is offered instead of breaking ─
+    //
+    // Derived from the RATIO between endurance and damage, never from absolute power, and
+    // never hand-authored. Ratios make Resolve orthogonal to strength for free: a cheap
+    // Defender still reads high, an expensive Striker still reads low. Hand-authoring would
+    // mean that one day somebody ships a Defender with 10% resolve and nothing catches it.
+    //
+    // log10 because E spans 0.86 to 667 across the roster — nearly 800x. A linear map would
+    // pile four fifths of the roster onto the same value.
+    public const float RESOLVE_E_LO = -0.5f;   // log10(E) at the bottom of the scale
+    public const float RESOLVE_E_HI = 3.0f;    // ...and at the top
+    public const float RESOLVE_BASE_MIN = 10f;
+    public const float RESOLVE_BASE_SPAN = 35f; // so the derived band is 10%..45%
+
+    // In-match adjustments, then a clamp. Two layers kept apart on purpose: who a person is
+    // (derived) plus what is happening to them (added). The first two are things the player
+    // can influence, which is what turns luck into something good play can buy.
+    public const float RESOLVE_ADJ_CALM_ALLY = 10f;    // a Calm ally standing next to them
+    public const float RESOLVE_ADJ_ALLY_BROKE = -15f;  // someone nearby broke this wave
+    public const float RESOLVE_ADJ_PER_SETBACK = -10f; // per break/death already survived
+    public const float RESOLVE_MIN = 5f;
+    public const float RESOLVE_MAX = 60f;
+
+    // Step 2.5 — raw numbers floating over each operator's head. Deliberately ugly and
+    // deliberately first: four knobs have to be tuned on READABLE NUMBERS before 4-5 days
+    // go into icons, sounds and feedback. Building the pretty version first and only then
+    // discovering STRESS_PER_LEAK is wrong costs the work twice.
+    // Flip to false to hide it; delete the file once Phase 4 ships the real icons.
+    public const bool MORALE_DEBUG_OVERLAY = false;
+    public const string COLOR_MORALE_CALM = "#A1CD3A";
+    public const string COLOR_MORALE_STEADY = "#FC7B01";
+    public const string COLOR_MORALE_STRESSED = "#FB2425";
+
+    // Collapse leaves the green → orange → red ramp entirely. That is the point: the first three
+    // are degrees of the same thing and read as a temperature, so a fourth red would say "even
+    // hotter" when the state is not on that scale at all. An unrelated hue says "off the scale".
+    public const string COLOR_MORALE_BROKEN = "#3C3180";
+
+    // The ONLY state whose badge is inverted: pale disc, dark symbol.
+    //
+    // Forced by measurement, not taste. Against the asphalt operators actually stand on (L=0.069)
+    // #3C3180 scores 1.23:1 — invisible. And no other dark shade rescues it: Calm/Steady/Stressed
+    // already occupy greyscale 175/148/100, and everything below Stressed lands on the road at 74.
+    // The only free slot that is still VISIBLE is above ~190, so the disc goes pale (5.45:1) and
+    // #3C3180 moves onto the symbol, where a dark mark on a light ground is exactly what it needs.
+    //
+    // The inversion is a bonus channel: no other state reads light-on-dark, so collapse is
+    // recognisable from the badge's polarity alone, before shape or hue resolve.
+    public const string COLOR_MORALE_BROKEN_DISC = "#CFC7E8";
+
+    // Rescue's own colour, off the morale ramp entirely — it is an ACTION, not a state, and must
+    // not read as "one worse than Stressed". Cyan also carries the support/heal convention.
+    public const string COLOR_RESCUE = "#35C4E8";
+
+    // How far Retreat and Rescue sit from the diamond's centre, as a multiple of their authored
+    // prefab position. 1.0 = exactly where the prefab puts them, tucked against the diamond.
+    //
+    // It was briefly 1.55, on measurement: the prefab's ~127px offset is almost exactly where the
+    // diagonally adjacent operator lands on screen (128px at ortho size 10, 1080p, 40-degree
+    // pitch), so both buttons sit on top of a neighbour, and a tap meant for that neighbour is
+    // swallowed with no feedback. Pushing them into the gap between the 1-cell and 2-cell
+    // neighbours (~128 and ~256px) fixed the taps but detached the buttons from the panel.
+    //
+    // Back to 1.0 by choice: the buttons read as part of the diamond, and the overlap is lived
+    // with. Raise this if the mis-tap becomes the worse problem again.
+    public const float DIAMOND_ACTION_SPREAD = 1.0f;
+
     // Tower/operator views
+    // How long the operator corpse lingers so the Die clip can finish before Destroy.
+    // Only used when the operator's Animator actually declares a "Die" trigger.
+    // ponytail: one value for every operator; move to OperatorData.dieDuration
+    // (mirroring EnemyData) if death clip lengths start to differ noticeably.
+    public const float OPERATOR_DIE_DURATION = 1.5f;
     public const string SELECTION_INDICATOR_NAME = "SelectionIndicator";
     public const string PATH_SLOT_DISABLED_OVERLAY = "DisabledOverlay";
     public const string PATH_SLOT_ICON = "SlotIcon";
