@@ -26,6 +26,13 @@ public class TDEnemyView : MonoBehaviour
 
     public EnemyType EnemyType { get; private set; }
 
+    // Unique per spawn, unlike the object (pooled) or the key (w{wave}-{type}-e{i}-{instanceID}
+    // repeats when the same object is reused for the same index at another gate). Lets a shot
+    // aimed before the hit event tell whether its target is still the enemy it aimed at.
+    private static int s_NextSpawnId;
+    private int m_SpawnId;
+    public int SpawnId => m_SpawnId;
+
     // Progress 0→1 (0 = just spawned, 1 = reached GateEnd)
     // Towers use this to prioritize the enemy closest to the gate
     public float PathProgress => m_PathsPosition.Count == 0 ? 0f
@@ -61,6 +68,7 @@ public class TDEnemyView : MonoBehaviour
         m_GoldReward = goldReward;
         EnemyType = enemyType;
         m_EnemyKey = key;
+        m_SpawnId = ++s_NextSpawnId;
 
         // Reset the animator to Idle (important when reusing from the pool)
         if (m_Animator != null)

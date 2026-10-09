@@ -108,6 +108,7 @@ public static class TDBalanceValidator
 
         HordeTime(failures);
         StartingGoldOneWriter(failures);
+        ReusedTarget(failures);
 
         Density(failures);
         Dominance(failures);
@@ -270,6 +271,38 @@ public static class TDBalanceValidator
         float two = TDEnemyPathMainControl.SliceSeconds(mixed, 2f);
         if (Mathf.Abs(two - (2f + 2f * wantOne + 2f)) > 0.001f)
             f.Add($"[HORDE_PACK_TIME] Normal, two packs, Fast at s=2: {two:F2}s, want {2f + 2f * wantOne + 2f:F2}");
+    }
+
+    // A ranged shot is aimed in TryAttack and lands on the animation's hit event. Enemies are
+    // pooled: one that dies in between can be handed out again as a NEW enemy before the hit —
+    // the shot must not land on (or splash around) the newcomer. Spawn ids, not object identity.
+    private static void ReusedTarget(List<string> f)
+    {
+        var go = new GameObject("ReusedTargetProbe") { hideFlags = HideFlags.HideAndDontSave };
+        try
+        {
+            var enemy = go.AddComponent<TDEnemyView>();
+            var ranged = new TowerZoneOperatorBehavior();
+            var data = new OperatorData { damage = 10f };
+            bool ok = TDMoraleValidator.SetField(f, enemy, "m_HPBarView", null)
+                    & TDMoraleValidator.SetField(f, enemy, "m_EnemyHealth", 100f)
+                    & TDMoraleValidator.SetField(f, enemy, "m_MaxHealth", 100f)
+                    & TDMoraleValidator.SetField(f, enemy, "m_SpawnId", 2)
+                    & TDMoraleValidator.SetField(f, ranged, "m_PendingTarget", enemy)
+                    & TDMoraleValidator.SetField(f, ranged, "m_PendingSpawnId", 1);
+            if (!ok) return;
+
+            ranged.ExecuteHit(Vector2Int.zero, Vector3.zero, data);
+            float hp = TDMoraleValidator.GetField<float>(enemy, "m_EnemyHealth");
+            if (hp != 100f) f.Add($"[HIT_SKIPS_REUSED_TARGET] the shot aimed at spawn 1 hit spawn 2 (hp {hp})");
+
+            TDMoraleValidator.SetField(f, ranged, "m_PendingTarget", enemy);
+            TDMoraleValidator.SetField(f, ranged, "m_PendingSpawnId", 2);
+            ranged.ExecuteHit(Vector2Int.zero, Vector3.zero, data);
+            hp = TDMoraleValidator.GetField<float>(enemy, "m_EnemyHealth");
+            if (hp != 90f) f.Add($"[HIT_CONTROL] the shot at its own target left hp {hp}, want 90");
+        }
+        finally { Object.DestroyImmediate(go); }
     }
 
     // Spec §5.7: the difficulty sets the opening purse, and it is the only writer. The HUD's

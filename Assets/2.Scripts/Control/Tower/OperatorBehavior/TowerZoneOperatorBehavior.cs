@@ -49,6 +49,7 @@ public class TowerZoneOperatorBehavior : IOperatorBehavior
     // ── Attack ────────────────────────────────────────────────────────────────
 
     private TDEnemyView m_PendingTarget;
+    private int m_PendingSpawnId; // which spawn of that pooled object the shot was aimed at
 
     public bool TryAttack(Vector2Int cell, Vector3 worldPos, OperatorData data)
     {
@@ -56,6 +57,7 @@ public class TowerZoneOperatorBehavior : IOperatorBehavior
         if (nearest == null) return false;
 
         m_PendingTarget = nearest;
+        m_PendingSpawnId = nearest.SpawnId;
         TDGameEventBus.OperatorAttacked(worldPos, data.operatorType);
         return true;
     }
@@ -63,7 +65,13 @@ public class TowerZoneOperatorBehavior : IOperatorBehavior
     // Called from the OnAttackHit animation event on TDOperatorView
     public void ExecuteHit(Vector2Int cell, Vector3 worldPos, OperatorData data)
     {
-        if (m_PendingTarget == null) return;
+        // The target died between the aim and this hit event and the pool handed the same object
+        // out again: it is a different enemy now, somewhere else. The shot is lost — splash too.
+        if (m_PendingTarget == null || m_PendingTarget.SpawnId != m_PendingSpawnId)
+        {
+            m_PendingTarget = null;
+            return;
+        }
 
         Vector3 impactPos = m_PendingTarget.transform.position;
         float damage = data?.damage ?? 0f;
