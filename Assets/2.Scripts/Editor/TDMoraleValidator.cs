@@ -41,7 +41,7 @@ public static class TDMoraleValidator
         var f = new List<string>();
 
         Rates(f);
-        Multipliers(f);
+        Bands(f);
         Recovery(f);
         SkillPoints(f);
         RetreatIsNotAReset(f);
@@ -114,12 +114,10 @@ public static class TDMoraleValidator
         Near(f, "ALLY_NO_STRESS_EFFECT", new TDOperatorMorale().NetRate(Ctx(true, calmAllies: 5)), 0f);
     }
 
-    // ── B — multipliers apply to the aura and to leaks, never to spikes ─────
+    // ── B — bands: a state for the icon, A4 and Resolve — no longer a price ─
 
-    private static void Multipliers(List<string> f)
+    private static void Bands(List<string> f)
     {
-        // The per-band leak price is LEAK_CALM / STEADY / STRESSED in Leaks().
-
         // Band edges: 33 is still Calm, 34 is Steady; 66 Steady, 67 Stressed; 100 Broken.
         if (TDOperatorMorale.StateOf(33f) != MoraleState.Calm) f.Add("[BAND] 33 is not Calm");
         if (TDOperatorMorale.StateOf(34f) != MoraleState.Steady) f.Add("[BAND] 34 is not Steady");
@@ -355,10 +353,9 @@ public static class TDMoraleValidator
 
     private static void Leaks(List<string> f)
     {
-        // One leak alone = 7 / 10.5 / 14 by band (round 2: 10 → 7, Herald ×2 → ×1.5).
-        Near(f, "LEAK_CALM", At(10f).OnLeak(1f, 1f), 7f);
-        Near(f, "LEAK_STEADY", At(50f).OnLeak(1f, 1f), 10.5f);
-        Near(f, "LEAK_STRESSED", At(70f).OnLeak(1f, 1f), 14f);
+        // Tầng 2 T2: a leak costs the same in every band (round 2: 10 → 7, Herald ×2 → ×1.5).
+        foreach (float start in new[] { 10f, 50f, 70f })
+            Near(f, $"LEAK_FLAT_{start:F0}", At(start).OnLeak(1f, 1f), 7f);
         Near(f, "LEAK_AMPLIFIED", At(0f).OnLeak(1f, TDConstant.LEAK_AMP_MULT), 10.5f);
 
         // Spec §7.2 forced case: a Calm melee alone, a Herald beside it, a whole pack walks past —
@@ -376,8 +373,9 @@ public static class TDMoraleValidator
         Near(f, "LEAK_IGNORED_WHEN_BROKEN", broken.OnLeak(1f, 1f), 0f);
         if (broken.Setbacks != sb) f.Add("[LEAK_IGNORED_WHEN_BROKEN] a leak on a collapsed operator counted a setback");
 
-        // Spec §5.2 table: 11 / 15 / 35 leaks from zero to collapse (8 / 11 / 25 before round 2).
-        foreach (var (tag, share, want) in new[] { ("LEAKS_ALONE", 1f, 11), ("LEAKS_SUPPORTED", 0.7f, 15), ("LEAKS_RANGED", 0.3f, 35) })
+        // Spec Tầng 2 §5: 15 / 21 / 48 leaks from zero to collapse (11 / 15 / 35 with the band
+        // multiplier, 8 / 11 / 25 before round 2).
+        foreach (var (tag, share, want) in new[] { ("LEAKS_ALONE", 1f, 15), ("LEAKS_SUPPORTED", 0.7f, 21), ("LEAKS_RANGED", 0.3f, 48) })
         {
             var m = new TDOperatorMorale(); int n = 0;
             while (!m.IsBroken && n < 100) { m.OnLeak(share, 1f); n++; }
@@ -386,6 +384,20 @@ public static class TDMoraleValidator
             if (!m.ConsumeBreak()) f.Add($"[{tag}_EDGE] a leak-induced collapse raised no edge");
         }
         if (new TDOperatorMorale().LeaksToBreak(0f) != int.MaxValue) f.Add("[LEAKS_NO_SHARE] share 0 reported a finite count");
+
+        // After a spike the most an operator can carry is 90 (Tầng 2 §5).
+        if (At(90f).LeaksToBreak(0.7f) != 3) f.Add($"[LEAKS_FROM_90_SUPPORTED] {At(90f).LeaksToBreak(0.7f)}, want 3");
+        if (At(90f).LeaksToBreak(1f) != 2) f.Add($"[LEAKS_FROM_90_ALONE] {At(90f).LeaksToBreak(1f)}, want 2");
+
+        // The overlay's count must match the real walk from every start, not just from zero.
+        foreach (float share in new[] { 1f, 0.7f, 0.3f })
+            for (int start = 0; start < 100; start++)
+            {
+                var walk = At(start); int n = 0;
+                while (!walk.IsBroken && n < 200) { walk.OnLeak(share, 1f); n++; }
+                int projected = At(start).LeaksToBreak(share);
+                if (projected != n) { f.Add($"[LEAKS_PROJECTION_ALL_STARTS] share {share} from {start}: projected {projected}, walked {n}"); break; }
+            }
     }
 
     // Spec §5.2 split table: melee 70%, covering ranged share 30%; broken melee hands it all over.
