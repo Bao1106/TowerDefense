@@ -355,8 +355,8 @@ public static class TDMoraleValidator
     {
         // Tầng 2 T2: a leak costs the same in every band (round 2: 10 → 7, Herald ×2 → ×1.5).
         foreach (float start in new[] { 10f, 50f, 70f })
-            Near(f, $"LEAK_FLAT_{start:F0}", At(start).OnLeak(1f, 1f), 7f);
-        Near(f, "LEAK_AMPLIFIED", At(0f).OnLeak(1f, TDConstant.LEAK_AMP_MULT), 10.5f);
+            Near(f, $"LEAK_FLAT_{start:F0}", At(start).OnLeak(1f), 7f);
+        Near(f, "LEAK_AMPLIFIED", At(0f).OnLeak(TDConstant.LEAK_AMP_MULT), 10.5f);
 
         // Spec §7.2 forced case: a Calm melee alone, a Herald beside it, a whole pack walks past —
         // at most 60 stress and still standing (round 2 measured 100 and a collapse at 10 / ×2).
@@ -366,11 +366,11 @@ public static class TDMoraleValidator
         foreach (float start in new[] { 0f, TDConstant.STRESS_CALM_MAX })
         {
             var lone = At(start); float packGain = 0f;
-            for (int i = 0; i < TDConstant.HORDE_PACK_SIZE; i++) packGain += lone.OnLeak(1f, packMult);
+            for (int i = 0; i < TDConstant.HORDE_PACK_SIZE; i++) packGain += lone.OnLeak(packMult);
             if (packGain > 60f || lone.IsBroken) f.Add($"[NIGHTMARE_PACK] a pack past a lone melee at {start} beside a Herald: +{packGain:F1}, broken {lone.IsBroken} (want ≤ 60, standing)");
         }
         var broken = At(TDConstant.STRESS_MAX); int sb = broken.Setbacks;
-        Near(f, "LEAK_IGNORED_WHEN_BROKEN", broken.OnLeak(1f, 1f), 0f);
+        Near(f, "LEAK_IGNORED_WHEN_BROKEN", broken.OnLeak(1f), 0f);
         if (broken.Setbacks != sb) f.Add("[LEAK_IGNORED_WHEN_BROKEN] a leak on a collapsed operator counted a setback");
 
         // Spec Tầng 2 §5: 15 / 21 / 48 leaks from zero to collapse (11 / 15 / 35 with the band
@@ -378,7 +378,7 @@ public static class TDMoraleValidator
         foreach (var (tag, share, want) in new[] { ("LEAKS_ALONE", 1f, 15), ("LEAKS_SUPPORTED", 0.7f, 21), ("LEAKS_RANGED", 0.3f, 48) })
         {
             var m = new TDOperatorMorale(); int n = 0;
-            while (!m.IsBroken && n < 100) { m.OnLeak(share, 1f); n++; }
+            while (!m.IsBroken && n < 100) { m.OnLeak(share); n++; }
             if (n != want) f.Add($"[{tag}] {n} leaks to collapse, want {want}");
             if (new TDOperatorMorale().LeaksToBreak(share) != want) f.Add($"[{tag}_PROJECTION] LeaksToBreak disagrees with the walk");
             if (!m.ConsumeBreak()) f.Add($"[{tag}_EDGE] a leak-induced collapse raised no edge");
@@ -394,7 +394,7 @@ public static class TDMoraleValidator
             for (int start = 0; start < 100; start++)
             {
                 var walk = At(start); int n = 0;
-                while (!walk.IsBroken && n < 200) { walk.OnLeak(share, 1f); n++; }
+                while (!walk.IsBroken && n < 200) { walk.OnLeak(share); n++; }
                 int projected = At(start).LeaksToBreak(share);
                 if (projected != n) { f.Add($"[LEAKS_PROJECTION_ALL_STARTS] share {share} from {start}: projected {projected}, walked {n}"); break; }
             }
@@ -417,6 +417,21 @@ public static class TDMoraleValidator
             var s = TDLeakShare.Split(true, k);
             Near(f, $"SPLIT_SUMS_{k}", s.melee + k * s.eachRanged, 1f);
         }
+
+        // Tầng 2 §4.1: one enemy charges each operator its heaviest weight along the path, once.
+        var ledger = new Dictionary<string, float>();
+        Near(f, "TOPUP_FIRST",   TDLeakShare.TopUp(ledger, "Moon", 0.3f), 0.3f);
+        Near(f, "TOPUP_SAME",    TDLeakShare.TopUp(ledger, "Moon", 0.3f), 0f);    // second cell, same share
+        Near(f, "TOPUP_LIGHTER", TDLeakShare.TopUp(ledger, "Moon", 0.15f), 0f);  // a lighter share adds nothing
+        Near(f, "TOPUP_HEAVIER", TDLeakShare.TopUp(ledger, "Moon", 1f), 0.7f);   // the melee at the next cell is broken
+        Near(f, "TOPUP_PER_OPERATOR", TDLeakShare.TopUp(ledger, "Knight", 0.7f), 0.7f);
+        Near(f, "TOPUP_NEW_ENEMY", TDLeakShare.TopUp(new Dictionary<string, float>(), "Moon", 0.3f), 0.3f);
+
+        // The spec's worked example: A (melee standing) then B (melee broken) → 2.1 + 4.9 = 7, not 9.1 (or 21 before).
+        var path = new Dictionary<string, float>(); var moon = new TDOperatorMorale();
+        float total = moon.OnLeak(TDLeakShare.TopUp(path, "Moon", TDLeakShare.Split(true, 1).eachRanged))
+                    + moon.OnLeak(TDLeakShare.TopUp(path, "Moon", TDLeakShare.Split(false, 1).eachRanged));
+        Near(f, "TOPUP_WORKED_EXAMPLE", total, 7f);
     }
 
     // Spec §5.1: one hard per-level cap shared by melee, ranged and turrets.
@@ -515,12 +530,12 @@ public static class TDMoraleValidator
             TDOperatorRegistry.api = new TDOperatorRegistry();
 
             TDOperatorRegistry.LogLeaks = false;
-            TDOperatorRegistry.api.ReportLeak(Vector2Int.zero, EnemyType.Normal);
+            TDOperatorRegistry.api.ReportLeak(Vector2Int.zero, EnemyType.Normal, new Dictionary<TDOperatorView, float>());
             if (logged != 0) f.Add($"[LEAK_LOG_GATED] {logged} [Leak] line(s) with LogLeaks off");
 
             logged = 0;
             TDOperatorRegistry.LogLeaks = true;
-            TDOperatorRegistry.api.ReportLeak(Vector2Int.zero, EnemyType.Normal);
+            TDOperatorRegistry.api.ReportLeak(Vector2Int.zero, EnemyType.Normal, new Dictionary<TDOperatorView, float>());
             if (logged != 1) f.Add($"[LEAK_LOG_ON] {logged} [Leak] line(s) with LogLeaks on, want 1");
         }
         finally

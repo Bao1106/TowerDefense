@@ -200,10 +200,10 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
     /// </summary>
     public bool IsCollapsed => Morale != null && Morale.IsBroken;
 
-    /// <summary>This operator's share of a leak (TDOperatorRegistry.ReportLeak). Returns the points added.</summary>
-    public float ReceiveLeak(float share, float amplifier)
+    /// <summary>This operator's part of a leak, topped up (TDOperatorRegistry.ReportLeak). Returns the points added.</summary>
+    public float ReceiveLeak(float weight)
     {
-        float added = Morale?.OnLeak(share, amplifier) ?? 0f;
+        float added = Morale?.OnLeak(weight) ?? 0f;
         if (added > 0f) m_MoraleIcon?.Pulse();
         return added;
     }

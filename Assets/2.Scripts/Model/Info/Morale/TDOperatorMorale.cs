@@ -121,19 +121,20 @@ public sealed class TDOperatorMorale
     public void AddSpike(float amount) => SetValue(m_Value + Mathf.Max(0f, amount));
 
     /// <summary>
-    /// An enemy walked past a cell this operator answers for. `share` is this operator's part of
-    /// the leak (TDLeakShare), `amplifier` the Herald multiplier. Returns the points actually
-    /// added after the clamp, so the caller can log and pulse on what really happened.
+    /// An enemy walked past a cell this operator answers for. `weight` is their share of the leak
+    /// times the amplifier, already topped up against what this enemy charged them before
+    /// (TDLeakShare.TopUp) — so it can be 0. Returns the points actually added after the clamp,
+    /// so the caller can log and pulse on what really happened.
     ///
     /// Ignored while collapsed: the latch already holds them at the top, and a second break
     /// from the same incident would count a second setback.
     /// </summary>
-    public float OnLeak(float share, float amplifier)
+    public float OnLeak(float weight)
     {
-        if (m_Broken || share <= 0f) return 0f;
+        if (m_Broken || weight <= 0f) return 0f;
 
         float before = m_Value;
-        SetValue(m_Value + TDConstant.STRESS_PER_LEAK * share * amplifier);
+        SetValue(m_Value + TDConstant.STRESS_PER_LEAK * weight);
         return m_Value - before;
     }
 

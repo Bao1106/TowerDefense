@@ -216,8 +216,13 @@ public class TDOperatorRegistry
     /// An enemy walked through `cell` past a full or collapsed melee (spec §5.2). The melee there,
     /// if still standing, and every standing ranged operator whose current range covers the cell
     /// split the leak by TDLeakShare. Turrets have no morale and never take a share.
+    ///
+    /// `ledger` belongs to the leaking enemy (spec Tầng 2 §4.1): each operator pays only what this
+    /// enemy has not charged them yet, so one enemy walking a line costs anyone at most their
+    /// heaviest share once. Everyone answerable still gets the call, even when that remainder is 0
+    /// — it is what marks them as leaked past for the wave relief.
     /// </summary>
-    public void ReportLeak(Vector2Int cell, TDEnums.EnemyType leaker)
+    public void ReportLeak(Vector2Int cell, TDEnums.EnemyType leaker, Dictionary<TDOperatorView, float> ledger)
     {
         TDPressureProbe.RecordLeak(); // every leak counts, including one nobody is left to feel
 
@@ -232,17 +237,18 @@ public class TDOperatorRegistry
 
         var (meleeShare, eachRanged) = TDLeakShare.Split(meleeStanding, ranged.Count);
         float amplifier = LeakAmplifierAt(cell, leaker);
+        float Charge(TDOperatorView who, float share) => who.ReceiveLeak(TDLeakShare.TopUp(ledger, who, share * amplifier));
 
         if (!LogLeaks)
         {
-            if (meleeStanding) melee.ReceiveLeak(meleeShare, amplifier);
-            foreach (var r in ranged) r.ReceiveLeak(eachRanged, amplifier);
+            if (meleeStanding) Charge(melee, meleeShare);
+            foreach (var r in ranged) Charge(r, eachRanged);
             return;
         }
 
         var parts = new List<string>();
-        if (meleeStanding) parts.Add($"{melee.Data.operatorName} +{melee.ReceiveLeak(meleeShare, amplifier):F1}");
-        foreach (var r in ranged) parts.Add($"{r.Data.operatorName} +{r.ReceiveLeak(eachRanged, amplifier):F1}");
+        if (meleeStanding) parts.Add($"{melee.Data.operatorName} +{Charge(melee, meleeShare):F1}");
+        foreach (var r in ranged) parts.Add($"{r.Data.operatorName} +{Charge(r, eachRanged):F1}");
         Debug.Log($"[Leak] {cell} → {(parts.Count > 0 ? string.Join(", ", parts) : "nobody")}");
     }
 
