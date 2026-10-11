@@ -380,20 +380,17 @@ public static class TDConstant
     public const float STRESS_PER_LEAK = 7f;
     public const float LEAK_SHARE_MELEE = 0.7f;
 
-    // A Herald within HERALD_RADIUS cells (Euclid) of the leak amplifies it ×1.5 (×2 before round 2). Does not stack,
-    // and never applies to a Horde body.
-    public const float HERALD_LEAK_MULT = 1.5f;
-    public const float HERALD_RADIUS = 4f;
+    // A Herald or a boss within LEAK_AMP_RADIUS cells (Euclid) of the leak amplifies it ×1.5 (×2 before round 2).
+    // Does not stack, and never applies to a Horde body. The boss used to radiate stress on its own (an aura); that
+    // was stress with no overload behind it, so it amplifies leaks like the Herald instead (spec Tầng 2 T5).
+    public const float LEAK_AMP_MULT = 1.5f;
+    public const float LEAK_AMP_RADIUS = 4f;
 
     // N3 — instant spikes, NOT multiplied by state. A 30-point jolt doubled at Stressed
     // would almost always kill outright, turning a cascade into an automatic wipe.
     public const float STRESS_ALLY_DEATH_SPIKE = 20f;
     public const float STRESS_ALLY_BREAK_SPIKE = 30f;   // worse than death: they are still there
     public const float STRESS_SPIKE_RADIUS = 2f;        // cells
-
-    // N4 — fear aura, boss only (a Herald amplifies leaks instead). Radius is hardcoded in
-    // TDPressureProbe.AuraRateAt.
-    public const float STRESS_AURA_BOSS = 2.0f;
 
     // Recovery.
     public const float STRESS_IDLE_RELIEF = 0.60f;      // not engaged: blocking nobody, no target in range

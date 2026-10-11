@@ -50,6 +50,7 @@ public static class TDMoraleValidator
         Leaks(f);
         LeakSplit(f);
         Amplifier(f);
+        AmplifierSources(f);
         DeployCap(f);
         Targets(f);
         Pearson(f);
@@ -65,12 +66,11 @@ public static class TDMoraleValidator
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    private static TDMoraleContext Ctx(bool engaged, int calmAllies = 0, float aura = 0f, float sinceHit = 0f)
+    private static TDMoraleContext Ctx(bool engaged, int calmAllies = 0, float sinceHit = 0f)
         => new TDMoraleContext
         {
             engaged = engaged,
             calmAlliesAdjacent = calmAllies,
-            auraRate = aura,
             secondsSinceHit = sinceHit,
         };
 
@@ -104,15 +104,13 @@ public static class TDMoraleValidator
             f.Add($"[{tag}] got {got:F3}, want {want:F3}");
     }
 
-    // ── A — rates: no clock any more — only the aura accrues, and idling recovers ──
+    // ── A — rates: no clock any more — nothing accrues over time, idling recovers ──
 
     private static void Rates(List<string> f)
     {
         Near(f, "ENGAGED_IS_FLAT", new TDOperatorMorale().NetRate(Ctx(true)), 0f);
         Near(f, "IDLE_RELIEF", new TDOperatorMorale().NetRate(Ctx(false)), -TDConstant.STRESS_IDLE_RELIEF);
-        Near(f, "N4_AURA", new TDOperatorMorale().NetRate(Ctx(true, aura: TDConstant.STRESS_AURA_BOSS)), TDConstant.STRESS_AURA_BOSS);
-        Near(f, "N4_AURA_MULT", At(70f).NetRate(Ctx(true, aura: TDConstant.STRESS_AURA_BOSS)),
-             TDConstant.STRESS_AURA_BOSS * TDConstant.STRESS_MULT_STRESSED);
+        Near(f, "NO_TIME_STRESS", At(70f).NetRate(Ctx(true)), 0f);
         Near(f, "ALLY_NO_STRESS_EFFECT", new TDOperatorMorale().NetRate(Ctx(true, calmAllies: 5)), 0f);
     }
 
@@ -320,11 +318,6 @@ public static class TDMoraleValidator
         spiked.AddSpike(TDConstant.STRESS_ALLY_BREAK_SPIKE); // already latched
         if (spiked.ConsumeBreak()) f.Add("[EDGE_WHILE_LATCHED] a spike on a broken operator raised a second edge");
 
-        var ticked = new TDOperatorMorale();
-        // The aura is the only time-based source left, so it is what drives a tick-induced break.
-        for (int i = 0; i < 2000 && !ticked.IsBroken; i++) ticked.Tick(0.05f, Ctx(true, aura: TDConstant.STRESS_AURA_BOSS));
-        if (!ticked.ConsumeBreak()) f.Add("[EDGE_FROM_TICK] a tick-induced break raised no edge");
-
         // ⭐ An edge nobody handled must not outlive the state it announces — otherwise it fires
         // on the next deploy, spiking and releasing around an operator who is perfectly fine.
         var rescued = At(TDConstant.STRESS_MAX);
@@ -366,7 +359,7 @@ public static class TDMoraleValidator
         Near(f, "LEAK_CALM", At(10f).OnLeak(1f, 1f), 7f);
         Near(f, "LEAK_STEADY", At(50f).OnLeak(1f, 1f), 10.5f);
         Near(f, "LEAK_STRESSED", At(70f).OnLeak(1f, 1f), 14f);
-        Near(f, "LEAK_AMPLIFIED", At(0f).OnLeak(1f, TDConstant.HERALD_LEAK_MULT), 10.5f);
+        Near(f, "LEAK_AMPLIFIED", At(0f).OnLeak(1f, TDConstant.LEAK_AMP_MULT), 10.5f);
 
         // Spec §7.2 forced case: a Calm melee alone, a Herald beside it, a whole pack walks past —
         // at most 60 stress and still standing (round 2 measured 100 and a collapse at 10 / ×2).
@@ -432,16 +425,27 @@ public static class TDMoraleValidator
         if (cap.OnField != 0) f.Add("[CAP_RESET_ON_INIT] a new match inherited units");
     }
 
-    // Spec §5.5: a Herald within HERALD_RADIUS cells (Euclid) of a leak amplifies it ×HERALD_LEAK_MULT; two do not stack.
+    // Tầng 2 §4.1 / T5: the boss amplifies leaks exactly like a Herald; nothing else does.
+    private static void AmplifierSources(List<string> f)
+    {
+        foreach (EnemyType t in System.Enum.GetValues(typeof(EnemyType)))
+        {
+            bool want = t == EnemyType.Herald || t == EnemyType.Boss;
+            if (TDOperatorRegistry.AmplifiesLeaks(t) != want) f.Add($"[AMP_SOURCE] {t}: {!want}, want {want}");
+        }
+    }
+
+    // Spec §5.5 / Tầng 2 §4.1: a Herald or boss within LEAK_AMP_RADIUS cells (Euclid) of a leak amplifies it
+    // ×LEAK_AMP_MULT; two sources do not stack, whatever their types.
     // A Horde body is never amplified (spec §7.2 forced case).
     private static void Amplifier(List<string> f)
     {
         var o = new Vector2Int(0, 0);
         var n = EnemyType.Normal;
         Near(f, "AMP_NONE", TDOperatorRegistry.LeakAmplifier(n, o, new Vector2Int[0]), 1f);
-        Near(f, "AMP_INSIDE", TDOperatorRegistry.LeakAmplifier(n, o, new[] { new Vector2Int(4, 0) }), TDConstant.HERALD_LEAK_MULT);
+        Near(f, "AMP_INSIDE", TDOperatorRegistry.LeakAmplifier(n, o, new[] { new Vector2Int(4, 0) }), TDConstant.LEAK_AMP_MULT);
         Near(f, "AMP_OUTSIDE", TDOperatorRegistry.LeakAmplifier(n, o, new[] { new Vector2Int(4, 1) }), 1f); // √17 > 4
-        Near(f, "AMP_NO_STACK", TDOperatorRegistry.LeakAmplifier(n, o, new[] { new Vector2Int(1, 0), new Vector2Int(0, 1) }), TDConstant.HERALD_LEAK_MULT);
+        Near(f, "AMP_NO_STACK", TDOperatorRegistry.LeakAmplifier(n, o, new[] { new Vector2Int(1, 0), new Vector2Int(0, 1) }), TDConstant.LEAK_AMP_MULT);
         Near(f, "AMP_HORDE_EXEMPT", TDOperatorRegistry.LeakAmplifier(EnemyType.Horde, o, new[] { new Vector2Int(1, 0) }), 1f);
     }
 

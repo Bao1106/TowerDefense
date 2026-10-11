@@ -15,10 +15,6 @@ public struct TDMoraleContext
     /// <summary>Adjacent allies currently Calm. Feeds Resolve only — it no longer touches stress.</summary>
     public int calmAlliesAdjacent;
 
-    /// <summary>Fear-aura rate from the strongest source in range: boss 2.0, else 0. A Herald has
-    /// no aura — it amplifies leaks instead (spec 2026-10-06 §5.5).</summary>
-    public float auraRate;
-
     /// <summary>Seconds since anything last damaged this operator — gates the broken-state recovery.</summary>
     public float secondsSinceHit;
 
@@ -27,17 +23,18 @@ public struct TDMoraleContext
 }
 
 /// <summary>
-/// Morale for a single operator. Stress comes from leaks (OnLeak), N3 spikes and the N4 boss
-/// aura; recovery is §05. The old N1 / N2 clocks — stress for enemies merely being near — are
-/// gone (spec 2026-10-06 §5.2): holding the line well now costs nothing.
+/// Morale for a single operator. Stress comes from leaks (OnLeak) and N3 spikes, nothing else;
+/// recovery is §05. The old N1 / N2 clocks — stress for enemies merely being near — are gone
+/// (spec 2026-10-06 §5.2), and so is the boss aura (spec Tầng 2 T5): nothing raises stress
+/// over time, so holding the line well costs nothing.
 ///
 /// Plain C#. No MonoBehaviour, no `static api`, no Update — the owner ticks it. That is a
 /// deliberate constraint from the plan and it buys the thing this project has been short
 /// of all along: the whole rule set can be exercised by an editor validator with no scene,
 /// no play mode and no prefab, so the numbers get checked before the UI exists.
 ///
-/// Multiplier discipline (§02): the state multiplier applies to the aura rate and to each leak
-/// — a leak is an event, but it keeps the band multiplier so the "point of no return" holds
+/// Multiplier discipline (§02): the state multiplier applies to each leak — a leak is an
+/// event, but it keeps the band multiplier so the "point of no return" holds
 /// until Tier 2 decides otherwise (spec §5.2). Never to N3 spikes (a 30-point jolt doubled at
 /// Stressed almost always kills outright, which turns a cascade into an automatic wipe) and
 /// never to recovery (or the operator who most needs relief heals slowest — punished twice).
@@ -97,9 +94,8 @@ public sealed class TDOperatorMorale
     // ── Rates ────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Net points per second at this instant, state multiplier included. Positive means
-    /// climbing toward a break. Exposed because the debug overlay of step 2.5 and the
-    /// validator both want the number, not just its effect.
+    /// Net points per second at this instant. Never positive any more — no time-based source
+    /// is left — so it is recovery or nothing. Exposed because the validator wants the number.
     /// </summary>
     public float NetRate(in TDMoraleContext ctx)
     {
@@ -113,10 +109,9 @@ public sealed class TDOperatorMorale
                 : 0f;
         }
 
-        // The aura is the only time-based source left; leaks arrive through OnLeak. The lull is
-        // worth something — but only while blocking nobody and with no target in range.
-        float n4 = Mathf.Max(0f, ctx.auraRate) * MultiplierOf(State);
-        return n4 - (ctx.engaged ? 0f : TDConstant.STRESS_IDLE_RELIEF);
+        // Stress arrives only as events (OnLeak, AddSpike). The lull is worth something — but only
+        // while blocking nobody and with no target in range.
+        return ctx.engaged ? 0f : -TDConstant.STRESS_IDLE_RELIEF;
     }
 
     // ── Tick ─────────────────────────────────────────────────────────────────

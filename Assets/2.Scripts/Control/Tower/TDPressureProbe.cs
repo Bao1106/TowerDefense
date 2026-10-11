@@ -4,10 +4,10 @@ using TDEnums;
 using UnityEngine;
 
 /// <summary>
-/// What the world around an operator feeds into morale, and the recorder the calibration runs
-/// read (spec 2026-10-06 §7.2). The pressure-zone counter that lived here (N1 / N2, spec §03)
-/// was removed by the load model (§5.4): load is counted as leak events, reported by
-/// TDOperatorRegistry.ReportLeak. Of the old probe only the boss aura is left.
+/// The recorder the calibration runs and the playtest read (spec 2026-10-06 §7.2). The
+/// pressure-zone counter that lived here (N1 / N2, spec §03) was removed by the load model
+/// (§5.4): load is counted as leak events, reported by TDOperatorRegistry.ReportLeak. The
+/// boss aura that outlived it became a leak amplifier (spec Tầng 2 T5).
 ///
 /// The recorder keeps one row per wave (units on the field, cap, gold earned, leaks, collapses)
 /// and one entry per stint — an operator's stay on the field, from deploy to retreat, death or
@@ -18,35 +18,6 @@ using UnityEngine;
 /// </summary>
 public static class TDPressureProbe
 {
-    /// <summary>
-    /// N4 — strongest fear aura reaching this cell, in points per second. Auras do not
-    /// stack with themselves; the worst one in range wins, so two bosses are frightening
-    /// rather than lethal-by-arithmetic.
-    ///
-    /// ponytail: radius and rate are hardcoded for the boss, the only aura there is — the
-    /// Herald amplifies leaks instead (spec 2026-10-06 §5.5). Move both onto EnemyData as
-    /// `fearAuraRadius` / `fearAuraRate` when a second aura source appears.
-    /// </summary>
-    public static float AuraRateAt(Vector2Int cell)
-    {
-        var enemies = TDEnemyRegistry.api?.GetAll();
-        if (enemies == null || enemies.Count == 0) return 0f;
-
-        var grid = TDGridMainModel.api;
-        float worst = 0f;
-
-        foreach (var enemy in enemies)
-        {
-            if (enemy == null || enemy.EnemyType != EnemyType.Boss) continue;
-
-            var ec = grid.WorldToCell(enemy.transform.position);
-            int dist = Mathf.Max(Mathf.Abs(ec.x - cell.x), Mathf.Abs(ec.y - cell.y));
-            if (dist <= 3 && TDConstant.STRESS_AURA_BOSS > worst) worst = TDConstant.STRESS_AURA_BOSS;
-        }
-
-        return worst;
-    }
-
     // ── Recorder ──────────────────────────────────────────────────────────────
 
     private const float MIN_STINT_SECONDS = 5f; // shorter stays are noise in a per-second rate
