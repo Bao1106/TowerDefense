@@ -399,7 +399,7 @@ public static class TDConstant
 
     // Recovery.
     public const float STRESS_IDLE_RELIEF = 0.60f;      // not engaged: blocking nobody, no target in range
-    public const float STRESS_WAVE_CLEAR_RELIEF = 15f;  // a wave cleared with nobody broken
+    public const float STRESS_WAVE_CLEAR_RELIEF = 15f;  // wave end, to each standing operator nobody leaked past
 
     // Retreat gives -70, not a reset. Pull out at 70 and you are clean; pull out at 90 and
     // you never are again. One number that teaches "retreating early is a reset, retreating

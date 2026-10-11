@@ -285,9 +285,8 @@ public class TDOperatorRegistry
     }
 
     /// <summary>
-    /// A wave finished. Everyone still deployed steadies a little — but only if nobody
-    /// broke, which is what makes holding the line without casualties worth something
-    /// beyond simply surviving it.
+    /// A wave finished. Each operator still deployed decides for themselves whether they earned
+    /// the relief — standing, and nobody leaked past them since the last one (TDOperatorMorale.OnWaveCleared).
     /// </summary>
     public void OnWaveCleared()
     {

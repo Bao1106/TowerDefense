@@ -43,6 +43,7 @@ public sealed class TDOperatorMorale
     private float m_RetreatCooldown;
     private bool m_Broken;
     private bool m_BreakPending; // entered collapse, and nobody has reacted to it yet
+    private bool m_LeakedSinceRelief; // an enemy got past them since the last wave relief or since they came on
 
     public float Value => m_Value;
 
@@ -143,7 +144,12 @@ public sealed class TDOperatorMorale
     /// </summary>
     public float OnLeak(float weight)
     {
-        if (m_Broken || weight <= 0f) return 0f;
+        if (m_Broken) return 0f;
+
+        // Marked even when this enemy already charged them in full (weight 0): they were still
+        // answerable for the cell it walked through, so this wave was not clean for them.
+        m_LeakedSinceRelief = true;
+        if (weight <= 0f) return 0f;
 
         float before = m_Value;
         SetValue(m_Value + TDConstant.STRESS_PER_LEAK * weight);
@@ -151,7 +157,11 @@ public sealed class TDOperatorMorale
     }
 
     /// <summary>
-    /// A wave ended — everyone still STANDING steadies a little. The collapsed get nothing.
+    /// A wave ended — everyone still STANDING whom nobody leaked past steadies a little.
+    ///
+    /// Spec Tầng 2 T4: from wave 5 on, 0 of 17 playtest waves were leak-free for the squad, so a
+    /// squad-wide "clean wave" would never fire when it matters. Per operator it does: the one on
+    /// the quiet lane recovers while the broken lane does not. The mark clears here either way.
     ///
     /// It used to be withheld from the whole squad whenever anybody broke, which made it the one
     /// thing §06 calls a "van chống chết chùm" and yet guaranteed to be shut during exactly the
@@ -168,7 +178,9 @@ public sealed class TDOperatorMorale
     /// </summary>
     public void OnWaveCleared()
     {
-        if (m_Broken) return;
+        bool leaked = m_LeakedSinceRelief;
+        m_LeakedSinceRelief = false;
+        if (m_Broken || leaked) return;
         Relieve(TDConstant.STRESS_WAVE_CLEAR_RELIEF);
     }
 
@@ -183,6 +195,8 @@ public sealed class TDOperatorMorale
     {
         Relieve(TDConstant.STRESS_RETREAT_RELIEF);
         m_RetreatCooldown = TDConstant.STRESS_RETREAT_COUNTDOWN;
+        // Off the field OnWaveCleared never reaches them; the mark must not wait for their return.
+        m_LeakedSinceRelief = false;
     }
 
     /// <summary>Rescue: -50 and the broken state is lifted (the caller pays the SP).</summary>
@@ -222,6 +236,7 @@ public sealed class TDOperatorMorale
         if (!m_Broken) OnSetback();
 
         m_RetreatCooldown = TDConstant.STRESS_DEATH_COUNTDOWN;
+        m_LeakedSinceRelief = false; // leaving the field, as in OnRetreat
 
         // The COLLAPSE ends here; the stress does not. Dying at 100 leaves ~84 after the 16s
         // cooldown ticks off-field, which is above the latch's exit line of 66 — so without this

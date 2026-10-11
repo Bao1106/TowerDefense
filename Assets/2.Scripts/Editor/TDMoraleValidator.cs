@@ -141,6 +141,25 @@ public static class TDMoraleValidator
         var cleared = At(50f);
         cleared.OnWaveCleared();
         Near(f, "WAVE_CLEAR", cleared.Value, 50f - TDConstant.STRESS_WAVE_CLEAR_RELIEF);
+
+        // Tầng 2 T4: the wave valve is for the operators nobody got past since the last relief.
+        var leaked = At(50f); leaked.OnLeak(0.3f); float v = leaked.Value;
+        leaked.OnWaveCleared();
+        Near(f, "RELIEF_SKIPS_LEAKED", leaked.Value, v);
+        leaked.OnWaveCleared(); // held the next wave clean: the mark went with the last relief
+        Near(f, "RELIEF_NEXT_WAVE", leaked.Value, v - TDConstant.STRESS_WAVE_CLEAR_RELIEF);
+
+        // Answerable but already charged in full by this enemy: still leaked past.
+        var zero = At(50f); zero.OnLeak(0f); zero.OnWaveCleared();
+        Near(f, "RELIEF_MARK_ON_ZERO_TOPUP", zero.Value, 50f);
+
+        // Off the field nobody calls OnWaveCleared, so leaving must take the mark along.
+        var away = At(90f); away.OnLeak(0.3f); away.OnRetreat(); float a = away.Value;
+        away.OnWaveCleared();
+        Near(f, "RELIEF_MARK_LEAVES_WITH_RETREAT", away.Value, a - TDConstant.STRESS_WAVE_CLEAR_RELIEF);
+        var fell = At(50f); fell.OnLeak(0.3f); fell.OnDeath(); float d = fell.Value;
+        fell.OnWaveCleared();
+        Near(f, "RELIEF_MARK_LEAVES_WITH_DEATH", fell.Value, d - TDConstant.STRESS_WAVE_CLEAR_RELIEF);
     }
 
     // ── SP (§06 · 3.2) ──────────────────────────────────────────────────────
