@@ -72,6 +72,14 @@ public sealed class TDOperatorMorale
     /// </summary>
     public int Setbacks { get; private set; }
 
+    /// <summary>
+    /// Points that actually landed from leaks / from ally spikes, over this operator's whole match
+    /// (after the clamp and the spike ceiling). The report takes differences per stint, which is
+    /// what tells whether a collapse came from the line failing or from a neighbour falling.
+    /// </summary>
+    public float LeakStress { get; private set; }
+    public float SpikeStress { get; private set; }
+
     /// <summary>Reports Broken while the latch holds, even though the value has fallen below 100.</summary>
     public MoraleState State => m_Broken ? MoraleState.Broken : StateOf(m_Value);
 
@@ -124,7 +132,11 @@ public sealed class TDOperatorMorale
     /// already above the ceiling gains nothing. Only a leak past them can make them break.
     /// </summary>
     public void AddSpike(float amount)
-        => SetValue(Mathf.Min(m_Value + Mathf.Max(0f, amount), Mathf.Max(m_Value, TDConstant.STRESS_SPIKE_CEILING)));
+    {
+        float before = m_Value;
+        SetValue(Mathf.Min(m_Value + Mathf.Max(0f, amount), Mathf.Max(m_Value, TDConstant.STRESS_SPIKE_CEILING)));
+        SpikeStress += m_Value - before;
+    }
 
     /// <summary>
     /// What this operator's death spikes the neighbours by. Nothing if they die collapsed: the
@@ -153,6 +165,7 @@ public sealed class TDOperatorMorale
 
         float before = m_Value;
         SetValue(m_Value + TDConstant.STRESS_PER_LEAK * weight);
+        LeakStress += m_Value - before;
         return m_Value - before;
     }
 

@@ -32,7 +32,7 @@ public static class TDPressureProbe
     /// read before the retreat's own −70 relief, or every red retreat would report Calm.</summary>
     public struct Stint
     {
-        public string op; public bool melee; public float seconds, hpLost, stressGained;
+        public string op; public bool melee; public float seconds, hpLost, stressGained, leakStress, spikeStress;
         public bool retreated; public float hpFrac; public MoraleState band;
     }
 
@@ -96,14 +96,15 @@ public static class TDPressureProbe
     }
 
     /// <summary>One stay on the field has ended (retreat, death, or the match). `stressGained`
-    /// sums the POSITIVE frame-to-frame rises — relief must not cancel the pressure it follows.</summary>
+    /// sums the POSITIVE frame-to-frame rises — relief must not cancel the pressure it follows.
+    /// `leakStress` / `spikeStress` split it by source (spec Tầng 2 §7.2 step 1).</summary>
     public static void RecordStint(string op, bool melee, float seconds, float hpLost, float stressGained,
-                                   bool retreated, float hpFrac, MoraleState band)
+                                   float leakStress, float spikeStress, bool retreated, float hpFrac, MoraleState band)
     {
         var s = new Stint
         {
             op = op, melee = melee, seconds = seconds, hpLost = hpLost, stressGained = stressGained,
-            retreated = retreated, hpFrac = hpFrac, band = band,
+            leakStress = leakStress, spikeStress = spikeStress, retreated = retreated, hpFrac = hpFrac, band = band,
         };
         s_Stints.Add(s);
         s_Pool.Add(s);
@@ -246,6 +247,7 @@ public static class TDPressureProbe
         sb.AppendLine($"stints: {s_Stints.Count}");
         foreach (var s in s_Stints)
             sb.AppendLine($"  {s.op,-9} {(s.melee ? "melee " : "ranged")} {s.seconds,6:F1}s  hp −{s.hpLost,6:F0}  stress +{s.stressGained,6:F1}" +
+                          $" (leak +{s.leakStress:F1} · spike +{s.spikeStress:F1})" +
                           $"  left {(s.retreated ? "retreat  " : "death/end")} hp {s.hpFrac,4:P0} {s.band}");
         int retreats = 0;
         foreach (var s in s_Stints) if (s.retreated) retreats++;

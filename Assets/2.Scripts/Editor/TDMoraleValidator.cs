@@ -380,6 +380,13 @@ public static class TDMoraleValidator
         latched.AddSpike(TDConstant.STRESS_ALLY_BREAK_SPIKE);
         Near(f, "SPIKE_ON_LATCHED", latched.Value, 90f);
         if (!latched.IsBroken || latched.ConsumeBreak()) f.Add("[SPIKE_ON_LATCHED] a spike lifted or re-announced the collapse");
+
+        // Spec Tầng 2 §7.2 step 1: stress by source, counting only what actually landed.
+        var src = At(85f); src.OnLeak(1f); src.AddSpike(TDConstant.STRESS_ALLY_BREAK_SPIKE); // 92: the spike adds nothing
+        Near(f, "SOURCE_LEAK", src.LeakStress, 7f);
+        Near(f, "SOURCE_SPIKE_CLAMPED", src.SpikeStress, 0f);
+        var sp = At(50f); sp.AddSpike(TDConstant.STRESS_ALLY_BREAK_SPIKE);
+        Near(f, "SOURCE_SPIKE", sp.SpikeStress, 15f);
     }
 
     // ── H — focus slow-mo: one formula, pause always wins ───────────────────
@@ -611,6 +618,7 @@ public static class TDMoraleValidator
         };
         TDPressureProbe.BeginMatch("DEMO-1", 0, Difficulty.Hard, plans);
         waveStarted.Invoke(null, new object[] { 0 });
+        TDPressureProbe.RecordStint("Knight", true, 10f, 0f, 22f, 7f, 15f, false, 1f, MoraleState.Steady);
         lifeLost.Invoke(null, new object[] { Vector3.zero });
         lifeLost.Invoke(null, new object[] { Vector3.zero });
         waveStarted.Invoke(null, new object[] { 1 });
@@ -636,6 +644,7 @@ public static class TDMoraleValidator
         if (w1[1] != "-" || w2[1] != "B") f.Add($"[REPORT_BOSS] boss column: wave 1 '{w1[1]}', wave 2 '{w2[1]}', want '-' and 'B'");
         if (w1[8] != "2" || w2[8] != "0") f.Add($"[REPORT_LIVES] lives lost: wave 1 {w1[8]}, wave 2 {w2[8]}, want 2 and 0");
         if (!report.Contains("retreats: 0")) f.Add("[REPORT_RETREATS] no 'retreats: N' line");
+        if (!report.Contains("leak +7.0 · spike +15.0")) f.Add("[REPORT_SOURCES] stint line does not split leak and spike stress");
     }
 
     // §06 · 3.1: a collapsed operator calms down after STRESS_BROKEN_CALM_SECONDS without a hit.

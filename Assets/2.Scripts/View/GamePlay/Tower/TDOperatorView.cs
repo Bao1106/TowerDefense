@@ -29,6 +29,7 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
     // The current stint — this stay on the field — for TDPressureProbe (spec §7.2).
     private bool m_StintOpen;
     private float m_StintStart, m_StintStartHp, m_StintStress, m_LastStress;
+    private float m_StintStartLeak, m_StintStartSpike; // morale's running totals at deploy — it outlives the stint
     private bool m_Retreated;            // left by DoRetreat, not by death or the match ending
     private MoraleState m_RetreatBand;
 
@@ -116,6 +117,8 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         m_StintStartHp = m_CurrentHp;
         m_StintStress = 0f;
         m_LastStress = Morale.Value;
+        m_StintStartLeak = Morale.LeakStress;
+        m_StintStartSpike = Morale.SpikeStress;
         // Still standing when the match ends is a stint ending too.
         TDGameEventBus.OnVictory += CloseStint;
         TDGameEventBus.OnGameOver += CloseStint;
@@ -141,6 +144,7 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         TDPressureProbe.RecordStint(m_Data?.operatorName, m_Data != null && m_Data.deployZone == DeployZone.PathCell,
                                     Time.time - m_StintStart,
                                     Mathf.Max(0f, m_StintStartHp - Mathf.Max(0f, m_CurrentHp)), m_StintStress,
+                                    Morale.LeakStress - m_StintStartLeak, Morale.SpikeStress - m_StintStartSpike,
                                     m_Retreated, m_MaxHp > 0f ? Mathf.Max(0f, m_CurrentHp) / m_MaxHp : 0f,
                                     m_Retreated ? m_RetreatBand : (Morale?.State ?? MoraleState.Calm));
     }
