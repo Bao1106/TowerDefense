@@ -39,9 +39,11 @@ public static class TDMoraleValidator
     public static List<string> Run()
     {
         var f = new List<string>();
+        if (k_SetValue == null) { f.Add("[REFLECT] TDOperatorMorale.SetValue missing"); return f; }
 
         Rates(f);
         Bands(f);
+        Spikes(f);
         Recovery(f);
         SkillPoints(f);
         RetreatIsNotAReset(f);
@@ -91,10 +93,15 @@ public static class TDMoraleValidator
         return fi == null ? default : (T)fi.GetValue(o);
     }
 
+    // Sets the value through SetValue itself, so the collapse latch behaves exactly as in play.
+    // Not through AddSpike any more: spikes stop at STRESS_SPIKE_CEILING, and At(100) must still break.
+    private static readonly MethodInfo k_SetValue =
+        typeof(TDOperatorMorale).GetMethod("SetValue", BindingFlags.Instance | BindingFlags.NonPublic);
+
     private static TDOperatorMorale At(float value)
     {
         var m = new TDOperatorMorale();
-        m.AddSpike(value);
+        k_SetValue.Invoke(m, new object[] { value });
         return m;
     }
 
@@ -124,12 +131,6 @@ public static class TDMoraleValidator
         if (TDOperatorMorale.StateOf(66f) != MoraleState.Steady) f.Add("[BAND] 66 is not Steady");
         if (TDOperatorMorale.StateOf(67f) != MoraleState.Stressed) f.Add("[BAND] 67 is not Stressed");
         if (TDOperatorMorale.StateOf(100f) != MoraleState.Broken) f.Add("[BAND] 100 is not Broken");
-
-        // ⭐ N3 must NOT be multiplied. At Stressed a doubled 30-point jolt would kill
-        // outright and turn every cascade into an automatic wipe.
-        var hot = At(60f);
-        hot.AddSpike(TDConstant.STRESS_ALLY_BREAK_SPIKE);
-        Near(f, "SPIKE_UNMULTIPLIED", hot.Value, 60f + TDConstant.STRESS_ALLY_BREAK_SPIKE);
     }
 
     // ── C — recovery, and its ceiling ───────────────────────────────────────
@@ -302,19 +303,20 @@ public static class TDMoraleValidator
     // ── J — a break is an EVENT, whoever pushed the value over ──────────────
     //
     // The view used to detect the break by reading IsBroken before Tick and comparing after.
-    // An ally's N3 spike latches the neighbour OUTSIDE that window, so a break caused by a
-    // spike never fired its own spike, setback or release — every cascade stopped at link two.
+    // A leak latches the operator OUTSIDE that window (it arrives as an event from the enemy), so a
+    // break caused by one never fired its own spike, setback or release. Spikes no longer break
+    // anyone (Tầng 2 §4.2), but leaks still arrive between ticks.
 
     private static void BreakEdge(List<string> f)
     {
-        var spiked = At(80f);
-        spiked.AddSpike(TDConstant.STRESS_ALLY_BREAK_SPIKE);
-        if (!spiked.ConsumeBreak()) f.Add("[EDGE_FROM_SPIKE] a spike-induced break raised no edge");
-        if (spiked.ConsumeBreak()) f.Add("[EDGE_ONCE] the same break was reported twice");
-        if (spiked.Setbacks != 1) f.Add($"[EDGE_SETBACK] spike break counted {spiked.Setbacks}, want 1");
+        var leaked = At(95f);
+        leaked.OnLeak(1f);
+        if (!leaked.ConsumeBreak()) f.Add("[EDGE_FROM_LEAK] a leak-induced break raised no edge");
+        if (leaked.ConsumeBreak()) f.Add("[EDGE_ONCE] the same break was reported twice");
+        if (leaked.Setbacks != 1) f.Add($"[EDGE_SETBACK] leak break counted {leaked.Setbacks}, want 1");
 
-        spiked.AddSpike(TDConstant.STRESS_ALLY_BREAK_SPIKE); // already latched
-        if (spiked.ConsumeBreak()) f.Add("[EDGE_WHILE_LATCHED] a spike on a broken operator raised a second edge");
+        leaked.OnLeak(1f); // already latched
+        if (leaked.ConsumeBreak()) f.Add("[EDGE_WHILE_LATCHED] a leak on a broken operator raised a second edge");
 
         // ⭐ An edge nobody handled must not outlive the state it announces — otherwise it fires
         // on the next deploy, spiking and releasing around an operator who is perfectly fine.
@@ -329,9 +331,36 @@ public static class TDMoraleValidator
         var again = At(TDConstant.STRESS_MAX);
         again.ConsumeBreak();
         again.OnRescue();
-        again.AddSpike(TDConstant.STRESS_MAX);
+        while (!again.IsBroken) again.OnLeak(1f);
         if (!again.ConsumeBreak() || again.Setbacks != 2)
             f.Add($"[EDGE_REBREAK] second break after rescue: setbacks {again.Setbacks}, want 2");
+    }
+
+    // ── K — spikes push toward the edge, never over it; one fall, one spike (Tầng 2 §4.2) ──
+
+    private static void Spikes(List<string> f)
+    {
+        var s = At(60f); s.AddSpike(TDConstant.STRESS_ALLY_BREAK_SPIKE);
+        Near(f, "SPIKE_BREAK_15", s.Value, 75f);
+        var c = At(80f); c.AddSpike(TDConstant.STRESS_ALLY_BREAK_SPIKE);
+        Near(f, "SPIKE_CEILING", c.Value, 90f);
+        var h = At(92f); h.AddSpike(TDConstant.STRESS_ALLY_BREAK_SPIKE);
+        Near(f, "SPIKE_ABOVE_CEILING", h.Value, 92f);
+
+        var many = new TDOperatorMorale();
+        for (int i = 0; i < 20; i++) many.AddSpike(TDConstant.STRESS_ALLY_BREAK_SPIKE);
+        if (many.IsBroken || many.ConsumeBreak()) f.Add("[SPIKE_NEVER_BREAKS] twenty break spikes collapsed an operator");
+
+        Near(f, "DEATH_SPIKE_STANDING", At(40f).DeathSpike, 10f);
+        Near(f, "DEATH_SPIKE_AFTER_BREAK", At(TDConstant.STRESS_MAX).DeathSpike, 0f);
+
+        // Collapsed and recovering under the latch (100 → ~80): a spike lifts to 90 at most and
+        // must neither lift the collapse nor announce it a second time.
+        var latched = At(TDConstant.STRESS_MAX); latched.ConsumeBreak();
+        for (int i = 0; i < 200; i++) latched.Tick(0.1f, Ctx(false, sinceHit: TDConstant.STRESS_BROKEN_CALM_SECONDS + 1f));
+        latched.AddSpike(TDConstant.STRESS_ALLY_BREAK_SPIKE);
+        Near(f, "SPIKE_ON_LATCHED", latched.Value, 90f);
+        if (!latched.IsBroken || latched.ConsumeBreak()) f.Add("[SPIKE_ON_LATCHED] a spike lifted or re-announced the collapse");
     }
 
     // ── H — focus slow-mo: one formula, pause always wins ───────────────────

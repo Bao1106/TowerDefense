@@ -264,8 +264,11 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
 
         // N3 must fire BEFORE OnRemove, or the registry has already dropped this cell and
         // the neighbours never learn anyone fell. A death spikes less than a break (§04):
-        // death is final and acceptable, a broken teammate is still standing there.
-        TDOperatorRegistry.api?.BroadcastSpike(m_MyCell, TDConstant.STRESS_ALLY_DEATH_SPIKE, wasBreak: false);
+        // death is final and acceptable, a broken teammate is still standing there. One fall, one
+        // spike: dying collapsed spikes nothing (DeathSpike is 0). Read here, before OnLeftField
+        // reaches Morale.OnDeath, which clears the collapse.
+        float deathSpike = Morale?.DeathSpike ?? TDConstant.STRESS_ALLY_DEATH_SPIKE;
+        if (deathSpike > 0f) TDOperatorRegistry.api?.BroadcastSpike(m_MyCell, deathSpike, wasBreak: false);
 
         // Frees the card again but keeps every stress point and grants no cooldown relief —
         // dying must never be the cheap way to reset someone.

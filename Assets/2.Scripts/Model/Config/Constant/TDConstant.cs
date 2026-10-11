@@ -384,11 +384,18 @@ public static class TDConstant
     public const float LEAK_AMP_MULT = 1.5f;
     public const float LEAK_AMP_RADIUS = 4f;
 
-    // N3 — instant spikes, NOT multiplied by state. A 30-point jolt doubled at Stressed
-    // would almost always kill outright, turning a cascade into an automatic wipe.
-    public const float STRESS_ALLY_DEATH_SPIKE = 20f;
-    public const float STRESS_ALLY_BREAK_SPIKE = 30f;   // worse than death: they are still there
+    // N3 — instant spikes when an ally falls nearby (spec Tầng 2 §4.2). 30 / 20 was a third of the
+    // bar, and a break followed by the death it led to fired both: +50 to everyone in a line that
+    // stands within two cells of each other. The Hard playtest had a Defender collapse at full HP
+    // with nobody leaking past it. Halved, one spike per fall (TDOperatorMorale.DeathSpike).
+    public const float STRESS_ALLY_DEATH_SPIKE = 10f;
+    public const float STRESS_ALLY_BREAK_SPIKE = 15f;   // worse than death: they are still there
     public const float STRESS_SPIKE_RADIUS = 2f;        // cells
+
+    // ...and a spike may push an operator to the edge but never over it. Collapse must always be
+    // traceable to a leak past THAT operator — "if you lose, it was your fault" — and from 90 a
+    // melee still has two or three leaks to be rotated out. Same idea as RESCUE_RESCUER_CEILING.
+    public const float STRESS_SPIKE_CEILING = 90f;
 
     // Recovery.
     public const float STRESS_IDLE_RELIEF = 0.60f;      // not engaged: blocking nobody, no target in range

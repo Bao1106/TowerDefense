@@ -117,8 +117,20 @@ public sealed class TDOperatorMorale
 
     // ── Events ───────────────────────────────────────────────────────────────
 
-    /// <summary>N3 — an ally died or broke nearby. Never multiplied by state (§02).</summary>
-    public void AddSpike(float amount) => SetValue(m_Value + Mathf.Max(0f, amount));
+    /// <summary>
+    /// N3 — an ally died or broke nearby. Pushes toward the edge but never over it: clamped at
+    /// STRESS_SPIKE_CEILING rather than refused, the same shape as PayRescueStress. An operator
+    /// already above the ceiling gains nothing. Only a leak past them can make them break.
+    /// </summary>
+    public void AddSpike(float amount)
+        => SetValue(Mathf.Min(m_Value + Mathf.Max(0f, amount), Mathf.Max(m_Value, TDConstant.STRESS_SPIKE_CEILING)));
+
+    /// <summary>
+    /// What this operator's death spikes the neighbours by. Nothing if they die collapsed: the
+    /// break already spiked everyone, and a break followed by the death it leads to is one fall,
+    /// not two — together they used to hand each neighbour +50.
+    /// </summary>
+    public float DeathSpike => m_Broken ? 0f : TDConstant.STRESS_ALLY_DEATH_SPIKE;
 
     /// <summary>
     /// An enemy walked past a cell this operator answers for. `weight` is their share of the leak
