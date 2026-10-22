@@ -61,6 +61,7 @@ public static class TDMoraleValidator
         ZeroDamage(f);
         FallAnnouncesBreak(f);
         RescuerPick(f);
+        RescueReach(f);
         LeakLog(f);
         Resolve(f);
         FocusScale(f);
@@ -732,6 +733,50 @@ public static class TDMoraleValidator
             Pick(f, "RESCUER_PICK_NONE_READY", new() { poor }, null);
             if (!broken.IsCollapsed) f.Add("[RESCUER_PICK_SETUP] the calming operator is not collapsed");
             Pick(f, "RESCUER_PICK_SKIPS_COLLAPSED", new() { broken, edgy }, edgy);
+        }
+        finally { foreach (var go in made) Object.DestroyImmediate(go); }
+    }
+
+    // Rescue reach follows the TARGET (playtest 2026-10-22): a ranged operator stands on a tower
+    // platform off the road, so with reach 1 nobody ever stood close enough to rescue Ginger.
+    // A collapsed ranged is reachable from RESCUE_REACH_RANGED cells, a collapsed melee from 1.
+    private static void RescueReach(List<string> f)
+    {
+        var made = new List<GameObject>();
+        var reg = new TDOperatorRegistry();
+        TDOperatorView Put(string name, Vector2Int cell, OperatorType type, bool collapsed)
+        {
+            var go = new GameObject(name) { hideFlags = HideFlags.HideAndDontSave };
+            made.Add(go);
+            var op = go.AddComponent<TDOperatorView>();
+            SetField(f, op, "m_Data", new OperatorData { operatorName = name, operatorType = type });
+            SetField(f, op, "<Morale>k__BackingField", At(collapsed ? TDConstant.STRESS_MAX : 0f));
+            reg.RegisterOperatorView(cell, op);
+            return op;
+        }
+        List<string> Names(List<TDOperatorView> ops)
+        {
+            var names = ops.ConvertAll(o => o.name);
+            names.Sort();
+            return names;
+        }
+
+        try
+        {
+            if (TDConstant.RESCUE_REACH_RANGED != 2) f.Add($"[RESCUE_REACH_TABLE] cells below assume reach 2, got {TDConstant.RESCUE_REACH_RANGED}");
+
+            var ranged = Put("ranged", new Vector2Int(0, 0), OperatorType.Ranger, collapsed: true);
+            var melee = Put("melee", new Vector2Int(5, 0), OperatorType.Knight, collapsed: true);
+            Put("two", new Vector2Int(2, 1), OperatorType.Knight, collapsed: false);      // 2 from ranged, 3 from melee
+            Put("three", new Vector2Int(0, 3), OperatorType.Knight, collapsed: false);    // 3 from ranged
+            Put("near", new Vector2Int(6, 1), OperatorType.Knight, collapsed: false);     // 1 from melee
+            Put("twoAway", new Vector2Int(7, 2), OperatorType.Knight, collapsed: false);  // 2 from melee
+
+            Seq(f, "RESCUE_REACH_RANGED_RESCUERS", Names(reg.GetRescuersFor(new Vector2Int(0, 0), ranged)), "two");
+            Seq(f, "RESCUE_REACH_MELEE_RESCUERS", Names(reg.GetRescuersFor(new Vector2Int(5, 0), melee)), "near");
+            Seq(f, "RESCUE_REACH_TARGETS_RANGED_AT_2", Names(reg.GetRescueTargetsFor(new Vector2Int(2, 1))), "ranged");
+            Seq(f, "RESCUE_REACH_TARGETS_MELEE_AT_2", Names(reg.GetRescueTargetsFor(new Vector2Int(7, 2))));
+            Seq(f, "RESCUE_REACH_TARGETS_MELEE_AT_1", Names(reg.GetRescueTargetsFor(new Vector2Int(6, 1))), "melee");
         }
         finally { foreach (var go in made) Object.DestroyImmediate(go); }
     }
