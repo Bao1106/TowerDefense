@@ -66,6 +66,7 @@ public static class TDMoraleValidator
         IconRendering(f);
         BadgeLayers(f);
         GreyLevels(f);
+        CardBadge(f);
         BreakTiming(f);
         RescueArc(f);
         RescuerPick(f);
@@ -958,6 +959,75 @@ public static class TDMoraleValidator
         if (TDMoraleBadge.FaceColour(MoraleState.Steady) != dark || TDMoraleBadge.FaceColour(MoraleState.Stressed) != dark)
             f.Add($"[C8_GREY_LEVELS] face on a filled disc is {TDMoraleBadge.FaceColour(MoraleState.Steady)} / {TDMoraleBadge.FaceColour(MoraleState.Stressed)}, want {TDMoraleBadge.COLOR_MORALE_FACE_ON_FILL}");
     }
+
+    // Tầng 4b §4.5: an operator's card in the slot bar wears the same badge as their head, while they
+    // are on the field or still carry stress or a cooldown — the roster keeps stress when they leave,
+    // so a Stressed badge on a card says "don't drop them back in yet". The badge lies over the card's
+    // corner, so it must never take the tap that lifts the operator.
+    private static void CardBadge(List<string> f)
+    {
+        if (TDSlotHolderItemView.ShowMoraleOnCard(false, 0f, 0f) || !TDSlotHolderItemView.ShowMoraleOnCard(true, 0f, 0f)
+            || !TDSlotHolderItemView.ShowMoraleOnCard(false, 40f, 0f) || !TDSlotHolderItemView.ShowMoraleOnCard(false, 0f, 5f))
+            f.Add($"[CARD_BADGE_VISIBILITY] fresh {TDSlotHolderItemView.ShowMoraleOnCard(false, 0f, 0f)} (want false), deployed {TDSlotHolderItemView.ShowMoraleOnCard(true, 0f, 0f)}, off-field stressed {TDSlotHolderItemView.ShowMoraleOnCard(false, 40f, 0f)}, cooling down {TDSlotHolderItemView.ShowMoraleOnCard(false, 0f, 5f)} (want true)");
+
+        var prefab = Resources.Load<GameObject>("Prefabs/SlotHolder");
+        if (prefab == null) { f.Add("[CARD_BADGE] no Resources/Prefabs/SlotHolder"); return; }
+
+        var turret = NewCard(prefab, TowerType.Cannon);
+        var card = NewCard(prefab, TowerType.Operator);
+        var probe = new GameObject("CardIconProbe") { hideFlags = HideFlags.HideAndDontSave };
+        try
+        {
+            if (turret.transform.Find("MoraleBadge") != null) f.Add("[CARD_BADGE_VISIBILITY] a turret card has a morale badge");
+
+            var holder = card.GetComponent<TDSlotHolderItemView>();
+            var badge = card.transform.Find("MoraleBadge");
+            var icon = TDMoraleIconView.Attach(probe.transform);
+            if (badge == null || icon == null) { f.Add($"[BADGE_SAME_ON_CARD] card badge {(badge != null ? "present" : "missing")}, icon {(icon != null ? "present" : "missing")}"); return; }
+
+            var cardDisc = badge.Find("Disc").GetComponent<UnityEngine.UI.Image>();
+            var cardFace = badge.Find("Face").GetComponent<UnityEngine.UI.Image>();
+            var iconDisc = icon.transform.Find("Badge/Disc").GetComponent<UnityEngine.UI.Image>();
+            var iconFace = icon.transform.Find("Badge/Face").GetComponent<UnityEngine.UI.Image>();
+            foreach (float v in new[] { 10f, 50f, 80f, 100f })
+            {
+                holder.ShowMorale(At(v), true);
+                icon.Refresh(At(v));
+                if (!badge.gameObject.activeSelf || !Same(cardDisc.color, iconDisc.color) || !Same(cardFace.color, iconFace.color))
+                    f.Add($"[BADGE_SAME_ON_CARD] stress {v}: shown {badge.gameObject.activeSelf}, disc {cardDisc.color} vs {iconDisc.color}, face {cardFace.color} vs {iconFace.color}");
+            }
+
+            holder.ShowMorale(At(0f), false);
+            if (badge.gameObject.activeSelf) f.Add("[BADGE_SAME_ON_CARD] still shown for a rested operator off the field");
+
+            foreach (var g in badge.GetComponentsInChildren<UnityEngine.UI.Graphic>(true))
+                if (g.raycastTarget) f.Add($"[CARD_BADGE_NO_RAYCAST] {g.name} takes raycasts: a press on the card's corner would not lift the operator");
+        }
+        finally
+        {
+            Object.DestroyImmediate(turret);
+            Object.DestroyImmediate(card);
+            Object.DestroyImmediate(probe);
+        }
+    }
+
+    private static GameObject NewCard(GameObject prefab, TowerType type)
+    {
+        var go = Object.Instantiate(prefab);
+        go.hideFlags = HideFlags.HideAndDontSave;
+        var holder = go.GetComponent<TDSlotHolderItemView>();
+        holder.SetupSlotHolderVariables();
+        holder.SetupSlot(new TDTowerSlotInfo
+        {
+            towerType = type,
+            operatorData = type == TowerType.Operator ? new OperatorData() : null,
+            cost = 10,
+        });
+        return go;
+    }
+
+    private static bool Same(Color a, Color b)
+        => Mathf.Abs(a.r - b.r) < 0.01f && Mathf.Abs(a.g - b.g) < 0.01f && Mathf.Abs(a.b - b.b) < 0.01f && Mathf.Abs(a.a - b.a) < 0.01f;
 
     private static string ChildNames(Transform parent)
     {
