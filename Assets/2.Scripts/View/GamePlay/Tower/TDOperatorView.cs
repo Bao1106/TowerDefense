@@ -187,7 +187,10 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         var state = Morale.State;
         switch (TDOperatorMorale.CueFor(m_LastMoraleState, state))
         {
-            case MoraleCue.Stressed: TDGameEventBus.OperatorStressed(transform.position); break;
+            case MoraleCue.Stressed:
+                TDGameEventBus.OperatorStressed(transform.position);
+                m_MoraleIcon?.PlayStressed();
+                break;
             case MoraleCue.Recovered: TDGameEventBus.OperatorRecovered(transform.position); break;
         }
         m_LastMoraleState = state;

@@ -65,9 +65,15 @@ public sealed class TDMoraleIconView : MonoBehaviour
 
     // The halo leaves the badge rim and is spent by one cell (108 px), where the neighbour stands.
     private const float RING_FROM_UNITS = 67f;
-    private const float HALO_MAX_RADIUS = 200f;
-    private const float HALO_SECONDS = 0.4f;
+    public const float HALO_MAX_RADIUS = 200f;
+    public const float HALO_SECONDS = 0.4f;
     private const float HALO_THICKNESS_UNITS = 7.4f;
+
+    // Entering Stressed (§4.3) is a warning, not an alarm: thinner, smaller and shorter than the
+    // break's halo — 80 px, 2 px, 0.3 s — and the badge itself does not punch.
+    public const float STRESS_RING_MAX_RADIUS = 148f;
+    public const float STRESS_RING_SECONDS = 0.3f;
+    private const float STRESS_RING_THICKNESS_UNITS = 3.7f;
 
     // Stressed pulses. 2.4-5.5 seconds is all the warning that band gives under heavy
     // pressure (§10), so a static icon is not a signal — it has to move to be noticed.
@@ -112,6 +118,8 @@ public sealed class TDMoraleIconView : MonoBehaviour
 
     private float m_LeakPulseStart = float.NegativeInfinity;
     private float m_BreakStart = float.NegativeInfinity;
+    private float m_StressedStart = float.NegativeInfinity;
+    private Image m_StressRing;
     private float m_BadgeScale = 1f;
     private Image m_Flash;
     private Image m_Halo;
@@ -314,6 +322,11 @@ public sealed class TDMoraleIconView : MonoBehaviour
         Centre(m_Halo.rectTransform, Vector2.zero, Vector2.one * (2f * RING_FROM_UNITS));
         m_Halo.enabled = false;
 
+        m_StressRing = NewImage("StressRing", root);
+        m_StressRing.sprite = RingSprite(STRESS_RING_THICKNESS_UNITS / STRESS_RING_MAX_RADIUS);
+        Centre(m_StressRing.rectTransform, Vector2.zero, Vector2.one * (2f * RING_FROM_UNITS));
+        m_StressRing.enabled = false;
+
         var platePos = new Vector2(0f, PIXELS * 0.5f + LABEL_GAP_UNITS + k_LabelPlate.y * 0.5f);
         m_LabelPlate = NewImage("LabelPlate", root);
         m_LabelPlate.sprite = PillSprite();
@@ -476,6 +489,20 @@ public sealed class TDMoraleIconView : MonoBehaviour
     /// <summary>Starts the break moment (§4.1). Runs from LateUpdate, so it finishes even if they die.</summary>
     public void PlayBreak() => m_BreakStart = Time.time;
 
+    /// <summary>One thin red ring for the climb into Stressed (§4.3).</summary>
+    public void PlayStressed() => m_StressedStart = Time.time;
+
+    private void AnimateStressRing(float t)
+    {
+        bool on = t >= 0f && t < STRESS_RING_SECONDS;
+        if (m_StressRing.enabled != on) m_StressRing.enabled = on;
+        if (!on) return;
+
+        m_StressRing.rectTransform.sizeDelta = Vector2.one * (2f * RingRadius(t, STRESS_RING_SECONDS, RING_FROM_UNITS, STRESS_RING_MAX_RADIUS));
+        var red = Hex(TDConstant.COLOR_MORALE_STRESSED);
+        m_StressRing.color = new Color(red.r, red.g, red.b, RingAlpha(t, STRESS_RING_SECONDS));
+    }
+
     /// <summary>The badge's extra scale at `t` seconds into a break: one sine bump to 1 + PUNCH_GAIN.</summary>
     public static float BreakPunch(float t)
         => t >= 0f && t < PUNCH_SECONDS ? 1f + PUNCH_GAIN * Mathf.Sin(Mathf.PI * t / PUNCH_SECONDS) : 1f;
@@ -566,6 +593,8 @@ public sealed class TDMoraleIconView : MonoBehaviour
 
         // Here, not in Refresh: Refresh stops with TickMorale while the operator is dying, and a
         // break announced by the fatal blow must still play out.
-        if (m_Badge != null) AnimateBreak(Time.time - m_BreakStart);
+        if (m_Badge == null) return;
+        AnimateBreak(Time.time - m_BreakStart);
+        AnimateStressRing(Time.time - m_StressedStart);
     }
 }

@@ -915,6 +915,14 @@ public static class TDMoraleValidator
         Near(f, "RING_RADIUS_CLAMP", TDMoraleIconView.RingRadius(1f, 0.4f, 67f, 200f), 200f);
         Near(f, "RING_ALPHA_MID", TDMoraleIconView.RingAlpha(0.2f, 0.4f), 0.5f);
         Near(f, "RING_ALPHA_END", TDMoraleIconView.RingAlpha(0.4f, 0.4f), 0f);
+
+        // §4.3: entering Stressed is a warning, so its ring must stay clearly under the break's.
+        Near(f, "STRESS_RING_RADIUS_MID", TDMoraleIconView.RingRadius(0.15f, 0.3f, 67f, 148f), 107.5f);
+        Near(f, "STRESS_RING_ALPHA_END", TDMoraleIconView.RingAlpha(0.3f, 0.3f), 0f);
+        float stressRadius = TDMoraleIconView.STRESS_RING_MAX_RADIUS, haloRadius = TDMoraleIconView.HALO_MAX_RADIUS;
+        float stressSeconds = TDMoraleIconView.STRESS_RING_SECONDS, haloSeconds = TDMoraleIconView.HALO_SECONDS;
+        if (stressRadius >= haloRadius || stressSeconds >= haloSeconds)
+            f.Add($"[STRESS_WEAKER_THAN_BREAK] Stressed ring {stressRadius}/{stressSeconds}s vs break halo {haloRadius}/{haloSeconds}s");
     }
 
     private static void Voice(List<string> f, string tag, bool[] playing, float[] startedAt, bool[] priority, bool want, int expect)
