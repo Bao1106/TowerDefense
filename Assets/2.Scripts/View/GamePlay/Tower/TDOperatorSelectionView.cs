@@ -92,6 +92,14 @@ public class TDOperatorSelectionView : MonoBehaviour
         // it is open, silently: eight dictionary lookups, and only while something is selected.
         if (m_SelectedOperator != null)
         {
+#if UNITY_EDITOR
+            // Editor-only test hook: B breaks whoever is selected. Through a real leak (one big
+            // enough to fill the bar from zero), so the break is announced, counted and spiked as
+            // in play — for trying Rescue on a ranged operator, who almost never collapses on
+            // their own (playtest 2026-10-22). Their stint reports the extra leak stress.
+            if (Keyboard.current != null && Keyboard.current.bKey.wasPressedThisFrame)
+                m_SelectedOperator.ReceiveLeak(TDConstant.STRESS_MAX);
+#endif
             TDDiamondPanelView.Instance?.UpdateRescue(BuildRescueOption(m_SelectedOperator, log: false));
 
             // Same reason, other corner: they can collapse — or be rescued — while the panel is open.
