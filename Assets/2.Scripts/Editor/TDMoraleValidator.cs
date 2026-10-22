@@ -67,6 +67,7 @@ public static class TDMoraleValidator
         BadgeLayers(f);
         GreyLevels(f);
         CardBadge(f);
+        AmpRing(f);
         BreakTiming(f);
         RescueArc(f);
         RescuerPick(f);
@@ -1009,6 +1010,41 @@ public static class TDMoraleValidator
             Object.DestroyImmediate(card);
             Object.DestroyImmediate(probe);
         }
+    }
+
+    // Tầng 4b §4.6: the amplifier's ring is exactly the reach the stress code uses — LEAK_AMP_RADIUS
+    // cells — flat at the range-highlight height, however the boss is scaled or turned. Its material
+    // is an asset: a shader only code asks for by name can be stripped from a build.
+    private static void AmpRing(List<string> f)
+    {
+        var mat = Resources.Load<Material>(TDAmpRingView.MATERIAL_PATH);
+        if (mat == null || mat.shader.name != "Sprites/Default")
+            f.Add($"[AMP_RING_MATERIAL] Resources/{TDAmpRingView.MATERIAL_PATH}: {(mat == null ? "missing" : mat.shader.name)}, want Sprites/Default");
+
+        var go = new GameObject("AmpRingProbe") { hideFlags = HideFlags.HideAndDontSave };
+        try
+        {
+            var centre = new Vector3(3f, 0f, -5f);
+            go.transform.position = centre;
+            go.transform.localScale = Vector3.one * 3f;
+            go.transform.rotation = Quaternion.Euler(0f, 90f, 0f);
+
+            var ring = TDAmpRingView.Attach(go.transform);
+            var points = ring != null ? ring.WorldPoints() : new Vector3[0];
+            float want = TDConstant.LEAK_AMP_RADIUS * TDConstant.CONFIG_GRID_CELL_SIZE;
+            if (points.Length != TDAmpRingView.SEGMENTS)
+                f.Add($"[AMP_RING_RADIUS] {points.Length} points, want {TDAmpRingView.SEGMENTS}");
+            foreach (var p in points)
+            {
+                float r = new Vector2(p.x - centre.x, p.z - centre.z).magnitude;
+                if (Mathf.Abs(r - want) > 0.01f || Mathf.Abs(p.y - TDConstant.CONFIG_RANGE_HIGHLIGHT_Y) > 0.001f)
+                {
+                    f.Add($"[AMP_RING_RADIUS] point {p}: radius {r:F3} (want {want}), height {p.y:F3} (want {TDConstant.CONFIG_RANGE_HIGHLIGHT_Y}) under a parent scaled 3 and turned 90°");
+                    break;
+                }
+            }
+        }
+        finally { Object.DestroyImmediate(go); }
     }
 
     private static GameObject NewCard(GameObject prefab, TowerType type)

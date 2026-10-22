@@ -116,7 +116,7 @@ public static class TDBalanceValidator
         StartingGoldOneWriter(failures);
         ReusedTarget(failures);
         ReusedBolt(failures);
-        AuraVisual(failures, LoadConfig<TDFlyweightEnemyDataSettings>()?.GetAllEnemies());
+        AmpRingWired(failures, LoadConfig<TDFlyweightEnemyDataSettings>()?.GetAllEnemies());
         MoraleWired(failures);
         HpBarOnTop(failures);
         EndSfxWired(failures);
@@ -360,22 +360,78 @@ public static class TDBalanceValidator
         }
     }
 
-    // A Herald stops amplifying the moment it dies (it leaves the enemy registry). Its fear ring
-    // must go out with it, or the 1 s death clip reads as an aura still at work. The prefab is
-    // read from the enemy data the game spawns from, not found by a project-wide search.
-    private static void AuraVisual(List<string> f, IReadOnlyList<EnemyData> enemies)
+    // Tầng 4b §4.6: every enemy that amplifies leaks wears the amplifier ring and no other does — read
+    // from TDOperatorRegistry.AmplifiesLeaks, the rule the stress code itself uses, so a new amplifier
+    // type gets its ring for free. It goes out the moment the enemy starts dying (it has left the
+    // registry, so it amplifies nothing during the death clip) and comes back when the pool hands the
+    // same object out again. Herald's purple disc, which tinted the ground under every badge (Tầng 4
+    // A2), is gone. Prefabs are read from the enemy data the game spawns from.
+    private static void AmpRingWired(List<string> f, IReadOnlyList<EnemyData> enemies)
     {
+        const System.Reflection.BindingFlags I = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        const System.Reflection.BindingFlags S = System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic;
+
+        if (typeof(TDEnemyView).GetField("m_AuraVisual", I) != null)
+            f.Add("[AMP_RING_ON_AMPLIFIERS] TDEnemyView still has m_AuraVisual");
         var herald = enemies?.FirstOrDefault(e => e.type == EnemyType.Herald)?.prefab;
-        var view = herald != null ? herald.GetComponent<TDEnemyView>() : null;
-        if (view == null) { f.Add("[HERALD_AURA_WIRED] no Herald prefab with a TDEnemyView in the enemy data"); return; }
+        if (herald != null && herald.GetComponentsInChildren<Transform>(true).Any(t => t.name == "FearRing"))
+            f.Add("[AMP_RING_ON_AMPLIFIERS] Herald.prefab still has its FearRing disc");
+        if (enemies == null || enemies.Count == 0) { f.Add("[AMP_RING_ON_AMPLIFIERS] no enemy data"); return; }
 
-        var fi = typeof(TDEnemyView).GetField("m_AuraVisual",
-            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-        if (fi == null) { f.Add("[REFLECT] TDEnemyView.m_AuraVisual missing"); return; }
+        var die = typeof(TDEnemyView).GetMethod("Die", I);
+        var diedField = typeof(TDGameEventBus).GetField("OnEnemyDied", S);
+        if (die == null || diedField == null) { f.Add("[REFLECT] TDEnemyView.Die / TDGameEventBus.OnEnemyDied missing"); return; }
 
-        var ring = fi.GetValue(view) as GameObject;
-        if (ring == null || ring.name != "FearRing")
-            f.Add($"[HERALD_AURA_WIRED] m_AuraVisual is {(ring == null ? "unset" : ring.name)}, want FearRing");
+        // Initialize and Die reach controls that only exist in a running match: stand in fresh ones, and
+        // stash the bus as Lives does — a live effect manager would play a death from a validator run.
+        var savedControl = TDEnemyControl.api;
+        var savedRegistry = TDEnemyRegistry.api;
+        object savedDied = diedField.GetValue(null);
+        TDEnemyControl.api = new TDEnemyControl();
+        TDEnemyRegistry.api = new TDEnemyRegistry();
+        diedField.SetValue(null, null);
+        try
+        {
+            foreach (var data in enemies)
+            {
+                if (data?.prefab == null || data.prefab.GetComponent<TDEnemyView>() == null) continue;
+                var go = Object.Instantiate(data.prefab);
+                go.hideFlags = HideFlags.HideAndDontSave;
+                try
+                {
+                    var enemy = go.GetComponent<TDEnemyView>();
+                    TDMoraleValidator.SetField(f, enemy, "m_HPBarView", null); // Awake does not run in Edit Mode
+                    bool want = TDOperatorRegistry.AmplifiesLeaks(data.type);
+
+                    enemy.Initialize("amp-probe", 100f, 1f, 0f, 1f, 1f, 0, data.type);
+                    bool spawned = RingShown(go);
+                    die.Invoke(enemy, null); // a 1 s death clip, so it waits rather than returning to the pool
+                    bool dying = RingShown(go);
+                    enemy.Initialize("amp-probe", 100f, 1f, 0f, 1f, 1f, 0, data.type);
+                    bool reused = RingShown(go);
+
+                    if (spawned != want || dying || reused != want)
+                        f.Add($"[AMP_RING_ON_AMPLIFIERS] {data.type}: ring on spawn {spawned}, while dying {dying}, after pool reuse {reused}; amplifies {want}");
+                }
+                catch (System.Exception e)
+                {
+                    f.Add($"[AMP_RING_ON_AMPLIFIERS] {data.type}: {(e.InnerException ?? e).GetType().Name} {(e.InnerException ?? e).Message}");
+                }
+                finally { Object.DestroyImmediate(go); } // before the controls are put back: OnDestroy reads them
+            }
+        }
+        finally
+        {
+            TDEnemyControl.api = savedControl;
+            TDEnemyRegistry.api = savedRegistry;
+            diedField.SetValue(null, savedDied);
+        }
+    }
+
+    private static bool RingShown(GameObject enemy)
+    {
+        var ring = enemy.GetComponentInChildren<TDAmpRingView>(true);
+        return ring != null && ring.gameObject.activeSelf;
     }
 
     // Tầng 4 §4.5: the three morale cues are wired in the Effect Config, each with a clip and the
