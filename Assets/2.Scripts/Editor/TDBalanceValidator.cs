@@ -119,6 +119,7 @@ public static class TDBalanceValidator
         AuraVisual(failures, LoadConfig<TDFlyweightEnemyDataSettings>()?.GetAllEnemies());
         MoraleWired(failures);
         HpBarOnTop(failures);
+        EndSfxWired(failures);
 
         Density(failures);
         Dominance(failures);
@@ -433,6 +434,24 @@ public static class TDBalanceValidator
                     if (shader != TDMoraleIconView.ON_TOP_SHADER && shader != HPBAR_PROCEDURAL_ON_TOP_SHADER)
                         f.Add($"[HPBAR_ON_TOP] {prefab.name}/{g.name}: {shader}");
                 }
+    }
+
+    // Tầng 4b §4.2: TDEffectManager already plays these three, but the Effect Config had no entry for
+    // them, so losing a life, winning and losing were silent. A life is lost in bursts (a leaking pack,
+    // three at once for a death), so that one stays ordinary; the two match endings must never be dropped.
+    private static void EndSfxWired(List<string> f)
+    {
+        var all = LoadConfig<TDEffectConfig>()?.GetAll();
+        if (all == null) { f.Add("[END_SFX_WIRED] no Effect Config asset"); return; }
+
+        foreach (var (key, priority) in new[] { (GameEventKey.LifeLost, false), (GameEventKey.Victory, true), (GameEventKey.GameOver, true) })
+        {
+            var defs = all.Where(d => d.key == key).ToList();
+            if (defs.Count != 1) { f.Add($"[END_SFX_WIRED] {key}: {defs.Count} entries, want 1"); continue; }
+            var d0 = defs[0];
+            if (d0.sfxClip == null || !d0.onlySfx || d0.sfxPriority != priority)
+                f.Add($"[END_SFX_WIRED] {key}: clip {(d0.sfxClip == null ? "missing" : d0.sfxClip.name)}, onlySfx {d0.onlySfx}, priority {d0.sfxPriority} (want {priority})");
+        }
     }
 
     // Spec §5.7: the difficulty sets the opening purse, and it is the only writer. The HUD's
