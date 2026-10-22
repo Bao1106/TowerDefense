@@ -24,6 +24,7 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
     private float m_LastAttackTime = -999f;
     private float m_LastHitTime = -999f;
     private TDMoraleIconView m_MoraleIcon;
+    private MoraleState m_LastMoraleState;
     private TDBlockFullMarker m_BlockFullMarker; // melee only
 
     // The current stint — this stay on the field — for TDPressureProbe (spec §7.2).
@@ -88,6 +89,10 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         Morale = TDOperatorRoster.api?.MoraleOf(m_Data) ?? new TDOperatorMorale();
         Sp = TDOperatorRoster.api?.SpOf(m_Data) ?? new TDOperatorSp();
         TDOperatorRoster.api?.OnDeployed(m_Data);
+
+        // Seeded from where the career already stands, so stepping onto the field is not a band
+        // change: an operator back at ~84 after a death arrives Stressed without the warning cue.
+        m_LastMoraleState = Morale.State;
 
         m_MoraleIcon = TDMoraleIconView.Attach(transform);
         if (data != null && data.deployZone == DeployZone.PathCell) m_BlockFullMarker = TDBlockFullMarker.Attach(transform);
@@ -177,6 +182,16 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         Morale.Tick(deltaTime, ctx);
         m_MoraleIcon?.Refresh(Morale);
 
+        // Compared frame to frame rather than around Tick, so a band change caused elsewhere — a
+        // leak in the enemy's Update, a rescue from the selection panel — still gets its cue here.
+        var state = Morale.State;
+        switch (TDOperatorMorale.CueFor(m_LastMoraleState, state))
+        {
+            case MoraleCue.Stressed: TDGameEventBus.OperatorStressed(transform.position); break;
+            case MoraleCue.Recovered: TDGameEventBus.OperatorRecovered(transform.position); break;
+        }
+        m_LastMoraleState = state;
+
         // Asked of the model rather than detected by comparing IsBroken before and after Tick —
         // a leak latches this operator OUTSIDE that window (ReportLeak runs in the enemy's
         // Update), so the comparison never sees it. The break is announced on this operator's
@@ -189,6 +204,7 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
     {
         Debug.Log($"[Morale] {m_Data?.operatorName} suy sụp tại {m_MyCell}");
         TDPressureProbe.RecordCollapse();
+        TDGameEventBus.OperatorBroke(transform.position);
         TDOperatorRegistry.api?.BroadcastSpike(m_MyCell, TDConstant.STRESS_ALLY_BREAK_SPIKE, wasBreak: true);
 
         // Collapse (§06 · 3.1). The one thing that has to happen ON the transition — everyone

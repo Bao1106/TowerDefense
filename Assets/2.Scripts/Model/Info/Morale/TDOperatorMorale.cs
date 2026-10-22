@@ -83,6 +83,20 @@ public sealed class TDOperatorMorale
     /// <summary>Reports Broken while the latch holds, even though the value has fallen below 100.</summary>
     public MoraleState State => m_Broken ? MoraleState.Broken : StateOf(m_Value);
 
+    /// <summary>
+    /// The cue owed for a band change seen between two frames (Tầng 4 §4.5). Only the climb into
+    /// Stressed warns — sliding back down is good news nobody needs a beep for — and leaving
+    /// Broken by any road (rescue, a ranged operator calming down) is relief. Reaching Broken
+    /// returns None: the break is announced through ConsumeBreak, which also catches the
+    /// collapses latched outside this operator's own frame.
+    /// </summary>
+    public static MoraleCue CueFor(MoraleState prev, MoraleState now)
+    {
+        if (prev == MoraleState.Broken && now != MoraleState.Broken) return MoraleCue.Recovered;
+        if (prev < MoraleState.Stressed && now == MoraleState.Stressed) return MoraleCue.Stressed;
+        return MoraleCue.None;
+    }
+
     public static MoraleState StateOf(float value)
     {
         if (value >= TDConstant.STRESS_MAX) return MoraleState.Broken;

@@ -61,6 +61,7 @@ public static class TDMoraleValidator
         Lives(f);
         ZeroDamage(f);
         FallAnnouncesBreak(f);
+        MoraleCues(f);
         RescuerPick(f);
         RescueReach(f);
         LeakLog(f);
@@ -734,11 +735,16 @@ public static class TDMoraleValidator
     {
         var announce = typeof(TDOperatorView).GetMethod("AnnounceFall", BindingFlags.Instance | BindingFlags.NonPublic);
         var total = typeof(TDPressureProbe).GetField("s_TotalCollapses", BindingFlags.Static | BindingFlags.NonPublic);
-        if (announce == null || total == null) { f.Add("[REFLECT] TDOperatorView.AnnounceFall / TDPressureProbe.s_TotalCollapses missing"); return; }
+        var brokeField = typeof(TDGameEventBus).GetField("OnOperatorBroke", BindingFlags.Static | BindingFlags.NonPublic);
+        if (announce == null || total == null || brokeField == null) { f.Add("[REFLECT] TDOperatorView.AnnounceFall / TDPressureProbe.s_TotalCollapses / TDGameEventBus.OnOperatorBroke missing"); return; }
 
+        // Stashed as in Lives: a live effect manager would play the break sting from a validator run.
+        object savedBroke = brokeField.GetValue(null);
+        int broke = 0;
         var go = new GameObject("FallProbe") { hideFlags = HideFlags.HideAndDontSave };
         try
         {
+            brokeField.SetValue(null, (System.Action<Vector3>)(_ => broke++));
             var op = go.AddComponent<TDOperatorView>();
             var broken = At(TDConstant.STRESS_MAX); // collapsed, and nobody has reacted to it yet
             if (!SetField(f, op, "<Morale>k__BackingField", broken)) return;
@@ -747,9 +753,90 @@ public static class TDMoraleValidator
             announce.Invoke(op, null);
             if ((int)total.GetValue(null) != before + 1) f.Add("[FALL_ANNOUNCES_BREAK] dying with an unannounced break recorded no collapse");
             if (broken.ConsumeBreak()) f.Add("[FALL_CONSUMES_EDGE] the fall left the break pending");
+            if (broke != 1) f.Add($"[FALL_RAISES_BROKE] the fall raised OnOperatorBroke {broke} times, want 1");
         }
-        finally { Object.DestroyImmediate(go); }
+        finally
+        {
+            brokeField.SetValue(null, savedBroke);
+            Object.DestroyImmediate(go);
+        }
     }
+
+    // Tầng 4 §4.5: which transitions deserve a cue. The break has its own edge (AnnounceBreak), so
+    // CueFor only answers "warning on the way up" and "relief on the way out of a collapse".
+    private static void MoraleCues(List<string> f)
+    {
+        Cue(f, "CUE_STEADY_STRESSED", MoraleState.Steady, MoraleState.Stressed, MoraleCue.Stressed);
+        Cue(f, "CUE_CALM_STRESSED", MoraleState.Calm, MoraleState.Stressed, MoraleCue.Stressed);
+        Cue(f, "CUE_STRESSED_BROKEN", MoraleState.Stressed, MoraleState.Broken, MoraleCue.None);
+        Cue(f, "CUE_STEADY_BROKEN", MoraleState.Steady, MoraleState.Broken, MoraleCue.None);
+        Cue(f, "CUE_BROKEN_STEADY", MoraleState.Broken, MoraleState.Steady, MoraleCue.Recovered);
+        Cue(f, "CUE_BROKEN_STRESSED", MoraleState.Broken, MoraleState.Stressed, MoraleCue.Recovered);
+        Cue(f, "CUE_STRESSED_STEADY", MoraleState.Stressed, MoraleState.Steady, MoraleCue.None);
+        Cue(f, "CUE_CALM_CALM", MoraleState.Calm, MoraleState.Calm, MoraleCue.None);
+        Cue(f, "CUE_BROKEN_BROKEN", MoraleState.Broken, MoraleState.Broken, MoraleCue.None);
+
+        // Effect Config stores these as ints: a key that moves silently plays the wrong sound.
+        if ((int)GameEventKey.OperatorStressed != 16 || (int)GameEventKey.OperatorBroke != 17 || (int)GameEventKey.OperatorRecovered != 18)
+            f.Add($"[EVENT_KEY_VALUES] {(int)GameEventKey.OperatorStressed}/{(int)GameEventKey.OperatorBroke}/{(int)GameEventKey.OperatorRecovered}, want 16/17/18");
+
+        TickCues(f);
+    }
+
+    private static void Cue(List<string> f, string tag, MoraleState prev, MoraleState now, MoraleCue want)
+    {
+        var got = TDOperatorMorale.CueFor(prev, now);
+        if (got != want) f.Add($"[{tag}] {prev}→{now} gave {got}, want {want}");
+    }
+
+    // The view raises the cues frame to frame, whatever moved the stress in between.
+    private static void TickCues(List<string> f)
+    {
+        const BindingFlags S = BindingFlags.Static | BindingFlags.NonPublic;
+        var stressedField = typeof(TDGameEventBus).GetField("OnOperatorStressed", S);
+        var recoveredField = typeof(TDGameEventBus).GetField("OnOperatorRecovered", S);
+        var tick = typeof(TDOperatorView).GetMethod("TickMorale", BindingFlags.Instance | BindingFlags.NonPublic);
+        if (stressedField == null || recoveredField == null || tick == null) { f.Add("[REFLECT] TDGameEventBus.OnOperatorStressed / OnOperatorRecovered / TDOperatorView.TickMorale missing"); return; }
+
+        object savedStressed = stressedField.GetValue(null), savedRecovered = recoveredField.GetValue(null);
+        int stressed = 0, recovered = 0;
+        var go = new GameObject("CueProbe") { hideFlags = HideFlags.HideAndDontSave };
+        try
+        {
+            stressedField.SetValue(null, (System.Action<Vector3>)(_ => stressed++));
+            recoveredField.SetValue(null, (System.Action<Vector3>)(_ => recovered++));
+            var op = go.AddComponent<TDOperatorView>();
+            object[] frame = { 0.016f };
+
+            if (!Arm(f, op, At(70f), MoraleState.Steady)) return;
+            tick.Invoke(op, frame);
+            tick.Invoke(op, frame);
+            if (stressed != 1) f.Add($"[TICK_RAISES_STRESSED] Steady→Stressed raised {stressed} cues over two ticks, want 1");
+
+            var rescued = At(TDConstant.STRESS_MAX);
+            rescued.ConsumeBreak();
+            rescued.OnRescue();
+            if (rescued.IsBroken) { f.Add("[TICK_SETUP] OnRescue did not release the collapse"); return; }
+            stressed = 0;
+            if (!Arm(f, op, rescued, MoraleState.Broken)) return;
+            tick.Invoke(op, frame);
+            if (recovered != 1 || stressed != 0) f.Add($"[TICK_RAISES_RECOVERED] leaving Broken raised {recovered} recovered / {stressed} stressed, want 1 / 0");
+
+            recovered = 0;
+            if (!Arm(f, op, At(50f), MoraleState.Stressed)) return;
+            tick.Invoke(op, frame);
+            if (stressed != 0 || recovered != 0) f.Add($"[TICK_SILENT_DOWN] Stressed→Steady raised {stressed} / {recovered}, want 0 / 0");
+        }
+        finally
+        {
+            stressedField.SetValue(null, savedStressed);
+            recoveredField.SetValue(null, savedRecovered);
+            Object.DestroyImmediate(go);
+        }
+    }
+
+    private static bool Arm(List<string> f, TDOperatorView op, TDOperatorMorale morale, MoraleState last)
+        => SetField(f, op, "<Morale>k__BackingField", morale) & SetField(f, op, "m_LastMoraleState", last);
 
     // Rescue pressed on the collapsed operator picks the rescuer for the player (playtest
     // 2026-10-22): the calmest neighbour who can pay, since they take RESCUE_RESCUER_STRESS; more
