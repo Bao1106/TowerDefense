@@ -63,6 +63,7 @@ public static class TDMoraleValidator
         FallAnnouncesBreak(f);
         MoraleCues(f);
         SfxVoices(f);
+        IconRendering(f);
         RescuerPick(f);
         RescueReach(f);
         LeakLog(f);
@@ -849,6 +850,42 @@ public static class TDMoraleValidator
         Voice(f, "SFX_PICK_NORMAL_DROPPED", new[] { T, T, T }, new[] { 3f, 1f, 2f }, new[] { F, F, F }, false, -1);
         Voice(f, "SFX_PICK_KEEPS_PRIORITY", new[] { T, T, T }, new[] { 0f, 5f, 1f }, new[] { T, F, T }, true, 1);
         Voice(f, "SFX_PICK_ALL_PRIORITY", new[] { T, T, T }, new[] { 0f, 5f, 1f }, new[] { T, T, T }, true, -1);
+    }
+
+    // Tầng 4 §4.2, §4.4: the badge draws over 3D models — a boss standing on the line hid it
+    // completely — and its scale lives on a "Badge" child, so what sits beside it is not scaled too.
+    private static void IconRendering(List<string> f)
+    {
+        var go = new GameObject("IconProbe") { hideFlags = HideFlags.HideAndDontSave };
+        try
+        {
+            var icon = TDMoraleIconView.Attach(go.transform);
+            if (icon == null) { f.Add("[ICON_ATTACH] TDMoraleIconView.Attach returned null — sprites missing?"); return; }
+
+            foreach (var g in icon.GetComponentsInChildren<UnityEngine.UI.Graphic>(true))
+            {
+                var mat = g is TMPro.TMP_Text t ? t.fontSharedMaterial : g.material;
+                if (mat == null || mat.GetInt("unity_GUIZTestMode") != (int)UnityEngine.Rendering.CompareFunction.Always)
+                    f.Add($"[ICON_ON_TOP] {g.name} is depth-tested: a model standing in front hides it");
+            }
+
+            icon.Refresh(At(10f));
+            var badge = icon.transform.Find("Badge");
+            float baseScale = GetField<float>(icon, "m_BaseScale");
+            if (badge == null || Mathf.Abs(icon.transform.localScale.x - baseScale) > 1e-6f)
+                f.Add($"[ICON_BADGE_SCALED] root scale {icon.transform.localScale.x:F5} vs base {baseScale:F5}, Badge child {(badge != null ? "present" : "missing")}");
+
+            var outline = badge != null ? badge.Find("Outline")?.GetComponent<UnityEngine.UI.Image>() : null;
+            ColorUtility.TryParseHtmlString(TDConstant.COLOR_MORALE_BROKEN, out var indigo);
+            icon.Refresh(At(TDConstant.STRESS_MAX));
+            bool shownBroken = outline != null && outline.enabled;
+            bool rightColour = outline != null && Mathf.Abs(outline.color.r - indigo.r) + Mathf.Abs(outline.color.g - indigo.g) + Mathf.Abs(outline.color.b - indigo.b) < 0.03f;
+            icon.Refresh(At(10f));
+            bool shownCalm = outline != null && outline.enabled;
+            if (!shownBroken || !rightColour || shownCalm)
+                f.Add($"[BROKEN_OUTLINE] outline {(outline != null ? "present" : "missing")}: on when Broken {shownBroken}, indigo {rightColour}, on when Calm {shownCalm}");
+        }
+        finally { Object.DestroyImmediate(go); }
     }
 
     private static void Voice(List<string> f, string tag, bool[] playing, float[] startedAt, bool[] priority, bool want, int expect)

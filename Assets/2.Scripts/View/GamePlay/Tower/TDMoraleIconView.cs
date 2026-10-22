@@ -1,5 +1,7 @@
+using System.Collections.Generic;
 using TDEnums;
 using UnityEngine;
+using UnityEngine.Rendering;
 using UnityEngine.UI;
 
 /// <summary>
@@ -23,7 +25,7 @@ public sealed class TDMoraleIconView : MonoBehaviour
     //
     // Up-and-right of the operator rather than centred over the head — the retreat panel opens
     // centred, so the thing telling the player WHETHER to pull out would sit under the thing
-    // used to DO it. On screen (camera pitched 30°) that lands ~0.55 up and ~0.47 right of the
+    // used to DO it. On screen (camera pitched 40°) that lands ~0.55 up and ~0.47 right of the
     // operator's feet; the -0.855 on z is what carries it 1.3 units toward the camera, clear of
     // the model it was otherwise buried in.
     private static readonly Vector3 OFFSET = new Vector3(0.465f, 1.125f, -0.855f);
@@ -38,6 +40,10 @@ public sealed class TDMoraleIconView : MonoBehaviour
     // Dark disc behind the face. Without it the icon competes with whatever tile happens to
     // be under it; with it, every icon sits on the same background whatever the map does.
     private const float DISC_SCALE = 1.05f;
+
+    // Broken's edge on pale ground (Tầng 4 §4.2): ~3 px at 1080p, where one canvas unit is ~0.54 px.
+    // A tower platform measured #C6DAFC — the pale disc melted into it and only the symbol was left.
+    private const float OUTLINE_UNITS = 5.6f;
 
     // Stressed pulses. 2.4-5.5 seconds is all the warning that band gives under heavy
     // pressure (§10), so a static icon is not a signal — it has to move to be noticed.
@@ -75,15 +81,35 @@ public sealed class TDMoraleIconView : MonoBehaviour
 
     private static Sprite[] s_Sprites;
     private static Sprite s_Disc;
+    private static readonly Dictionary<float, Sprite> s_Rings = new();
+    private static Material s_OnTop;
 
     private float m_LeakPulseStart = float.NegativeInfinity;
 
     private CanvasGroup m_Group;
     private float m_BaseScale;
     private Transform m_Owner;
+    private RectTransform m_Badge;
     private Image m_Disc;
     private Image m_Backdrop;
     private Image m_Face;
+    private Image m_Outline;
+
+    /// <summary>
+    /// The UI material with depth testing switched off. A world-space canvas is depth-tested like
+    /// any mesh, so a boss standing on the line hid the badge completely (Tầng 4 §1.2 A1) — the
+    /// one moment it mattered most. Shared by everything morale draws, the rescue arc included.
+    /// </summary>
+    public static Material OnTopMaterial
+    {
+        get
+        {
+            if (s_OnTop != null) return s_OnTop;
+            s_OnTop = new Material(Canvas.GetDefaultCanvasMaterial()) { name = "MoraleOnTop", hideFlags = HideFlags.HideAndDontSave };
+            s_OnTop.SetInt("unity_GUIZTestMode", (int)CompareFunction.Always);
+            return s_OnTop;
+        }
+    }
     private MoraleState m_Shown = (MoraleState)(-1);
 
     /// <summary>
@@ -115,6 +141,37 @@ public sealed class TDMoraleIconView : MonoBehaviour
         tex.Apply();
         s_Disc = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
         return s_Disc;
+    }
+
+    /// <summary>
+    /// A ring whose band is `thickness` of its radius, generated once per thickness for the same
+    /// reason as the disc. 256 px so the thinnest band still has a few texels to feather.
+    /// </summary>
+    private static Sprite RingSprite(float thickness)
+    {
+        if (s_Rings.TryGetValue(thickness, out var cached) && cached != null) return cached;
+
+        const int size = 256;
+        const float r = size * 0.5f;
+        float inner = r * (1f - thickness);
+        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
+        {
+            hideFlags = HideFlags.HideAndDontSave,
+            filterMode = FilterMode.Bilinear,
+        };
+
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                float d = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), new Vector2(r, r));
+                float a = Mathf.Clamp01(r - d) * Mathf.Clamp01(d - inner); // feathered on both rims
+                tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+            }
+
+        tex.Apply();
+        var sprite = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
+        s_Rings[thickness] = sprite;
+        return sprite;
     }
 
     /// <summary>Creates the icon under `owner` and returns it. Null if the art is missing.</summary>
@@ -168,20 +225,37 @@ public sealed class TDMoraleIconView : MonoBehaviour
         // the Stressed disc pulse keeps modulating its own alpha underneath, untouched.
         m_Group = gameObject.AddComponent<CanvasGroup>();
 
+        // The badge's own scale (band weight, leak beat) lives on this child, not on the root,
+        // so what sits beside the badge — the BROKEN label, the rings — is not scaled with it.
+        var badgeGo = new GameObject("Badge", typeof(RectTransform));
+        m_Badge = (RectTransform)badgeGo.transform;
+        m_Badge.SetParent(rect, worldPositionStays: false);
+        m_Badge.anchorMin = Vector2.zero;
+        m_Badge.anchorMax = Vector2.one;
+        m_Badge.offsetMin = Vector2.zero;
+        m_Badge.offsetMax = Vector2.zero;
+
         // Disc first, so everything else sits on a known background instead of on the map.
-        m_Disc = NewImage("Disc", rect);
+        m_Disc = NewImage("Disc", m_Badge);
         m_Disc.sprite = DiscSprite();
         m_Disc.color = new Color(0.05f, 0.05f, 0.07f, 0.72f);
         ((RectTransform)m_Disc.transform).localScale = Vector3.one * DISC_SCALE;
 
+        // Broken's rim, the disc's size exactly, shown only in that state.
+        m_Outline = NewImage("Outline", m_Badge);
+        m_Outline.sprite = RingSprite(OUTLINE_UNITS / (PIXELS * DISC_SCALE * 0.5f));
+        m_Outline.color = Hex(TDConstant.COLOR_MORALE_BROKEN);
+        m_Outline.enabled = false;
+        ((RectTransform)m_Outline.transform).localScale = Vector3.one * DISC_SCALE;
+
         // Backdrop: the same face at low alpha. It keeps the silhouette readable while the
         // coloured layer drains away, so an operator near the end of a band still shows
         // WHICH band rather than fading to nothing.
-        m_Backdrop = NewImage("Backdrop", rect);
+        m_Backdrop = NewImage("Backdrop", m_Badge);
         m_Backdrop.color = new Color(1f, 1f, 1f, 0.25f);
 
         // Face: the coloured layer, drained top-down as stress fills the band.
-        m_Face = NewImage("Face", rect);
+        m_Face = NewImage("Face", m_Badge);
         m_Face.type = Image.Type.Filled;
         m_Face.fillMethod = Image.FillMethod.Vertical;
         m_Face.fillOrigin = (int)Image.OriginVertical.Bottom; // drains from the top down
@@ -199,6 +273,7 @@ public sealed class TDMoraleIconView : MonoBehaviour
 
         var img = go.GetComponent<Image>();
         img.raycastTarget = false;
+        img.material = OnTopMaterial;
         return img;
     }
 
@@ -220,8 +295,9 @@ public sealed class TDMoraleIconView : MonoBehaviour
         var weight = k_Weight[Mathf.Clamp((int)state, 0, k_Weight.Length - 1)];
         float beat = (Time.time - m_LeakPulseStart) / LEAK_PULSE_SECONDS;
         float leak = beat >= 0f && beat < 1f ? LEAK_PULSE_GAIN * Mathf.Sin(beat * Mathf.PI) : 0f;
-        transform.localScale = Vector3.one * (m_BaseScale * weight.scale * (1f + leak));
+        m_Badge.localScale = Vector3.one * (weight.scale * (1f + leak));
         if (m_Group != null) m_Group.alpha = weight.alpha;
+        m_Outline.enabled = state == MoraleState.Broken;
 
         Color colour = ColourFor(state);
 
