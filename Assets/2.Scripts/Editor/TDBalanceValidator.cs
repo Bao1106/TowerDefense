@@ -118,6 +118,7 @@ public static class TDBalanceValidator
         ReusedBolt(failures);
         AuraVisual(failures, LoadConfig<TDFlyweightEnemyDataSettings>()?.GetAllEnemies());
         MoraleWired(failures);
+        HpBarOnTop(failures);
 
         Density(failures);
         Dominance(failures);
@@ -406,6 +407,32 @@ public static class TDBalanceValidator
             if (defs[0].sfxClip == null || !defs[0].sfxPriority)
                 f.Add($"[MORALE_SFX_WIRED] {key}: clip {(defs[0].sfxClip == null ? "missing" : defs[0].sfxClip.name)}, priority {defs[0].sfxPriority}");
         }
+    }
+
+    // The ProceduralImage twin of Custom/UI_AlwaysOnTop, used by HPBar_ProceduralAlwaysOnTop.mat.
+    private const string HPBAR_PROCEDURAL_ON_TOP_SHADER = "UI/Procedural UI Image AlwaysOnTop";
+
+    // Tầng 4b §4.1: every part of every HP bar draws with a ZTest Always shader. One of the three
+    // images in each bar prefab was left on the default material, so a model standing in front cut
+    // a piece out of the bar. Sorting order cannot fix that — it orders canvases, not 3D depth.
+    // Prefabs are read from the data the game spawns from, not found by a project-wide search.
+    private static void HpBarOnTop(List<string> f)
+    {
+        var prefabs = new List<GameObject>();
+        var ops = LoadConfig<TDFlyweightOperatorDataSettings>()?.GetAllOperators();
+        if (ops != null) prefabs.AddRange(ops.Select(o => o.operatorPrefab));
+        var enemies = LoadConfig<TDFlyweightEnemyDataSettings>()?.GetAllEnemies();
+        if (enemies != null) prefabs.AddRange(enemies.Select(e => e.prefab));
+        if (prefabs.Count == 0) { f.Add("[HPBAR_ON_TOP] no operator or enemy data"); return; }
+
+        foreach (var prefab in prefabs.Where(p => p != null).Distinct())
+            foreach (var bar in prefab.GetComponentsInChildren<TDHPBarView>(true))
+                foreach (var g in bar.GetComponentsInChildren<UnityEngine.UI.Graphic>(true))
+                {
+                    string shader = g.material != null ? g.material.shader.name : "none";
+                    if (shader != TDMoraleIconView.ON_TOP_SHADER && shader != HPBAR_PROCEDURAL_ON_TOP_SHADER)
+                        f.Add($"[HPBAR_ON_TOP] {prefab.name}/{g.name}: {shader}");
+                }
     }
 
     // Spec §5.7: the difficulty sets the opening purse, and it is the only writer. The HUD's
