@@ -6,7 +6,7 @@ using UnityEngine;
 public class TDEnemyView : MonoBehaviour
 {
     [SerializeField] private TDHPBarView m_HPBarView;
-    [SerializeField] private GameObject m_AuraVisual; // Herald's FearRing; none on other enemies
+    private TDAmpRingView m_AmpRing; // built on first need, only for enemies that amplify leaks
 
     private Animator m_Animator;
     private List<Vector3> m_PathsPosition = new List<Vector3>();
@@ -46,7 +46,6 @@ public class TDEnemyView : MonoBehaviour
         // A Horde has no bar. Unity hands an unassigned field over as a fake null that `?.`
         // does not see, so make it a real one.
         if (m_HPBarView == null) m_HPBarView = null;
-        if (m_AuraVisual == null) m_AuraVisual = null;
     }
 
     public void Initialize(string key, float hp, float speed,
@@ -81,7 +80,7 @@ public class TDEnemyView : MonoBehaviour
             m_Animator.Update(0f);
         }
         m_HPBarView?.ResetBar();
-        m_AuraVisual?.SetActive(true); // back on for a pooled Herald that last went out dying
+        ShowAmpRing(TDOperatorRegistry.AmplifiesLeaks(enemyType)); // back on for a pooled amplifier that last went out dying
         TriggerSafe(TDConstant.ANIM_TRIGGER_WALK);
 
         TDEnemyControl.api.onGetEnemyPathPos += OnGetEnemyPathPos;
@@ -149,12 +148,20 @@ public class TDEnemyView : MonoBehaviour
 
         TriggerSafe(TDConstant.ANIM_TRIGGER_DIE);
         // It left the registry above, so it no longer amplifies anything; the ring says so too.
-        m_AuraVisual?.SetActive(false);
+        ShowAmpRing(false);
 
         if (m_DieDuration > 0f)
             StartCoroutine(ReturnAfterDelay(m_DieDuration));
         else
             PoolReturn();
+    }
+
+    // Tầng 4b §4.6: whoever AmplifiesLeaks wears the ring — the boss and the Herald today, any new
+    // amplifier tomorrow — so the rule lives in one place and no prefab has to remember to carry it.
+    private void ShowAmpRing(bool on)
+    {
+        if (on && m_AmpRing == null) m_AmpRing = TDAmpRingView.Attach(transform);
+        if (m_AmpRing != null) m_AmpRing.Show(on);
     }
 
     private IEnumerator ReturnAfterDelay(float delay)

@@ -35,12 +35,69 @@ public class TDSlotHolderItemView : MonoBehaviour
     /// <summary>Selectable but for the deploy cap — the one refusal the cap counter should flash for.</summary>
     public bool BlockedOnlyByCap(int gold) => gold >= Cost && IsAvailable && (TDDeployCap.api?.IsFull ?? false);
 
+    // Canvas units against the card icon's 144: big enough to read at a glance, tucked into the top-left
+    // corner so it never covers the price tag in the bottom-right one (Tầng 4b §4.5).
+    public const float MORALE_BADGE_SIZE = 56f;
+    private static readonly Vector2 k_BadgeInset = new Vector2(8f, -8f);
+
+    private TDMoraleBadge m_Badge;
+    private GameObject m_BadgeRoot;
+
+    /// <summary>
+    /// Whether an operator's card wears their morale badge: on the field, or still carrying stress or a
+    /// cooldown from their last stint. The roster keeps stress when they leave, so a Stressed badge on a
+    /// card says "don't drop them back in yet". A fresh, rested operator's card stays clean.
+    /// </summary>
+    public static bool ShowMoraleOnCard(bool deployed, float value, float retreatCooldown)
+        => deployed || value > 0f || retreatCooldown > 0f;
+
+    /// <summary>Shows or hides the badge for `morale` and feeds it. Update calls this with roster data.</summary>
+    public void ShowMorale(TDOperatorMorale morale, bool deployed)
+    {
+        if (m_Badge == null || morale == null) return;
+
+        bool show = ShowMoraleOnCard(deployed, morale.Value, morale.RetreatCooldown);
+        if (m_BadgeRoot.activeSelf != show) m_BadgeRoot.SetActive(show);
+        if (show) m_Badge.Refresh(morale);
+    }
+
     public void SetupSlot(TDTowerSlotInfo slot)
     {
         m_UnitType = slot.towerType;
         m_OperatorData = slot.operatorData;
         SetupSlotCost(slot.cost);
         SetupIcon(slot.icon);
+        if (m_UnitType == TDEnums.TowerType.Operator) BuildMoraleBadge();
+    }
+
+    private void Update()
+    {
+        // Read straight from the roster every frame rather than on events: stress moves continuously
+        // and off-field recovery has no event at all. One dictionary lookup per card, eight cards at most.
+        var roster = TDOperatorRoster.api;
+        if (m_Badge == null || roster == null) return;
+        ShowMorale(roster.MoraleOf(m_OperatorData), roster.IsDeployed(m_OperatorData));
+    }
+
+    private void BuildMoraleBadge()
+    {
+        if (m_BadgeRoot != null) return;
+
+        var go = new GameObject("MoraleBadge", typeof(RectTransform), typeof(LayoutElement));
+        go.GetComponent<LayoutElement>().ignoreLayout = true;
+        var rt = (RectTransform)go.transform;
+        rt.SetParent(transform, worldPositionStays: false);
+        rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0f, 1f);
+        rt.anchoredPosition = k_BadgeInset;
+        rt.sizeDelta = Vector2.one * MORALE_BADGE_SIZE;
+        // Last child, over the DisabledOverlay: the card greys out while its operator is on the field,
+        // which is exactly when the badge has to be read in full colour.
+        rt.SetAsLastSibling();
+
+        // The HUD is a screen-space overlay, so nothing 3D can cover it: the canvas default material.
+        m_Badge = TDMoraleBadge.Build(rt, null);
+        m_BadgeRoot = go;
+        go.SetActive(false);
     }
 
     public void SetupSlotHolderVariables()

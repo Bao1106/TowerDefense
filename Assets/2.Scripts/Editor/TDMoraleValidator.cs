@@ -64,6 +64,10 @@ public static class TDMoraleValidator
         MoraleCues(f);
         SfxVoices(f);
         IconRendering(f);
+        BadgeLayers(f);
+        GreyLevels(f);
+        CardBadge(f);
+        AmpRing(f);
         BreakTiming(f);
         RescueArc(f);
         RescuerPick(f);
@@ -901,6 +905,171 @@ public static class TDMoraleValidator
                 f.Add($"[LABEL_CLEARS_ON_RECOVERY] kept while Broken {keptWhileBroken}, cleared once not Broken {clearedOnRecovery}");
         }
         finally { Object.DestroyImmediate(go); }
+    }
+
+    // Tầng 4b §4.3: the badge's four layers come from TDMoraleBadge, the one piece the floating icon
+    // and the slot-bar card share. Order matters — each layer sits on the one before, and the break's
+    // flash goes right over the disc — and no layer may take a tap: on the card it lies over the button.
+    private static void BadgeLayers(List<string> f)
+    {
+        var go = new GameObject("BadgeProbe", typeof(RectTransform)) { hideFlags = HideFlags.HideAndDontSave };
+        try
+        {
+            var badge = TDMoraleBadge.Build((RectTransform)go.transform, null);
+            if (badge == null) { f.Add("[BADGE_LAYERS] Build returned null"); return; }
+
+            string built = ChildNames(go.transform);
+            if (built != "Disc,Outline,Backdrop,Face") f.Add($"[BADGE_LAYERS] built {built}, want Disc,Outline,Backdrop,Face");
+            foreach (var g in go.GetComponentsInChildren<UnityEngine.UI.Graphic>(true))
+                if (g.raycastTarget) f.Add($"[BADGE_LAYERS] {g.name} takes raycasts");
+
+            var icon = TDMoraleIconView.Attach(go.transform);
+            var inIcon = icon != null ? icon.transform.Find("Badge") : null;
+            string iconLayers = inIcon != null ? ChildNames(inIcon) : "none";
+            if (iconLayers != "Disc,Flash,Outline,Backdrop,Face")
+                f.Add($"[BADGE_LAYERS] icon Badge has {iconLayers}, want Disc,Flash,Outline,Backdrop,Face");
+        }
+        finally { Object.DestroyImmediate(go); }
+    }
+
+    // Tầng 4b §4.4 (C8): in greyscale Steady and Stressed both read as "dark disc with a face" (Tầng 4
+    // A5). Their discs now take their own colour, opaque, so the four discs sit at four grey levels
+    // whatever the ground under them: Calm < Stressed < Steady < Broken, each step at least 40 apart.
+    private static void GreyLevels(List<string> f)
+    {
+        float Luma(Color c) => 255f * (0.299f * c.r + 0.587f * c.g + 0.114f * c.b);
+
+        float calm = Luma(TDMoraleBadge.DiscColour(MoraleState.Calm, 0f));
+        float stressedLow = Luma(TDMoraleBadge.DiscColour(MoraleState.Stressed, 1f)); // darkest point of the pulse
+        float stressedHigh = Luma(TDMoraleBadge.DiscColour(MoraleState.Stressed, 0f));
+        float steady = Luma(TDMoraleBadge.DiscColour(MoraleState.Steady, 0f));
+        float broken = Luma(TDMoraleBadge.DiscColour(MoraleState.Broken, 0f));
+
+        Near(f, "C8_GREY_CALM", calm, 13f, 3f);
+        Near(f, "C8_GREY_STRESSED_LOW", stressedLow, 70f, 3f);
+        Near(f, "C8_GREY_STRESSED_HIGH", stressedHigh, 100f, 3f);
+        Near(f, "C8_GREY_STEADY", steady, 148f, 3f);
+        Near(f, "C8_GREY_BROKEN", broken, 205f, 3f);
+        if (stressedLow - calm < 40f || steady - stressedHigh < 40f || broken - steady < 40f)
+            f.Add($"[C8_GREY_LEVELS] gaps calm→stressed {stressedLow - calm:F0}, stressed→steady {steady - stressedHigh:F0}, steady→broken {broken - steady:F0}; want ≥ 40 each");
+
+        if (TDMoraleBadge.DiscColour(MoraleState.Steady, 0f).a < 0.999f || TDMoraleBadge.DiscColour(MoraleState.Stressed, 0.5f).a < 0.999f)
+            f.Add("[C8_GREY_LEVELS] Steady/Stressed disc is not opaque, so its grey depends on the ground");
+
+        ColorUtility.TryParseHtmlString(TDMoraleBadge.COLOR_MORALE_FACE_ON_FILL, out var dark);
+        if (TDMoraleBadge.FaceColour(MoraleState.Steady) != dark || TDMoraleBadge.FaceColour(MoraleState.Stressed) != dark)
+            f.Add($"[C8_GREY_LEVELS] face on a filled disc is {TDMoraleBadge.FaceColour(MoraleState.Steady)} / {TDMoraleBadge.FaceColour(MoraleState.Stressed)}, want {TDMoraleBadge.COLOR_MORALE_FACE_ON_FILL}");
+    }
+
+    // Tầng 4b §4.5: an operator's card in the slot bar wears the same badge as their head, while they
+    // are on the field or still carry stress or a cooldown — the roster keeps stress when they leave,
+    // so a Stressed badge on a card says "don't drop them back in yet". The badge lies over the card's
+    // corner, so it must never take the tap that lifts the operator.
+    private static void CardBadge(List<string> f)
+    {
+        if (TDSlotHolderItemView.ShowMoraleOnCard(false, 0f, 0f) || !TDSlotHolderItemView.ShowMoraleOnCard(true, 0f, 0f)
+            || !TDSlotHolderItemView.ShowMoraleOnCard(false, 40f, 0f) || !TDSlotHolderItemView.ShowMoraleOnCard(false, 0f, 5f))
+            f.Add($"[CARD_BADGE_VISIBILITY] fresh {TDSlotHolderItemView.ShowMoraleOnCard(false, 0f, 0f)} (want false), deployed {TDSlotHolderItemView.ShowMoraleOnCard(true, 0f, 0f)}, off-field stressed {TDSlotHolderItemView.ShowMoraleOnCard(false, 40f, 0f)}, cooling down {TDSlotHolderItemView.ShowMoraleOnCard(false, 0f, 5f)} (want true)");
+
+        var prefab = Resources.Load<GameObject>("Prefabs/SlotHolder");
+        if (prefab == null) { f.Add("[CARD_BADGE] no Resources/Prefabs/SlotHolder"); return; }
+
+        var turret = NewCard(prefab, TowerType.Cannon);
+        var card = NewCard(prefab, TowerType.Operator);
+        var probe = new GameObject("CardIconProbe") { hideFlags = HideFlags.HideAndDontSave };
+        try
+        {
+            if (turret.transform.Find("MoraleBadge") != null) f.Add("[CARD_BADGE_VISIBILITY] a turret card has a morale badge");
+
+            var holder = card.GetComponent<TDSlotHolderItemView>();
+            var badge = card.transform.Find("MoraleBadge");
+            var icon = TDMoraleIconView.Attach(probe.transform);
+            if (badge == null || icon == null) { f.Add($"[BADGE_SAME_ON_CARD] card badge {(badge != null ? "present" : "missing")}, icon {(icon != null ? "present" : "missing")}"); return; }
+
+            var cardDisc = badge.Find("Disc").GetComponent<UnityEngine.UI.Image>();
+            var cardFace = badge.Find("Face").GetComponent<UnityEngine.UI.Image>();
+            var iconDisc = icon.transform.Find("Badge/Disc").GetComponent<UnityEngine.UI.Image>();
+            var iconFace = icon.transform.Find("Badge/Face").GetComponent<UnityEngine.UI.Image>();
+            foreach (float v in new[] { 10f, 50f, 80f, 100f })
+            {
+                holder.ShowMorale(At(v), true);
+                icon.Refresh(At(v));
+                if (!badge.gameObject.activeSelf || !Same(cardDisc.color, iconDisc.color) || !Same(cardFace.color, iconFace.color))
+                    f.Add($"[BADGE_SAME_ON_CARD] stress {v}: shown {badge.gameObject.activeSelf}, disc {cardDisc.color} vs {iconDisc.color}, face {cardFace.color} vs {iconFace.color}");
+            }
+
+            holder.ShowMorale(At(0f), false);
+            if (badge.gameObject.activeSelf) f.Add("[BADGE_SAME_ON_CARD] still shown for a rested operator off the field");
+
+            foreach (var g in badge.GetComponentsInChildren<UnityEngine.UI.Graphic>(true))
+                if (g.raycastTarget) f.Add($"[CARD_BADGE_NO_RAYCAST] {g.name} takes raycasts: a press on the card's corner would not lift the operator");
+        }
+        finally
+        {
+            Object.DestroyImmediate(turret);
+            Object.DestroyImmediate(card);
+            Object.DestroyImmediate(probe);
+        }
+    }
+
+    // Tầng 4b §4.6: the amplifier's ring is exactly the reach the stress code uses — LEAK_AMP_RADIUS
+    // cells — flat at the range-highlight height, however the boss is scaled or turned. Its material
+    // is an asset: a shader only code asks for by name can be stripped from a build.
+    private static void AmpRing(List<string> f)
+    {
+        var mat = Resources.Load<Material>(TDAmpRingView.MATERIAL_PATH);
+        if (mat == null || mat.shader.name != "Sprites/Default")
+            f.Add($"[AMP_RING_MATERIAL] Resources/{TDAmpRingView.MATERIAL_PATH}: {(mat == null ? "missing" : mat.shader.name)}, want Sprites/Default");
+
+        var go = new GameObject("AmpRingProbe") { hideFlags = HideFlags.HideAndDontSave };
+        try
+        {
+            var centre = new Vector3(3f, 0f, -5f);
+            go.transform.position = centre;
+            go.transform.localScale = Vector3.one * 3f;
+            go.transform.rotation = Quaternion.Euler(0f, 90f, 0f);
+
+            var ring = TDAmpRingView.Attach(go.transform);
+            var points = ring != null ? ring.WorldPoints() : new Vector3[0];
+            float want = TDConstant.LEAK_AMP_RADIUS * TDConstant.CONFIG_GRID_CELL_SIZE;
+            if (points.Length != TDAmpRingView.SEGMENTS)
+                f.Add($"[AMP_RING_RADIUS] {points.Length} points, want {TDAmpRingView.SEGMENTS}");
+            foreach (var p in points)
+            {
+                float r = new Vector2(p.x - centre.x, p.z - centre.z).magnitude;
+                if (Mathf.Abs(r - want) > 0.01f || Mathf.Abs(p.y - TDConstant.CONFIG_RANGE_HIGHLIGHT_Y) > 0.001f)
+                {
+                    f.Add($"[AMP_RING_RADIUS] point {p}: radius {r:F3} (want {want}), height {p.y:F3} (want {TDConstant.CONFIG_RANGE_HIGHLIGHT_Y}) under a parent scaled 3 and turned 90°");
+                    break;
+                }
+            }
+        }
+        finally { Object.DestroyImmediate(go); }
+    }
+
+    private static GameObject NewCard(GameObject prefab, TowerType type)
+    {
+        var go = Object.Instantiate(prefab);
+        go.hideFlags = HideFlags.HideAndDontSave;
+        var holder = go.GetComponent<TDSlotHolderItemView>();
+        holder.SetupSlotHolderVariables();
+        holder.SetupSlot(new TDTowerSlotInfo
+        {
+            towerType = type,
+            operatorData = type == TowerType.Operator ? new OperatorData() : null,
+            cost = 10,
+        });
+        return go;
+    }
+
+    private static bool Same(Color a, Color b)
+        => Mathf.Abs(a.r - b.r) < 0.01f && Mathf.Abs(a.g - b.g) < 0.01f && Mathf.Abs(a.b - b.b) < 0.01f && Mathf.Abs(a.a - b.a) < 0.01f;
+
+    private static string ChildNames(Transform parent)
+    {
+        var names = new List<string>();
+        foreach (Transform child in parent) names.Add(child.name);
+        return string.Join(",", names);
     }
 
     // Tầng 4 §4.1: the break moment's rhythm, as pure functions so the numbers the spec pins are
