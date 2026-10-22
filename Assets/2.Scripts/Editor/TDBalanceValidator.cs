@@ -115,6 +115,7 @@ public static class TDBalanceValidator
         HordeTime(failures);
         StartingGoldOneWriter(failures);
         ReusedTarget(failures);
+        ReusedBolt(failures);
         AuraVisual(failures, LoadConfig<TDFlyweightEnemyDataSettings>()?.GetAllEnemies());
 
         Density(failures);
@@ -310,6 +311,50 @@ public static class TDBalanceValidator
             if (hp != 90f) f.Add($"[HIT_CONTROL] the shot at its own target left hp {hp}, want 90");
         }
         finally { Object.DestroyImmediate(go); }
+    }
+
+    // Same pool hazard for turret bolts, which home every frame: once the target leaves (dies, or
+    // reaches the gate) and the object comes back as a new enemy, the bolt must stop following it
+    // and finish at the last known position — not cross the map after the newcomer.
+    private static void ReusedBolt(List<string> f)
+    {
+        var enemyGo = new GameObject("ReusedBoltEnemy") { hideFlags = HideFlags.HideAndDontSave };
+        var boltGo = new GameObject("ReusedBoltProbe") { hideFlags = HideFlags.HideAndDontSave };
+        try
+        {
+            // Both points far from the bolt (at the origin): it must never arrive during the test —
+            // OnImpact would release it into the static bullet pool.
+            enemyGo.transform.position = new Vector3(100f, 0f, 0f);
+            var enemy = enemyGo.AddComponent<TDEnemyView>();
+            var bolt = boltGo.AddComponent<TDAttackVFX>();
+            var lastKnown = new Vector3(-100f, 0f, 0f);
+            var update = typeof(TDAttackVFX).GetMethod("Update",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+
+            bool ok = TDMoraleValidator.SetField(f, enemy, "m_HPBarView", null)
+                    & TDMoraleValidator.SetField(f, enemy, "m_SpawnId", 2)
+                    & TDMoraleValidator.SetField(f, bolt, "m_Target", enemy)
+                    & TDMoraleValidator.SetField(f, bolt, "m_TargetSpawnId", 1)
+                    & TDMoraleValidator.SetField(f, bolt, "m_TargetPos", lastKnown);
+            if (!ok || update == null) return;
+
+            update.Invoke(bolt, null);
+            var pos = TDMoraleValidator.GetField<Vector3>(bolt, "m_TargetPos");
+            if (pos != lastKnown) f.Add($"[BOLT_DROPS_REUSED_TARGET] the bolt fired at spawn 1 now heads for spawn 2 at {pos}");
+
+            if (TDMoraleValidator.GetField<bool>(bolt, "m_HasImpacted")) { f.Add("[BOLT_TEST] the bolt arrived mid-test"); return; }
+            TDMoraleValidator.SetField(f, bolt, "m_Target", enemy);
+            TDMoraleValidator.SetField(f, bolt, "m_TargetSpawnId", 2);
+            TDMoraleValidator.SetField(f, bolt, "m_TargetPos", lastKnown);
+            update.Invoke(bolt, null);
+            pos = TDMoraleValidator.GetField<Vector3>(bolt, "m_TargetPos");
+            if (pos != enemyGo.transform.position) f.Add($"[BOLT_CONTROL] the bolt stopped tracking its own target (heads for {pos})");
+        }
+        finally
+        {
+            Object.DestroyImmediate(boltGo);
+            Object.DestroyImmediate(enemyGo);
+        }
     }
 
     // A Herald stops amplifying the moment it dies (it leaves the enemy registry). Its fear ring

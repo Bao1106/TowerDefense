@@ -29,6 +29,7 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
     // The current stint — this stay on the field — for TDPressureProbe (spec §7.2).
     private bool m_StintOpen;
     private float m_StintStart, m_StintStartHp, m_StintStress, m_LastStress;
+    private float m_StintStartLeak, m_StintStartSpike; // morale's running totals at deploy — it outlives the stint
     private bool m_Retreated;            // left by DoRetreat, not by death or the match ending
     private MoraleState m_RetreatBand;
 
@@ -116,6 +117,8 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         m_StintStartHp = m_CurrentHp;
         m_StintStress = 0f;
         m_LastStress = Morale.Value;
+        m_StintStartLeak = Morale.LeakStress;
+        m_StintStartSpike = Morale.SpikeStress;
         // Still standing when the match ends is a stint ending too.
         TDGameEventBus.OnVictory += CloseStint;
         TDGameEventBus.OnGameOver += CloseStint;
@@ -141,6 +144,7 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         TDPressureProbe.RecordStint(m_Data?.operatorName, m_Data != null && m_Data.deployZone == DeployZone.PathCell,
                                     Time.time - m_StintStart,
                                     Mathf.Max(0f, m_StintStartHp - Mathf.Max(0f, m_CurrentHp)), m_StintStress,
+                                    Morale.LeakStress - m_StintStartLeak, Morale.SpikeStress - m_StintStartSpike,
                                     m_Retreated, m_MaxHp > 0f ? Mathf.Max(0f, m_CurrentHp) / m_MaxHp : 0f,
                                     m_Retreated ? m_RetreatBand : (Morale?.State ?? MoraleState.Calm));
     }
@@ -155,8 +159,8 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
 
     /// <summary>
     /// Feeds morale from what this operator can already see. No new Update() and no new
-    /// singleton: engagement comes from the behavior, the allies from the operator registry,
-    /// the aura from the enemy registry. Leaks arrive separately, as events (ReceiveLeak).
+    /// singleton: engagement comes from the behavior, the allies from the operator registry.
+    /// Stress arrives separately, as events (ReceiveLeak, ally spikes).
     /// </summary>
     private void TickMorale(float deltaTime)
     {
@@ -166,7 +170,6 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         {
             engaged = m_Behavior != null && m_Behavior.IsEngaged(m_MyCell),
             calmAlliesAdjacent = TDOperatorRegistry.api?.CountCalmAlliesAdjacent(m_MyCell) ?? 0,
-            auraRate = TDPressureProbe.AuraRateAt(m_MyCell),
             secondsSinceHit = Time.time - m_LastHitTime,
             allyBrokeThisWave = TDOperatorRegistry.api?.AnyBrokeThisWave ?? false,
         };
@@ -174,24 +177,25 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         Morale.Tick(deltaTime, ctx);
         m_MoraleIcon?.Refresh(Morale);
 
-        // Breaking is an event, not just a value crossing 100: it spikes everyone nearby (§04 N3).
-        //
         // Asked of the model rather than detected by comparing IsBroken before and after Tick —
-        // an ally's spike latches this operator OUTSIDE that window, so the comparison never saw
-        // a spike-induced break and every cascade died at the second link. Each link now fires on
-        // its victim's next frame, one frame apart, which is the intended pace of a chain.
-        if (Morale.ConsumeBreak())
-        {
-            Debug.Log($"[Morale] {m_Data?.operatorName} suy sụp tại {m_MyCell}");
-            TDPressureProbe.RecordCollapse();
-            TDOperatorRegistry.api?.BroadcastSpike(m_MyCell, TDConstant.STRESS_ALLY_BREAK_SPIKE, wasBreak: true);
+        // a leak latches this operator OUTSIDE that window (ReportLeak runs in the enemy's
+        // Update), so the comparison never sees it. The break is announced on this operator's
+        // next frame instead, or by AnnounceFall if the walk-over blow kills them first.
+        if (Morale.ConsumeBreak()) AnnounceBreak();
+    }
 
-            // Collapse (§06 · 3.1). The one thing that has to happen ON the transition — everyone
-            // they were holding walks free the instant they stop holding. Everything else about
-            // being collapsed (no blocking, no attacking, no self-retreat, x3 damage) is derived
-            // live from IsBroken, so recovering needs no matching "un-collapse" step.
-            TDOperatorRegistry.api?.ReleaseBlockedEnemies(m_MyCell);
-        }
+    // Breaking is an event, not just a value crossing 100: it spikes everyone nearby (§04 N3).
+    private void AnnounceBreak()
+    {
+        Debug.Log($"[Morale] {m_Data?.operatorName} suy sụp tại {m_MyCell}");
+        TDPressureProbe.RecordCollapse();
+        TDOperatorRegistry.api?.BroadcastSpike(m_MyCell, TDConstant.STRESS_ALLY_BREAK_SPIKE, wasBreak: true);
+
+        // Collapse (§06 · 3.1). The one thing that has to happen ON the transition — everyone
+        // they were holding walks free the instant they stop holding. Everything else about
+        // being collapsed (no blocking, no attacking, no self-retreat, x3 damage) is derived
+        // live from IsBroken, so recovering needs no matching "un-collapse" step.
+        TDOperatorRegistry.api?.ReleaseBlockedEnemies(m_MyCell);
     }
 
     /// <summary>
@@ -201,10 +205,10 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
     /// </summary>
     public bool IsCollapsed => Morale != null && Morale.IsBroken;
 
-    /// <summary>This operator's share of a leak (TDOperatorRegistry.ReportLeak). Returns the points added.</summary>
-    public float ReceiveLeak(float share, float amplifier)
+    /// <summary>This operator's part of a leak, topped up (TDOperatorRegistry.ReportLeak). Returns the points added.</summary>
+    public float ReceiveLeak(float weight)
     {
-        float added = Morale?.OnLeak(share, amplifier) ?? 0f;
+        float added = Morale?.OnLeak(weight) ?? 0f;
         if (added > 0f) m_MoraleIcon?.Pulse();
         return added;
     }
@@ -264,9 +268,9 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         m_IsDying = true;
 
         // N3 must fire BEFORE OnRemove, or the registry has already dropped this cell and
-        // the neighbours never learn anyone fell. A death spikes less than a break (§04):
-        // death is final and acceptable, a broken teammate is still standing there.
-        TDOperatorRegistry.api?.BroadcastSpike(m_MyCell, TDConstant.STRESS_ALLY_DEATH_SPIKE, wasBreak: false);
+        // the neighbours never learn anyone fell. Before OnLeftField too: it reaches
+        // Morale.OnDeath, which clears the collapse.
+        AnnounceFall();
 
         // Frees the card again but keeps every stress point and grants no cooldown relief —
         // dying must never be the cheap way to reset someone.
@@ -287,6 +291,17 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
 
         m_Animator.SetTrigger(TDConstant.ANIM_TRIGGER_DIE);
         Destroy(gameObject, TDConstant.OPERATOR_DIE_DURATION);
+    }
+
+    // A death spikes less than a break (§04): death is final and acceptable, a broken teammate is
+    // still standing there. One fall, one spike: dying collapsed spikes nothing (DeathSpike is 0).
+    // That holds only if the break was announced. A leak can break a melee and the walk-over
+    // blow kill them in the same enemy Update, before TickMorale runs, so announce it here.
+    private void AnnounceFall()
+    {
+        if (Morale != null && Morale.ConsumeBreak()) AnnounceBreak();
+        float deathSpike = Morale?.DeathSpike ?? TDConstant.STRESS_ALLY_DEATH_SPIKE;
+        if (deathSpike > 0f) TDOperatorRegistry.api?.BroadcastSpike(m_MyCell, deathSpike, wasBreak: false);
     }
 
     private bool HasAnimatorTrigger(string triggerName)

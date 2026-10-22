@@ -216,8 +216,13 @@ public class TDOperatorRegistry
     /// An enemy walked through `cell` past a full or collapsed melee (spec §5.2). The melee there,
     /// if still standing, and every standing ranged operator whose current range covers the cell
     /// split the leak by TDLeakShare. Turrets have no morale and never take a share.
+    ///
+    /// `ledger` belongs to the leaking enemy (spec Tầng 2 §4.1): each operator pays only what this
+    /// enemy has not charged them yet, so one enemy walking a line costs anyone at most their
+    /// heaviest share once. Everyone answerable still gets the call, even when that remainder is 0
+    /// — it is what marks them as leaked past for the wave relief.
     /// </summary>
-    public void ReportLeak(Vector2Int cell, TDEnums.EnemyType leaker)
+    public void ReportLeak(Vector2Int cell, TDEnums.EnemyType leaker, Dictionary<TDOperatorView, float> ledger)
     {
         TDPressureProbe.RecordLeak(); // every leak counts, including one nobody is left to feel
 
@@ -232,52 +237,56 @@ public class TDOperatorRegistry
 
         var (meleeShare, eachRanged) = TDLeakShare.Split(meleeStanding, ranged.Count);
         float amplifier = LeakAmplifierAt(cell, leaker);
+        float Charge(TDOperatorView who, float share) => who.ReceiveLeak(TDLeakShare.TopUp(ledger, who, share * amplifier));
 
         if (!LogLeaks)
         {
-            if (meleeStanding) melee.ReceiveLeak(meleeShare, amplifier);
-            foreach (var r in ranged) r.ReceiveLeak(eachRanged, amplifier);
+            if (meleeStanding) Charge(melee, meleeShare);
+            foreach (var r in ranged) Charge(r, eachRanged);
             return;
         }
 
         var parts = new List<string>();
-        if (meleeStanding) parts.Add($"{melee.Data.operatorName} +{melee.ReceiveLeak(meleeShare, amplifier):F1}");
-        foreach (var r in ranged) parts.Add($"{r.Data.operatorName} +{r.ReceiveLeak(eachRanged, amplifier):F1}");
+        if (meleeStanding) parts.Add($"{melee.Data.operatorName} +{Charge(melee, meleeShare):F1}");
+        foreach (var r in ranged) parts.Add($"{r.Data.operatorName} +{Charge(r, eachRanged):F1}");
         Debug.Log($"[Leak] {cell} → {(parts.Count > 0 ? string.Join(", ", parts) : "nobody")}");
     }
 
-    // The live Heralds' cells, from the enemy registry — a dying enemy leaves it at once, so a
-    // Herald stops amplifying the moment it is killed.
+    // The live amplifiers' cells, from the enemy registry — a dying enemy leaves it at once, so a
+    // Herald or boss stops amplifying the moment it is killed.
     private float LeakAmplifierAt(Vector2Int cell, TDEnums.EnemyType leaker)
     {
-        var heralds = new List<Vector2Int>();
+        var sources = new List<Vector2Int>();
         var enemies = TDEnemyRegistry.api?.GetAll();
         if (enemies != null && TDGridMainModel.api != null)
             foreach (var e in enemies)
-                if (e != null && e.EnemyType == TDEnums.EnemyType.Herald)
-                    heralds.Add(TDGridMainModel.api.WorldToCell(e.transform.position));
-        return LeakAmplifier(leaker, cell, heralds);
+                if (e != null && AmplifiesLeaks(e.EnemyType))
+                    sources.Add(TDGridMainModel.api.WorldToCell(e.transform.position));
+        return LeakAmplifier(leaker, cell, sources);
     }
 
+    /// <summary>Spec Tầng 2 T5: the boss amplifies leaks exactly like a Herald — it no longer radiates stress.</summary>
+    public static bool AmplifiesLeaks(TDEnums.EnemyType type)
+        => type == TDEnums.EnemyType.Herald || type == TDEnums.EnemyType.Boss;
+
     /// <summary>
-    /// Spec §5.5: HERALD_LEAK_MULT when any Herald stands within HERALD_RADIUS cells (Euclid) of
-    /// the leak, otherwise 1. Two Heralds in range amplify no more than one — it does not stack.
-    /// A Horde body is never amplified: the pack is already the overflow threat, and amplified it
-    /// broke a lone melee from the top of Calm with one pack (spec §7.2 forced case).
+    /// Spec §5.5: LEAK_AMP_MULT when any amplifier (Herald or boss) stands within LEAK_AMP_RADIUS
+    /// cells (Euclid) of the leak, otherwise 1. Two in range amplify no more than one — it does not
+    /// stack, whatever their types. A Horde body is never amplified: the pack is already the overflow
+    /// threat, and amplified it broke a lone melee from the top of Calm with one pack (spec §7.2 forced case).
     /// </summary>
-    public static float LeakAmplifier(TDEnums.EnemyType leaker, Vector2Int leakCell, IReadOnlyList<Vector2Int> heraldCells)
+    public static float LeakAmplifier(TDEnums.EnemyType leaker, Vector2Int leakCell, IReadOnlyList<Vector2Int> sourceCells)
     {
         if (leaker == TDEnums.EnemyType.Horde) return 1f;
-        float r2 = TDConstant.HERALD_RADIUS * TDConstant.HERALD_RADIUS;
-        foreach (var h in heraldCells)
-            if ((h - leakCell).sqrMagnitude <= r2) return TDConstant.HERALD_LEAK_MULT;
+        float r2 = TDConstant.LEAK_AMP_RADIUS * TDConstant.LEAK_AMP_RADIUS;
+        foreach (var s in sourceCells)
+            if ((s - leakCell).sqrMagnitude <= r2) return TDConstant.LEAK_AMP_MULT;
         return 1f;
     }
 
     /// <summary>
-    /// A wave finished. Everyone still deployed steadies a little — but only if nobody
-    /// broke, which is what makes holding the line without casualties worth something
-    /// beyond simply surviving it.
+    /// A wave finished. Each operator still deployed decides for themselves whether they earned
+    /// the relief — standing, and nobody leaked past them since the last one (TDOperatorMorale.OnWaveCleared).
     /// </summary>
     public void OnWaveCleared()
     {

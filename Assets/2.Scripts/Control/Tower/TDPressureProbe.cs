@@ -4,10 +4,10 @@ using TDEnums;
 using UnityEngine;
 
 /// <summary>
-/// What the world around an operator feeds into morale, and the recorder the calibration runs
-/// read (spec 2026-10-06 §7.2). The pressure-zone counter that lived here (N1 / N2, spec §03)
-/// was removed by the load model (§5.4): load is counted as leak events, reported by
-/// TDOperatorRegistry.ReportLeak. Of the old probe only the boss aura is left.
+/// The recorder the calibration runs and the playtest read (spec 2026-10-06 §7.2). The
+/// pressure-zone counter that lived here (N1 / N2, spec §03) was removed by the load model
+/// (§5.4): load is counted as leak events, reported by TDOperatorRegistry.ReportLeak. The
+/// boss aura that outlived it became a leak amplifier (spec Tầng 2 T5).
 ///
 /// The recorder keeps one row per wave (units on the field, cap, gold earned, leaks, collapses)
 /// and one entry per stint — an operator's stay on the field, from deploy to retreat, death or
@@ -18,35 +18,6 @@ using UnityEngine;
 /// </summary>
 public static class TDPressureProbe
 {
-    /// <summary>
-    /// N4 — strongest fear aura reaching this cell, in points per second. Auras do not
-    /// stack with themselves; the worst one in range wins, so two bosses are frightening
-    /// rather than lethal-by-arithmetic.
-    ///
-    /// ponytail: radius and rate are hardcoded for the boss, the only aura there is — the
-    /// Herald amplifies leaks instead (spec 2026-10-06 §5.5). Move both onto EnemyData as
-    /// `fearAuraRadius` / `fearAuraRate` when a second aura source appears.
-    /// </summary>
-    public static float AuraRateAt(Vector2Int cell)
-    {
-        var enemies = TDEnemyRegistry.api?.GetAll();
-        if (enemies == null || enemies.Count == 0) return 0f;
-
-        var grid = TDGridMainModel.api;
-        float worst = 0f;
-
-        foreach (var enemy in enemies)
-        {
-            if (enemy == null || enemy.EnemyType != EnemyType.Boss) continue;
-
-            var ec = grid.WorldToCell(enemy.transform.position);
-            int dist = Mathf.Max(Mathf.Abs(ec.x - cell.x), Mathf.Abs(ec.y - cell.y));
-            if (dist <= 3 && TDConstant.STRESS_AURA_BOSS > worst) worst = TDConstant.STRESS_AURA_BOSS;
-        }
-
-        return worst;
-    }
-
     // ── Recorder ──────────────────────────────────────────────────────────────
 
     private const float MIN_STINT_SECONDS = 5f; // shorter stays are noise in a per-second rate
@@ -55,13 +26,13 @@ public static class TDPressureProbe
     // for "near full"; 80% is the plan's call (2026-10-09), and red is the Stressed band.
     public const float A4_MIN_HP_FRAC = 0.8f;
 
-    private struct WaveRow { public int wave, onField, limit, goldEarned, leaks, leakedEnemies, leakedHorde, collapses; }
+    private struct WaveRow { public int wave, onField, limit, goldEarned, leaks, leakedEnemies, leakedHorde, livesLost, collapses; public bool boss; }
 
     /// <summary>One stay on the field. `band` is the band the operator LEFT in — for a retreat,
     /// read before the retreat's own −70 relief, or every red retreat would report Calm.</summary>
     public struct Stint
     {
-        public string op; public bool melee; public float seconds, hpLost, stressGained;
+        public string op; public bool melee; public float seconds, hpLost, stressGained, leakStress, spikeStress;
         public bool retreated; public float hpFrac; public MoraleState band;
     }
 
@@ -69,7 +40,13 @@ public static class TDPressureProbe
     private static readonly List<Stint> s_Stints = new();
     private static readonly List<Stint> s_Pool = new(); // every match since ResetPool
     private static int s_Wave = -1, s_Leaks, s_LeakedEnemies, s_LeakedHorde, s_Collapses, s_TotalCollapses, s_PoolMatches;
+    private static int s_LivesLost, s_LivesLeft = -1;
     private static string s_Ending, s_Report;
+
+    // Which match this is — several reports get compared side by side (§7.3 playtest).
+    private static string s_Stage = "?", s_Difficulty = "?";
+    private static int s_LevelIndex = -1;
+    private static readonly HashSet<int> s_BossWaves = new(); // 0-based wave indices
 
     // Subscribed once per play session: the bus is static and outlives scenes, and with domain
     // reload off a second subscription would double every row. -= first makes it idempotent.
@@ -82,7 +59,24 @@ public static class TDPressureProbe
         TDGameEventBus.OnVictory += OnVictory;
         TDGameEventBus.OnGameOver -= OnGameOver;
         TDGameEventBus.OnGameOver += OnGameOver;
+        TDGameEventBus.OnLifeLost -= OnLifeLost;
+        TDGameEventBus.OnLifeLost += OnLifeLost;
     }
+
+    /// <summary>Called by TDEnemyPathMainView as a match's waves are planned, before wave 1.</summary>
+    public static void BeginMatch(string stageId, int levelIndex, Difficulty difficulty,
+                                  IReadOnlyList<List<EnemyType>> wavePlans)
+    {
+        s_Stage = string.IsNullOrEmpty(stageId) ? "?" : stageId;
+        s_LevelIndex = levelIndex;
+        s_Difficulty = difficulty.ToString();
+        s_BossWaves.Clear();
+        for (int i = 0; i < (wavePlans?.Count ?? 0); i++)
+            if (wavePlans[i] != null && wavePlans[i].Contains(EnemyType.Boss)) s_BossWaves.Add(i);
+    }
+
+    // A life is an enemy that reached the base — not the same thing as a leak past a blocker.
+    private static void OnLifeLost(Vector3 _) => s_LivesLost++;
 
     // Leak EVENTS (every full blocker passed — what morale feels) vs leaked ENEMIES (each counted
     // once — what calibration measures: one enemy past a line of four is one failure, not four).
@@ -102,14 +96,15 @@ public static class TDPressureProbe
     }
 
     /// <summary>One stay on the field has ended (retreat, death, or the match). `stressGained`
-    /// sums the POSITIVE frame-to-frame rises — relief must not cancel the pressure it follows.</summary>
+    /// sums the POSITIVE frame-to-frame rises — relief must not cancel the pressure it follows.
+    /// `leakStress` / `spikeStress` split it by source (spec Tầng 2 §7.2 step 1).</summary>
     public static void RecordStint(string op, bool melee, float seconds, float hpLost, float stressGained,
-                                   bool retreated, float hpFrac, MoraleState band)
+                                   float leakStress, float spikeStress, bool retreated, float hpFrac, MoraleState band)
     {
         var s = new Stint
         {
             op = op, melee = melee, seconds = seconds, hpLost = hpLost, stressGained = stressGained,
-            retreated = retreated, hpFrac = hpFrac, band = band,
+            leakStress = leakStress, spikeStress = spikeStress, retreated = retreated, hpFrac = hpFrac, band = band,
         };
         s_Stints.Add(s);
         s_Pool.Add(s);
@@ -164,12 +159,13 @@ public static class TDPressureProbe
             s_Waves.Clear();
             s_Stints.Clear();
             s_TotalCollapses = 0;
+            s_LivesLeft = -1;
             s_Ending = s_Report = null;
         }
         else CloseWave();
 
         s_Wave = waveIdx;
-        s_Leaks = s_LeakedEnemies = s_LeakedHorde = s_Collapses = 0;
+        s_Leaks = s_LeakedEnemies = s_LeakedHorde = s_Collapses = s_LivesLost = 0;
     }
 
     private static void OnVictory() => End("Victory");
@@ -181,14 +177,39 @@ public static class TDPressureProbe
         CloseWave();
         s_Ending = how;
         s_PoolMatches++;
+        s_LivesLeft = TDPlayerLifeControl.api?.CurrentLives ?? -1;
 
 #if UNITY_EDITOR
         // So a human playtest gets the numbers too, not only the bot (§7.3). Printed on the next
         // editor tick, not here: this handler is subscribed at AfterSceneLoad, so it runs BEFORE
         // the CloseStint of every operator still standing, and their stints would be missing.
-        UnityEditor.EditorApplication.delayCall += () => Debug.Log(LastReport);
+        // Also saved under Logs/ (git-ignored), so a session of matches is not copied by hand.
+        UnityEditor.EditorApplication.delayCall += () =>
+        {
+            string report = LastReport;
+            Debug.Log(report);
+            Save(report);
+        };
 #endif
     }
+
+#if UNITY_EDITOR
+    private static void Save(string report)
+    {
+        try
+        {
+            string dir = System.IO.Path.Combine("Logs", "pressure-reports");
+            System.IO.Directory.CreateDirectory(dir);
+            string name = $"{System.DateTime.Now:yyyyMMdd-HHmmss}-{s_Stage}-{s_Difficulty}-{s_Ending}.txt";
+            foreach (char c in System.IO.Path.GetInvalidFileNameChars()) name = name.Replace(c, '_');
+            System.IO.File.WriteAllText(System.IO.Path.Combine(dir, name), report);
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning($"[TDPressureProbe] report not saved: {e.Message}"); // the console copy still exists
+        }
+    }
+#endif
 
     private static void CloseWave()
     {
@@ -202,7 +223,9 @@ public static class TDPressureProbe
             leaks = s_Leaks,
             leakedEnemies = s_LeakedEnemies,
             leakedHorde = s_LeakedHorde,
+            livesLost = s_LivesLost,
             collapses = s_Collapses,
+            boss = s_BossWaves.Contains(s_Wave),
         });
         s_Wave = -1;
     }
@@ -210,18 +233,25 @@ public static class TDPressureProbe
     private static string Build()
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"Pressure report — {s_Ending ?? "in progress"}");
-        sb.AppendLine("wave  onField  limit  goldEarned  leaks  leaked  horde  collapses");
+        sb.AppendLine($"Pressure report — {s_Ending ?? "in progress"} · {s_Stage} · level {s_LevelIndex} · {s_Difficulty}" +
+                      (s_LivesLeft >= 0 ? $" · lives left {s_LivesLeft}" : ""));
+        sb.AppendLine("wave  boss  onField  limit  goldEarned  leaks  leaked  horde  livesLost  collapses");
         foreach (var w in s_Waves)
-            sb.AppendLine($"{w.wave,4}  {w.onField,7}  {w.limit,5}  {w.goldEarned,10}  {w.leaks,5}  {w.leakedEnemies,6}  {w.leakedHorde,5}  {w.collapses,9}");
-        if (s_Wave >= 0) sb.AppendLine($"{s_Wave + 1,4}  (open)  leaks {s_Leaks}, leaked {s_LeakedEnemies} ({s_LeakedHorde} Horde), collapses {s_Collapses}");
+            sb.AppendLine($"{w.wave,4}  {(w.boss ? "B" : "-"),4}  {w.onField,7}  {w.limit,5}  {w.goldEarned,10}  {w.leaks,5}  {w.leakedEnemies,6}  {w.leakedHorde,5}  {w.livesLost,9}  {w.collapses,9}");
+        if (s_Wave >= 0)
+            sb.AppendLine($"{s_Wave + 1,4}  {(s_BossWaves.Contains(s_Wave) ? "B" : "-"),4}  (open)  leaks {s_Leaks}, leaked {s_LeakedEnemies} ({s_LeakedHorde} Horde), " +
+                          $"lives lost {s_LivesLost}, collapses {s_Collapses}");
 
         float r = MeleeR(s_Stints, out int n);
         float pooled = MeleeR(s_Pool, out int pooledN);
         sb.AppendLine($"stints: {s_Stints.Count}");
         foreach (var s in s_Stints)
             sb.AppendLine($"  {s.op,-9} {(s.melee ? "melee " : "ranged")} {s.seconds,6:F1}s  hp −{s.hpLost,6:F0}  stress +{s.stressGained,6:F1}" +
+                          $" (leak +{s.leakStress:F1} · spike +{s.spikeStress:F1})" +
                           $"  left {(s.retreated ? "retreat  " : "death/end")} hp {s.hpFrac,4:P0} {s.band}");
+        int retreats = 0;
+        foreach (var s in s_Stints) if (s.retreated) retreats++;
+        sb.AppendLine($"retreats: {retreats}");
         sb.AppendLine($"A4 retreats (HP ≥ {A4_MIN_HP_FRAC:P0}, Stressed): {CountA4(s_Stints)}");
         sb.AppendLine($"r melee (HP lost/s vs stress gained/s) = {Format(r)} over {n} stints of ≥ {MIN_STINT_SECONDS:F0}s");
         sb.AppendLine($"r melee pooled over {s_PoolMatches} matches = {Format(pooled)} over {pooledN} stints");

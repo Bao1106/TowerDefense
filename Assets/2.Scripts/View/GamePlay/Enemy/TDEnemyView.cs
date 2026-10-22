@@ -23,6 +23,7 @@ public class TDEnemyView : MonoBehaviour
     // Operator blocking state
     private bool m_IsBlocked;
     private bool m_HasLeaked; // counted once by TDPressureProbe however many full blockers it passes
+    private readonly Dictionary<TDOperatorView, float> m_LeakLedger = new(); // what this spawn charged each operator (TDLeakShare.TopUp)
     private Vector2Int m_BlockerCell;
 
     public EnemyType EnemyType { get; private set; }
@@ -56,6 +57,7 @@ public class TDEnemyView : MonoBehaviour
         m_HasReachedEnd = false;
         m_IsDying = false;
         m_HasLeaked = false;
+        m_LeakLedger.Clear(); // pooled: a new spawn owes nobody anything yet
         m_IsBlocked = false;
         m_BlockerCell = Vector2Int.zero;
         m_CurrentPathIndex = 0;
@@ -234,7 +236,7 @@ public class TDEnemyView : MonoBehaviour
                     // it already stepped their path index past it.
                     if (TDOperatorRegistry.api != null && TDOperatorRegistry.api.HasOperatorAt(arrivedCell))
                     {
-                        TDOperatorRegistry.api.ReportLeak(arrivedCell, EnemyType);
+                        TDOperatorRegistry.api.ReportLeak(arrivedCell, EnemyType, m_LeakLedger);
 
                         // Every full blocker passed is a leak for morale; for calibration it is one
                         // enemy that got through, however long the line it walked past.

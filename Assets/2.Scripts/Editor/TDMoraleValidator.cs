@@ -39,9 +39,11 @@ public static class TDMoraleValidator
     public static List<string> Run()
     {
         var f = new List<string>();
+        if (k_SetValue == null) { f.Add("[REFLECT] TDOperatorMorale.SetValue missing"); return f; }
 
         Rates(f);
-        Multipliers(f);
+        Bands(f);
+        Spikes(f);
         Recovery(f);
         SkillPoints(f);
         RetreatIsNotAReset(f);
@@ -50,11 +52,14 @@ public static class TDMoraleValidator
         Leaks(f);
         LeakSplit(f);
         Amplifier(f);
+        AmplifierSources(f);
         DeployCap(f);
         Targets(f);
         Pearson(f);
         A4(f);
+        ReportContents(f);
         ZeroDamage(f);
+        FallAnnouncesBreak(f);
         LeakLog(f);
         Resolve(f);
         FocusScale(f);
@@ -64,12 +69,11 @@ public static class TDMoraleValidator
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    private static TDMoraleContext Ctx(bool engaged, int calmAllies = 0, float aura = 0f, float sinceHit = 0f)
+    private static TDMoraleContext Ctx(bool engaged, int calmAllies = 0, float sinceHit = 0f)
         => new TDMoraleContext
         {
             engaged = engaged,
             calmAlliesAdjacent = calmAllies,
-            auraRate = aura,
             secondsSinceHit = sinceHit,
         };
 
@@ -90,10 +94,15 @@ public static class TDMoraleValidator
         return fi == null ? default : (T)fi.GetValue(o);
     }
 
+    // Sets the value through SetValue itself, so the collapse latch behaves exactly as in play.
+    // Not through AddSpike any more: spikes stop at STRESS_SPIKE_CEILING, and At(100) must still break.
+    private static readonly MethodInfo k_SetValue =
+        typeof(TDOperatorMorale).GetMethod("SetValue", BindingFlags.Instance | BindingFlags.NonPublic);
+
     private static TDOperatorMorale At(float value)
     {
         var m = new TDOperatorMorale();
-        m.AddSpike(value);
+        k_SetValue.Invoke(m, new object[] { value });
         return m;
     }
 
@@ -103,36 +112,26 @@ public static class TDMoraleValidator
             f.Add($"[{tag}] got {got:F3}, want {want:F3}");
     }
 
-    // ── A — rates: no clock any more — only the aura accrues, and idling recovers ──
+    // ── A — rates: no clock any more — nothing accrues over time, idling recovers ──
 
     private static void Rates(List<string> f)
     {
         Near(f, "ENGAGED_IS_FLAT", new TDOperatorMorale().NetRate(Ctx(true)), 0f);
         Near(f, "IDLE_RELIEF", new TDOperatorMorale().NetRate(Ctx(false)), -TDConstant.STRESS_IDLE_RELIEF);
-        Near(f, "N4_AURA", new TDOperatorMorale().NetRate(Ctx(true, aura: TDConstant.STRESS_AURA_BOSS)), TDConstant.STRESS_AURA_BOSS);
-        Near(f, "N4_AURA_MULT", At(70f).NetRate(Ctx(true, aura: TDConstant.STRESS_AURA_BOSS)),
-             TDConstant.STRESS_AURA_BOSS * TDConstant.STRESS_MULT_STRESSED);
+        Near(f, "NO_TIME_STRESS", At(70f).NetRate(Ctx(true)), 0f);
         Near(f, "ALLY_NO_STRESS_EFFECT", new TDOperatorMorale().NetRate(Ctx(true, calmAllies: 5)), 0f);
     }
 
-    // ── B — multipliers apply to the aura and to leaks, never to spikes ─────
+    // ── B — bands: a state for the icon, A4 and Resolve — no longer a price ─
 
-    private static void Multipliers(List<string> f)
+    private static void Bands(List<string> f)
     {
-        // The per-band leak price is LEAK_CALM / STEADY / STRESSED in Leaks().
-
         // Band edges: 33 is still Calm, 34 is Steady; 66 Steady, 67 Stressed; 100 Broken.
         if (TDOperatorMorale.StateOf(33f) != MoraleState.Calm) f.Add("[BAND] 33 is not Calm");
         if (TDOperatorMorale.StateOf(34f) != MoraleState.Steady) f.Add("[BAND] 34 is not Steady");
         if (TDOperatorMorale.StateOf(66f) != MoraleState.Steady) f.Add("[BAND] 66 is not Steady");
         if (TDOperatorMorale.StateOf(67f) != MoraleState.Stressed) f.Add("[BAND] 67 is not Stressed");
         if (TDOperatorMorale.StateOf(100f) != MoraleState.Broken) f.Add("[BAND] 100 is not Broken");
-
-        // ⭐ N3 must NOT be multiplied. At Stressed a doubled 30-point jolt would kill
-        // outright and turn every cascade into an automatic wipe.
-        var hot = At(60f);
-        hot.AddSpike(TDConstant.STRESS_ALLY_BREAK_SPIKE);
-        Near(f, "SPIKE_UNMULTIPLIED", hot.Value, 60f + TDConstant.STRESS_ALLY_BREAK_SPIKE);
     }
 
     // ── C — recovery, and its ceiling ───────────────────────────────────────
@@ -143,6 +142,25 @@ public static class TDMoraleValidator
         var cleared = At(50f);
         cleared.OnWaveCleared();
         Near(f, "WAVE_CLEAR", cleared.Value, 50f - TDConstant.STRESS_WAVE_CLEAR_RELIEF);
+
+        // Tầng 2 T4: the wave valve is for the operators nobody got past since the last relief.
+        var leaked = At(50f); leaked.OnLeak(0.3f); float v = leaked.Value;
+        leaked.OnWaveCleared();
+        Near(f, "RELIEF_SKIPS_LEAKED", leaked.Value, v);
+        leaked.OnWaveCleared(); // held the next wave clean: the mark went with the last relief
+        Near(f, "RELIEF_NEXT_WAVE", leaked.Value, v - TDConstant.STRESS_WAVE_CLEAR_RELIEF);
+
+        // Answerable but already charged in full by this enemy: still leaked past.
+        var zero = At(50f); zero.OnLeak(0f); zero.OnWaveCleared();
+        Near(f, "RELIEF_MARK_ON_ZERO_TOPUP", zero.Value, 50f);
+
+        // Off the field nobody calls OnWaveCleared, so leaving must take the mark along.
+        var away = At(90f); away.OnLeak(0.3f); away.OnRetreat(); float a = away.Value;
+        away.OnWaveCleared();
+        Near(f, "RELIEF_MARK_LEAVES_WITH_RETREAT", away.Value, a - TDConstant.STRESS_WAVE_CLEAR_RELIEF);
+        var fell = At(50f); fell.OnLeak(0.3f); fell.OnDeath(); float d = fell.Value;
+        fell.OnWaveCleared();
+        Near(f, "RELIEF_MARK_LEAVES_WITH_DEATH", fell.Value, d - TDConstant.STRESS_WAVE_CLEAR_RELIEF);
     }
 
     // ── SP (§06 · 3.2) ──────────────────────────────────────────────────────
@@ -305,24 +323,20 @@ public static class TDMoraleValidator
     // ── J — a break is an EVENT, whoever pushed the value over ──────────────
     //
     // The view used to detect the break by reading IsBroken before Tick and comparing after.
-    // An ally's N3 spike latches the neighbour OUTSIDE that window, so a break caused by a
-    // spike never fired its own spike, setback or release — every cascade stopped at link two.
+    // A leak latches the operator OUTSIDE that window (it arrives as an event from the enemy), so a
+    // break caused by one never fired its own spike, setback or release. Spikes no longer break
+    // anyone (Tầng 2 §4.2), but leaks still arrive between ticks.
 
     private static void BreakEdge(List<string> f)
     {
-        var spiked = At(80f);
-        spiked.AddSpike(TDConstant.STRESS_ALLY_BREAK_SPIKE);
-        if (!spiked.ConsumeBreak()) f.Add("[EDGE_FROM_SPIKE] a spike-induced break raised no edge");
-        if (spiked.ConsumeBreak()) f.Add("[EDGE_ONCE] the same break was reported twice");
-        if (spiked.Setbacks != 1) f.Add($"[EDGE_SETBACK] spike break counted {spiked.Setbacks}, want 1");
+        var leaked = At(95f);
+        leaked.OnLeak(1f);
+        if (!leaked.ConsumeBreak()) f.Add("[EDGE_FROM_LEAK] a leak-induced break raised no edge");
+        if (leaked.ConsumeBreak()) f.Add("[EDGE_ONCE] the same break was reported twice");
+        if (leaked.Setbacks != 1) f.Add($"[EDGE_SETBACK] leak break counted {leaked.Setbacks}, want 1");
 
-        spiked.AddSpike(TDConstant.STRESS_ALLY_BREAK_SPIKE); // already latched
-        if (spiked.ConsumeBreak()) f.Add("[EDGE_WHILE_LATCHED] a spike on a broken operator raised a second edge");
-
-        var ticked = new TDOperatorMorale();
-        // The aura is the only time-based source left, so it is what drives a tick-induced break.
-        for (int i = 0; i < 2000 && !ticked.IsBroken; i++) ticked.Tick(0.05f, Ctx(true, aura: TDConstant.STRESS_AURA_BOSS));
-        if (!ticked.ConsumeBreak()) f.Add("[EDGE_FROM_TICK] a tick-induced break raised no edge");
+        leaked.OnLeak(1f); // already latched
+        if (leaked.ConsumeBreak()) f.Add("[EDGE_WHILE_LATCHED] a leak on a broken operator raised a second edge");
 
         // ⭐ An edge nobody handled must not outlive the state it announces — otherwise it fires
         // on the next deploy, spiking and releasing around an operator who is perfectly fine.
@@ -337,9 +351,43 @@ public static class TDMoraleValidator
         var again = At(TDConstant.STRESS_MAX);
         again.ConsumeBreak();
         again.OnRescue();
-        again.AddSpike(TDConstant.STRESS_MAX);
+        while (!again.IsBroken) again.OnLeak(1f);
         if (!again.ConsumeBreak() || again.Setbacks != 2)
             f.Add($"[EDGE_REBREAK] second break after rescue: setbacks {again.Setbacks}, want 2");
+    }
+
+    // ── K — spikes push toward the edge, never over it; one fall, one spike (Tầng 2 §4.2) ──
+
+    private static void Spikes(List<string> f)
+    {
+        var s = At(60f); s.AddSpike(TDConstant.STRESS_ALLY_BREAK_SPIKE);
+        Near(f, "SPIKE_BREAK_15", s.Value, 75f);
+        var c = At(80f); c.AddSpike(TDConstant.STRESS_ALLY_BREAK_SPIKE);
+        Near(f, "SPIKE_CEILING", c.Value, 90f);
+        var h = At(92f); h.AddSpike(TDConstant.STRESS_ALLY_BREAK_SPIKE);
+        Near(f, "SPIKE_ABOVE_CEILING", h.Value, 92f);
+
+        var many = new TDOperatorMorale();
+        for (int i = 0; i < 20; i++) many.AddSpike(TDConstant.STRESS_ALLY_BREAK_SPIKE);
+        if (many.IsBroken || many.ConsumeBreak()) f.Add("[SPIKE_NEVER_BREAKS] twenty break spikes collapsed an operator");
+
+        Near(f, "DEATH_SPIKE_STANDING", At(40f).DeathSpike, 10f);
+        Near(f, "DEATH_SPIKE_AFTER_BREAK", At(TDConstant.STRESS_MAX).DeathSpike, 0f);
+
+        // Collapsed and recovering under the latch (100 → ~80): a spike lifts to 90 at most and
+        // must neither lift the collapse nor announce it a second time.
+        var latched = At(TDConstant.STRESS_MAX); latched.ConsumeBreak();
+        for (int i = 0; i < 200; i++) latched.Tick(0.1f, Ctx(false, sinceHit: TDConstant.STRESS_BROKEN_CALM_SECONDS + 1f));
+        latched.AddSpike(TDConstant.STRESS_ALLY_BREAK_SPIKE);
+        Near(f, "SPIKE_ON_LATCHED", latched.Value, 90f);
+        if (!latched.IsBroken || latched.ConsumeBreak()) f.Add("[SPIKE_ON_LATCHED] a spike lifted or re-announced the collapse");
+
+        // Spec Tầng 2 §7.2 step 1: stress by source, counting only what actually landed.
+        var src = At(85f); src.OnLeak(1f); src.AddSpike(TDConstant.STRESS_ALLY_BREAK_SPIKE); // 92: the spike adds nothing
+        Near(f, "SOURCE_LEAK", src.LeakStress, 7f);
+        Near(f, "SOURCE_SPIKE_CLAMPED", src.SpikeStress, 0f);
+        var sp = At(50f); sp.AddSpike(TDConstant.STRESS_ALLY_BREAK_SPIKE);
+        Near(f, "SOURCE_SPIKE", sp.SpikeStress, 15f);
     }
 
     // ── H — focus slow-mo: one formula, pause always wins ───────────────────
@@ -361,11 +409,10 @@ public static class TDMoraleValidator
 
     private static void Leaks(List<string> f)
     {
-        // One leak alone = 7 / 10.5 / 14 by band (round 2: 10 → 7, Herald ×2 → ×1.5).
-        Near(f, "LEAK_CALM", At(10f).OnLeak(1f, 1f), 7f);
-        Near(f, "LEAK_STEADY", At(50f).OnLeak(1f, 1f), 10.5f);
-        Near(f, "LEAK_STRESSED", At(70f).OnLeak(1f, 1f), 14f);
-        Near(f, "LEAK_AMPLIFIED", At(0f).OnLeak(1f, TDConstant.HERALD_LEAK_MULT), 10.5f);
+        // Tầng 2 T2: a leak costs the same in every band (round 2: 10 → 7, Herald ×2 → ×1.5).
+        foreach (float start in new[] { 10f, 50f, 70f })
+            Near(f, $"LEAK_FLAT_{start:F0}", At(start).OnLeak(1f), 7f);
+        Near(f, "LEAK_AMPLIFIED", At(0f).OnLeak(TDConstant.LEAK_AMP_MULT), 10.5f);
 
         // Spec §7.2 forced case: a Calm melee alone, a Herald beside it, a whole pack walks past —
         // at most 60 stress and still standing (round 2 measured 100 and a collapse at 10 / ×2).
@@ -375,23 +422,38 @@ public static class TDMoraleValidator
         foreach (float start in new[] { 0f, TDConstant.STRESS_CALM_MAX })
         {
             var lone = At(start); float packGain = 0f;
-            for (int i = 0; i < TDConstant.HORDE_PACK_SIZE; i++) packGain += lone.OnLeak(1f, packMult);
+            for (int i = 0; i < TDConstant.HORDE_PACK_SIZE; i++) packGain += lone.OnLeak(packMult);
             if (packGain > 60f || lone.IsBroken) f.Add($"[NIGHTMARE_PACK] a pack past a lone melee at {start} beside a Herald: +{packGain:F1}, broken {lone.IsBroken} (want ≤ 60, standing)");
         }
         var broken = At(TDConstant.STRESS_MAX); int sb = broken.Setbacks;
-        Near(f, "LEAK_IGNORED_WHEN_BROKEN", broken.OnLeak(1f, 1f), 0f);
+        Near(f, "LEAK_IGNORED_WHEN_BROKEN", broken.OnLeak(1f), 0f);
         if (broken.Setbacks != sb) f.Add("[LEAK_IGNORED_WHEN_BROKEN] a leak on a collapsed operator counted a setback");
 
-        // Spec §5.2 table: 11 / 15 / 35 leaks from zero to collapse (8 / 11 / 25 before round 2).
-        foreach (var (tag, share, want) in new[] { ("LEAKS_ALONE", 1f, 11), ("LEAKS_SUPPORTED", 0.7f, 15), ("LEAKS_RANGED", 0.3f, 35) })
+        // Spec Tầng 2 §5: 15 / 21 / 48 leaks from zero to collapse (11 / 15 / 35 with the band
+        // multiplier, 8 / 11 / 25 before round 2).
+        foreach (var (tag, share, want) in new[] { ("LEAKS_ALONE", 1f, 15), ("LEAKS_SUPPORTED", 0.7f, 21), ("LEAKS_RANGED", 0.3f, 48) })
         {
             var m = new TDOperatorMorale(); int n = 0;
-            while (!m.IsBroken && n < 100) { m.OnLeak(share, 1f); n++; }
+            while (!m.IsBroken && n < 100) { m.OnLeak(share); n++; }
             if (n != want) f.Add($"[{tag}] {n} leaks to collapse, want {want}");
             if (new TDOperatorMorale().LeaksToBreak(share) != want) f.Add($"[{tag}_PROJECTION] LeaksToBreak disagrees with the walk");
             if (!m.ConsumeBreak()) f.Add($"[{tag}_EDGE] a leak-induced collapse raised no edge");
         }
         if (new TDOperatorMorale().LeaksToBreak(0f) != int.MaxValue) f.Add("[LEAKS_NO_SHARE] share 0 reported a finite count");
+
+        // After a spike the most an operator can carry is 90 (Tầng 2 §5).
+        if (At(90f).LeaksToBreak(0.7f) != 3) f.Add($"[LEAKS_FROM_90_SUPPORTED] {At(90f).LeaksToBreak(0.7f)}, want 3");
+        if (At(90f).LeaksToBreak(1f) != 2) f.Add($"[LEAKS_FROM_90_ALONE] {At(90f).LeaksToBreak(1f)}, want 2");
+
+        // The overlay's count must match the real walk from every start, not just from zero.
+        foreach (float share in new[] { 1f, 0.7f, 0.3f })
+            for (int start = 0; start < 100; start++)
+            {
+                var walk = At(start); int n = 0;
+                while (!walk.IsBroken && n < 200) { walk.OnLeak(share); n++; }
+                int projected = At(start).LeaksToBreak(share);
+                if (projected != n) { f.Add($"[LEAKS_PROJECTION_ALL_STARTS] share {share} from {start}: projected {projected}, walked {n}"); break; }
+            }
     }
 
     // Spec §5.2 split table: melee 70%, covering ranged share 30%; broken melee hands it all over.
@@ -411,6 +473,21 @@ public static class TDMoraleValidator
             var s = TDLeakShare.Split(true, k);
             Near(f, $"SPLIT_SUMS_{k}", s.melee + k * s.eachRanged, 1f);
         }
+
+        // Tầng 2 §4.1: one enemy charges each operator its heaviest weight along the path, once.
+        var ledger = new Dictionary<string, float>();
+        Near(f, "TOPUP_FIRST",   TDLeakShare.TopUp(ledger, "Moon", 0.3f), 0.3f);
+        Near(f, "TOPUP_SAME",    TDLeakShare.TopUp(ledger, "Moon", 0.3f), 0f);    // second cell, same share
+        Near(f, "TOPUP_LIGHTER", TDLeakShare.TopUp(ledger, "Moon", 0.15f), 0f);  // a lighter share adds nothing
+        Near(f, "TOPUP_HEAVIER", TDLeakShare.TopUp(ledger, "Moon", 1f), 0.7f);   // the melee at the next cell is broken
+        Near(f, "TOPUP_PER_OPERATOR", TDLeakShare.TopUp(ledger, "Knight", 0.7f), 0.7f);
+        Near(f, "TOPUP_NEW_ENEMY", TDLeakShare.TopUp(new Dictionary<string, float>(), "Moon", 0.3f), 0.3f);
+
+        // The spec's worked example: A (melee standing) then B (melee broken) → 2.1 + 4.9 = 7, not 9.1 (or 21 before).
+        var path = new Dictionary<string, float>(); var moon = new TDOperatorMorale();
+        float total = moon.OnLeak(TDLeakShare.TopUp(path, "Moon", TDLeakShare.Split(true, 1).eachRanged))
+                    + moon.OnLeak(TDLeakShare.TopUp(path, "Moon", TDLeakShare.Split(false, 1).eachRanged));
+        Near(f, "TOPUP_WORKED_EXAMPLE", total, 7f);
     }
 
     // Spec §5.1: one hard per-level cap shared by melee, ranged and turrets.
@@ -431,16 +508,27 @@ public static class TDMoraleValidator
         if (cap.OnField != 0) f.Add("[CAP_RESET_ON_INIT] a new match inherited units");
     }
 
-    // Spec §5.5: a Herald within HERALD_RADIUS cells (Euclid) of a leak amplifies it ×HERALD_LEAK_MULT; two do not stack.
+    // Tầng 2 §4.1 / T5: the boss amplifies leaks exactly like a Herald; nothing else does.
+    private static void AmplifierSources(List<string> f)
+    {
+        foreach (EnemyType t in System.Enum.GetValues(typeof(EnemyType)))
+        {
+            bool want = t == EnemyType.Herald || t == EnemyType.Boss;
+            if (TDOperatorRegistry.AmplifiesLeaks(t) != want) f.Add($"[AMP_SOURCE] {t}: {!want}, want {want}");
+        }
+    }
+
+    // Spec §5.5 / Tầng 2 §4.1: a Herald or boss within LEAK_AMP_RADIUS cells (Euclid) of a leak amplifies it
+    // ×LEAK_AMP_MULT; two sources do not stack, whatever their types.
     // A Horde body is never amplified (spec §7.2 forced case).
     private static void Amplifier(List<string> f)
     {
         var o = new Vector2Int(0, 0);
         var n = EnemyType.Normal;
         Near(f, "AMP_NONE", TDOperatorRegistry.LeakAmplifier(n, o, new Vector2Int[0]), 1f);
-        Near(f, "AMP_INSIDE", TDOperatorRegistry.LeakAmplifier(n, o, new[] { new Vector2Int(4, 0) }), TDConstant.HERALD_LEAK_MULT);
+        Near(f, "AMP_INSIDE", TDOperatorRegistry.LeakAmplifier(n, o, new[] { new Vector2Int(4, 0) }), TDConstant.LEAK_AMP_MULT);
         Near(f, "AMP_OUTSIDE", TDOperatorRegistry.LeakAmplifier(n, o, new[] { new Vector2Int(4, 1) }), 1f); // √17 > 4
-        Near(f, "AMP_NO_STACK", TDOperatorRegistry.LeakAmplifier(n, o, new[] { new Vector2Int(1, 0), new Vector2Int(0, 1) }), TDConstant.HERALD_LEAK_MULT);
+        Near(f, "AMP_NO_STACK", TDOperatorRegistry.LeakAmplifier(n, o, new[] { new Vector2Int(1, 0), new Vector2Int(0, 1) }), TDConstant.LEAK_AMP_MULT);
         Near(f, "AMP_HORDE_EXEMPT", TDOperatorRegistry.LeakAmplifier(EnemyType.Horde, o, new[] { new Vector2Int(1, 0) }), 1f);
     }
 
@@ -498,12 +586,12 @@ public static class TDMoraleValidator
             TDOperatorRegistry.api = new TDOperatorRegistry();
 
             TDOperatorRegistry.LogLeaks = false;
-            TDOperatorRegistry.api.ReportLeak(Vector2Int.zero, EnemyType.Normal);
+            TDOperatorRegistry.api.ReportLeak(Vector2Int.zero, EnemyType.Normal, new Dictionary<TDOperatorView, float>());
             if (logged != 0) f.Add($"[LEAK_LOG_GATED] {logged} [Leak] line(s) with LogLeaks off");
 
             logged = 0;
             TDOperatorRegistry.LogLeaks = true;
-            TDOperatorRegistry.api.ReportLeak(Vector2Int.zero, EnemyType.Normal);
+            TDOperatorRegistry.api.ReportLeak(Vector2Int.zero, EnemyType.Normal, new Dictionary<TDOperatorView, float>());
             if (logged != 1) f.Add($"[LEAK_LOG_ON] {logged} [Leak] line(s) with LogLeaks on, want 1");
         }
         finally
@@ -512,6 +600,52 @@ public static class TDMoraleValidator
             Application.logMessageReceived -= count;
             TDOperatorRegistry.api = saved;
         }
+    }
+
+    // §7.3 playtest: several reports get compared side by side, so each must say which match it
+    // is, what each wave cost in lives (a leak is not a life), which waves were boss waves, and
+    // how often the player rotated. Driven through the probe's own event handlers.
+    private static void ReportContents(List<string> f)
+    {
+        const BindingFlags S = BindingFlags.Static | BindingFlags.NonPublic;
+        var waveStarted = typeof(TDPressureProbe).GetMethod("OnWaveStarted", S);
+        var lifeLost = typeof(TDPressureProbe).GetMethod("OnLifeLost", S);
+        if (waveStarted == null || lifeLost == null) { f.Add("[REFLECT] TDPressureProbe.OnWaveStarted / OnLifeLost missing"); return; }
+
+        var plans = new List<List<EnemyType>>
+        {
+            new() { EnemyType.Normal },
+            new() { EnemyType.Normal, EnemyType.Boss },
+        };
+        TDPressureProbe.BeginMatch("DEMO-1", 0, Difficulty.Hard, plans);
+        waveStarted.Invoke(null, new object[] { 0 });
+        TDPressureProbe.RecordStint("Knight", true, 10f, 0f, 22f, 7f, 15f, false, 1f, MoraleState.Steady);
+        lifeLost.Invoke(null, new object[] { Vector3.zero });
+        lifeLost.Invoke(null, new object[] { Vector3.zero });
+        waveStarted.Invoke(null, new object[] { 1 });
+        waveStarted.Invoke(null, new object[] { 2 }); // closes wave 2; a wave past the plan is not a boss
+        string report = TDPressureProbe.LastReport;
+
+        string header = report.Split('\n')[0];
+        if (!header.Contains("DEMO-1") || !header.Contains("level 0") || !header.Contains("Hard"))
+            f.Add($"[REPORT_HEADER] '{header.Trim()}' does not name the stage, level and difficulty");
+
+        // wave  boss  onField  limit  goldEarned  leaks  leaked  horde  livesLost  collapses
+        string[] Row(int wave)
+        {
+            foreach (var line in report.Split('\n'))
+            {
+                var t = line.Split((char[])null, System.StringSplitOptions.RemoveEmptyEntries);
+                if (t.Length == 10 && t[0] == wave.ToString()) return t;
+            }
+            return null;
+        }
+        var w1 = Row(1); var w2 = Row(2);
+        if (w1 == null || w2 == null) { f.Add("[REPORT_ROWS] wave rows 1 and 2 not found with 10 columns"); return; }
+        if (w1[1] != "-" || w2[1] != "B") f.Add($"[REPORT_BOSS] boss column: wave 1 '{w1[1]}', wave 2 '{w2[1]}', want '-' and 'B'");
+        if (w1[8] != "2" || w2[8] != "0") f.Add($"[REPORT_LIVES] lives lost: wave 1 {w1[8]}, wave 2 {w2[8]}, want 2 and 0");
+        if (!report.Contains("retreats: 0")) f.Add("[REPORT_RETREATS] no 'retreats: N' line");
+        if (!report.Contains("leak +7.0 · spike +15.0")) f.Add("[REPORT_SOURCES] stint line does not split leak and spike stress");
     }
 
     // §06 · 3.1: a collapsed operator calms down after STRESS_BROKEN_CALM_SECONDS without a hit.
@@ -532,6 +666,31 @@ public static class TDMoraleValidator
 
             op.TakeDamage(1f);
             if (GetField<float>(op, "m_LastHitTime") == -100f) f.Add("[ZERO_DAMAGE_CONTROL] a real hit did not register");
+        }
+        finally { Object.DestroyImmediate(go); }
+    }
+
+    // One fall, one spike (Tầng 2 §4.2). A leak breaks a melee inside the ENEMY's Update, and the
+    // walk-over blow (x3) can kill them the same frame, before their own TickMorale announces the
+    // break. Dying broken spikes nothing, so the fall itself must announce it, or the break goes
+    // unspiked and the collapse uncounted.
+    private static void FallAnnouncesBreak(List<string> f)
+    {
+        var announce = typeof(TDOperatorView).GetMethod("AnnounceFall", BindingFlags.Instance | BindingFlags.NonPublic);
+        var total = typeof(TDPressureProbe).GetField("s_TotalCollapses", BindingFlags.Static | BindingFlags.NonPublic);
+        if (announce == null || total == null) { f.Add("[REFLECT] TDOperatorView.AnnounceFall / TDPressureProbe.s_TotalCollapses missing"); return; }
+
+        var go = new GameObject("FallProbe") { hideFlags = HideFlags.HideAndDontSave };
+        try
+        {
+            var op = go.AddComponent<TDOperatorView>();
+            var broken = At(TDConstant.STRESS_MAX); // collapsed, and nobody has reacted to it yet
+            if (!SetField(f, op, "<Morale>k__BackingField", broken)) return;
+
+            int before = (int)total.GetValue(null);
+            announce.Invoke(op, null);
+            if ((int)total.GetValue(null) != before + 1) f.Add("[FALL_ANNOUNCES_BREAK] dying with an unannounced break recorded no collapse");
+            if (broken.ConsumeBreak()) f.Add("[FALL_CONSUMES_EDGE] the fall left the break pending");
         }
         finally { Object.DestroyImmediate(go); }
     }

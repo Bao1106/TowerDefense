@@ -362,41 +362,44 @@ public static class TDConstant
     //
     // Load is counted in LEAKS, not seconds (spec 2026-10-06 §5.2): an operator only takes
     // stress when the line they hold actually fails. Tune by "how many leaks until they
-    // break" — 11 alone, 15 with ranged support, 35 for a ranged operator (8 / 11 / 25 before
-    // round 2: a Horde pack past a lone Calm melee beside a Herald broke it, spec §7.2).
+    // break" — 15 alone, 21 with ranged support, 48 for a ranged operator (spec Tầng 2 §5).
+    //
+    // The bands are a STATE (icon, A4, Resolve), not a price. A band multiplier (x1 / x1.5 / x2)
+    // used to make the last third twice as fast; with spikes and the share hand-over it was one
+    // of three feedback loops stacked on each other, and the Hard playtest broke 3–4 operators
+    // inside one wave. "Retreat early" is already taught by retreat's -70, so the price is flat.
     public const float STRESS_MAX = 100f;
     public const float STRESS_CALM_MAX = 33f;
     public const float STRESS_STEADY_MAX = 66f;
 
-    // Accelerating, not linear: hesitating late costs more than hesitating early, and the
-    // icon changing shape IS the tell that the clock just sped up.
-    public const float STRESS_MULT_CALM = 1.0f;
-    public const float STRESS_MULT_STEADY = 1.5f;
-    public const float STRESS_MULT_STRESSED = 2.0f;
-
     // Leaks replace N1 / N2. One enemy walking past a full (or collapsed) melee = one leak:
-    // STRESS_PER_LEAK x share x herald amplifier x band multiplier to each operator answerable
-    // for that cell. The melee standing there takes 70%, the ranged covering it split 30%.
+    // STRESS_PER_LEAK x share x amplifier to each operator answerable for that cell. The melee
+    // standing there takes 70%, the ranged covering it split 30%.
     public const float STRESS_PER_LEAK = 7f;
     public const float LEAK_SHARE_MELEE = 0.7f;
 
-    // A Herald within HERALD_RADIUS cells (Euclid) of the leak amplifies it ×1.5 (×2 before round 2). Does not stack,
-    // and never applies to a Horde body.
-    public const float HERALD_LEAK_MULT = 1.5f;
-    public const float HERALD_RADIUS = 4f;
+    // A Herald or a boss within LEAK_AMP_RADIUS cells (Euclid) of the leak amplifies it ×1.5 (×2 before round 2).
+    // Does not stack, and never applies to a Horde body. The boss used to radiate stress on its own (an aura); that
+    // was stress with no overload behind it, so it amplifies leaks like the Herald instead (spec Tầng 2 T5).
+    public const float LEAK_AMP_MULT = 1.5f;
+    public const float LEAK_AMP_RADIUS = 4f;
 
-    // N3 — instant spikes, NOT multiplied by state. A 30-point jolt doubled at Stressed
-    // would almost always kill outright, turning a cascade into an automatic wipe.
-    public const float STRESS_ALLY_DEATH_SPIKE = 20f;
-    public const float STRESS_ALLY_BREAK_SPIKE = 30f;   // worse than death: they are still there
+    // N3 — instant spikes when an ally falls nearby (spec Tầng 2 §4.2). 30 / 20 was a third of the
+    // bar, and a break followed by the death it led to fired both: +50 to everyone in a line that
+    // stands within two cells of each other. The Hard playtest had a Defender collapse at full HP
+    // with nobody leaking past it. Halved, one spike per fall (TDOperatorMorale.DeathSpike).
+    public const float STRESS_ALLY_DEATH_SPIKE = 10f;
+    public const float STRESS_ALLY_BREAK_SPIKE = 15f;   // worse than death: they are still there
     public const float STRESS_SPIKE_RADIUS = 2f;        // cells
 
-    // N4 — fear auras. Radius lives on the enemy data so designers can tune it.
-    public const float STRESS_AURA_BOSS = 2.0f;
+    // ...and a spike may push an operator to the edge but never over it. Collapse must always be
+    // traceable to a leak past THAT operator — "if you lose, it was your fault" — and from 90 a
+    // melee still has two or three leaks to be rotated out. Same idea as RESCUE_RESCUER_CEILING.
+    public const float STRESS_SPIKE_CEILING = 90f;
 
     // Recovery.
     public const float STRESS_IDLE_RELIEF = 0.60f;      // not engaged: blocking nobody, no target in range
-    public const float STRESS_WAVE_CLEAR_RELIEF = 15f;  // a wave cleared with nobody broken
+    public const float STRESS_WAVE_CLEAR_RELIEF = 15f;  // wave end, to each standing operator nobody leaked past
 
     // Retreat gives -70, not a reset. Pull out at 70 and you are clean; pull out at 90 and
     // you never are again. One number that teaches "retreating early is a reset, retreating

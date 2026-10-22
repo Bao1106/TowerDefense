@@ -15,10 +15,6 @@ public struct TDMoraleContext
     /// <summary>Adjacent allies currently Calm. Feeds Resolve only — it no longer touches stress.</summary>
     public int calmAlliesAdjacent;
 
-    /// <summary>Fear-aura rate from the strongest source in range: boss 2.0, else 0. A Herald has
-    /// no aura — it amplifies leaks instead (spec 2026-10-06 §5.5).</summary>
-    public float auraRate;
-
     /// <summary>Seconds since anything last damaged this operator — gates the broken-state recovery.</summary>
     public float secondsSinceHit;
 
@@ -27,20 +23,19 @@ public struct TDMoraleContext
 }
 
 /// <summary>
-/// Morale for a single operator. Stress comes from leaks (OnLeak), N3 spikes and the N4 boss
-/// aura; recovery is §05. The old N1 / N2 clocks — stress for enemies merely being near — are
-/// gone (spec 2026-10-06 §5.2): holding the line well now costs nothing.
+/// Morale for a single operator. Stress comes from leaks (OnLeak) and N3 spikes, nothing else;
+/// recovery is §05. The old N1 / N2 clocks — stress for enemies merely being near — are gone
+/// (spec 2026-10-06 §5.2), and so is the boss aura (spec Tầng 2 T5): nothing raises stress
+/// over time, so holding the line well costs nothing.
 ///
 /// Plain C#. No MonoBehaviour, no `static api`, no Update — the owner ticks it. That is a
 /// deliberate constraint from the plan and it buys the thing this project has been short
 /// of all along: the whole rule set can be exercised by an editor validator with no scene,
 /// no play mode and no prefab, so the numbers get checked before the UI exists.
 ///
-/// Multiplier discipline (§02): the state multiplier applies to the aura rate and to each leak
-/// — a leak is an event, but it keeps the band multiplier so the "point of no return" holds
-/// until Tier 2 decides otherwise (spec §5.2). Never to N3 spikes (a 30-point jolt doubled at
-/// Stressed almost always kills outright, which turns a cascade into an automatic wipe) and
-/// never to recovery (or the operator who most needs relief heals slowest — punished twice).
+/// No multipliers (spec Tầng 2 T2): the band is a state, never a price. A leak costs the same at
+/// 10 as at 70, which is what lets the overlay say exactly how many leaks are left. Recovery was
+/// never scaled either — the operator who most needs relief must not heal slowest.
 /// </summary>
 public sealed class TDOperatorMorale
 {
@@ -48,6 +43,7 @@ public sealed class TDOperatorMorale
     private float m_RetreatCooldown;
     private bool m_Broken;
     private bool m_BreakPending; // entered collapse, and nobody has reacted to it yet
+    private bool m_LeakedSinceRelief; // an enemy got past them since the last wave relief or since they came on
 
     public float Value => m_Value;
 
@@ -76,6 +72,14 @@ public sealed class TDOperatorMorale
     /// </summary>
     public int Setbacks { get; private set; }
 
+    /// <summary>
+    /// Points that actually landed from leaks / from ally spikes, over this operator's whole match
+    /// (after the clamp and the spike ceiling). The report takes differences per stint, which is
+    /// what tells whether a collapse came from the line failing or from a neighbour falling.
+    /// </summary>
+    public float LeakStress { get; private set; }
+    public float SpikeStress { get; private set; }
+
     /// <summary>Reports Broken while the latch holds, even though the value has fallen below 100.</summary>
     public MoraleState State => m_Broken ? MoraleState.Broken : StateOf(m_Value);
 
@@ -87,19 +91,11 @@ public sealed class TDOperatorMorale
         return MoraleState.Calm;
     }
 
-    public static float MultiplierOf(MoraleState state) => state switch
-    {
-        MoraleState.Steady => TDConstant.STRESS_MULT_STEADY,
-        MoraleState.Stressed => TDConstant.STRESS_MULT_STRESSED,
-        _ => TDConstant.STRESS_MULT_CALM, // Broken no longer accrues — it is already at the top
-    };
-
     // ── Rates ────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Net points per second at this instant, state multiplier included. Positive means
-    /// climbing toward a break. Exposed because the debug overlay of step 2.5 and the
-    /// validator both want the number, not just its effect.
+    /// Net points per second at this instant. Never positive any more — no time-based source
+    /// is left — so it is recovery or nothing. Exposed because the validator wants the number.
     /// </summary>
     public float NetRate(in TDMoraleContext ctx)
     {
@@ -113,10 +109,9 @@ public sealed class TDOperatorMorale
                 : 0f;
         }
 
-        // The aura is the only time-based source left; leaks arrive through OnLeak. The lull is
-        // worth something — but only while blocking nobody and with no target in range.
-        float n4 = Mathf.Max(0f, ctx.auraRate) * MultiplierOf(State);
-        return n4 - (ctx.engaged ? 0f : TDConstant.STRESS_IDLE_RELIEF);
+        // Stress arrives only as events (OnLeak, AddSpike). The lull is worth something — but only
+        // while blocking nobody and with no target in range.
+        return ctx.engaged ? 0f : -TDConstant.STRESS_IDLE_RELIEF;
     }
 
     // ── Tick ─────────────────────────────────────────────────────────────────
@@ -131,28 +126,55 @@ public sealed class TDOperatorMorale
 
     // ── Events ───────────────────────────────────────────────────────────────
 
-    /// <summary>N3 — an ally died or broke nearby. Never multiplied by state (§02).</summary>
-    public void AddSpike(float amount) => SetValue(m_Value + Mathf.Max(0f, amount));
+    /// <summary>
+    /// N3 — an ally died or broke nearby. Pushes toward the edge but never over it: clamped at
+    /// STRESS_SPIKE_CEILING rather than refused, the same shape as PayRescueStress. An operator
+    /// already above the ceiling gains nothing. Only a leak past them can make them break.
+    /// </summary>
+    public void AddSpike(float amount)
+    {
+        float before = m_Value;
+        SetValue(Mathf.Min(m_Value + Mathf.Max(0f, amount), Mathf.Max(m_Value, TDConstant.STRESS_SPIKE_CEILING)));
+        SpikeStress += m_Value - before;
+    }
 
     /// <summary>
-    /// An enemy walked past a cell this operator answers for. `share` is this operator's part of
-    /// the leak (TDLeakShare), `amplifier` the Herald multiplier. Returns the points actually
-    /// added after the clamp, so the caller can log and pulse on what really happened.
+    /// What this operator's death spikes the neighbours by. Nothing if they die collapsed: the
+    /// break already spiked everyone, and a break followed by the death it leads to is one fall,
+    /// not two — together they used to hand each neighbour +50.
+    /// </summary>
+    public float DeathSpike => m_Broken ? 0f : TDConstant.STRESS_ALLY_DEATH_SPIKE;
+
+    /// <summary>
+    /// An enemy walked past a cell this operator answers for. `weight` is their share of the leak
+    /// times the amplifier, already topped up against what this enemy charged them before
+    /// (TDLeakShare.TopUp) — so it can be 0. Returns the points actually added after the clamp,
+    /// so the caller can log and pulse on what really happened.
     ///
     /// Ignored while collapsed: the latch already holds them at the top, and a second break
     /// from the same incident would count a second setback.
     /// </summary>
-    public float OnLeak(float share, float amplifier)
+    public float OnLeak(float weight)
     {
-        if (m_Broken || share <= 0f) return 0f;
+        if (m_Broken) return 0f;
+
+        // Marked even when this enemy already charged them in full (weight 0): they were still
+        // answerable for the cell it walked through, so this wave was not clean for them.
+        m_LeakedSinceRelief = true;
+        if (weight <= 0f) return 0f;
 
         float before = m_Value;
-        SetValue(m_Value + TDConstant.STRESS_PER_LEAK * share * amplifier * MultiplierOf(State));
+        SetValue(m_Value + TDConstant.STRESS_PER_LEAK * weight);
+        LeakStress += m_Value - before;
         return m_Value - before;
     }
 
     /// <summary>
-    /// A wave ended — everyone still STANDING steadies a little. The collapsed get nothing.
+    /// A wave ended — everyone still STANDING whom nobody leaked past steadies a little.
+    ///
+    /// Spec Tầng 2 T4: from wave 5 on, 0 of 17 playtest waves were leak-free for the squad, so a
+    /// squad-wide "clean wave" would never fire when it matters. Per operator it does: the one on
+    /// the quiet lane recovers while the broken lane does not. The mark clears here either way.
     ///
     /// It used to be withheld from the whole squad whenever anybody broke, which made it the one
     /// thing §06 calls a "van chống chết chùm" and yet guaranteed to be shut during exactly the
@@ -169,7 +191,9 @@ public sealed class TDOperatorMorale
     /// </summary>
     public void OnWaveCleared()
     {
-        if (m_Broken) return;
+        bool leaked = m_LeakedSinceRelief;
+        m_LeakedSinceRelief = false;
+        if (m_Broken || leaked) return;
         Relieve(TDConstant.STRESS_WAVE_CLEAR_RELIEF);
     }
 
@@ -184,6 +208,8 @@ public sealed class TDOperatorMorale
     {
         Relieve(TDConstant.STRESS_RETREAT_RELIEF);
         m_RetreatCooldown = TDConstant.STRESS_RETREAT_COUNTDOWN;
+        // Off the field OnWaveCleared never reaches them; the mark must not wait for their return.
+        m_LeakedSinceRelief = false;
     }
 
     /// <summary>Rescue: -50 and the broken state is lifted (the caller pays the SP).</summary>
@@ -223,6 +249,7 @@ public sealed class TDOperatorMorale
         if (!m_Broken) OnSetback();
 
         m_RetreatCooldown = TDConstant.STRESS_DEATH_COUNTDOWN;
+        m_LeakedSinceRelief = false; // leaving the field, as in OnRetreat
 
         // The COLLAPSE ends here; the stress does not. Dying at 100 leaves ~84 after the 16s
         // cooldown ticks off-field, which is above the latch's exit line of 66 — so without this
@@ -231,8 +258,8 @@ public sealed class TDOperatorMorale
         // leak, not a punishment. "Collapsed" describes someone standing on the field, and they
         // are not on it any more.
         //
-        // DEATH_KEEPS_STRESS is untouched and still does the punishing: coming back at ~84 is the
-        // Stressed band at a x2.0 multiplier, seconds from breaking again under any pressure.
+        // DEATH_KEEPS_STRESS is untouched and still does the punishing: coming back at ~84 is
+        // deep in the Stressed band, three leaks from breaking again.
         m_Broken = false;
 
         // Nor may an unannounced break outlive them: it would fire on the next deploy, spiking
@@ -318,9 +345,8 @@ public sealed class TDOperatorMorale
     /// Leaks at this share (amplifier 1, no recovery in between) until this operator breaks —
     /// the number tuning happens on. 0 if already collapsed, int.MaxValue if share is 0.
     ///
-    /// Each leak is priced by the band it LANDS in, exactly like OnLeak, so this walks the same
-    /// steps rather than dividing per band: a leak that starts at 32 is a Calm leak even though
-    /// it carries the value deep into Steady.
+    /// Walks the same float additions OnLeak makes rather than dividing: 4.9 is not exact in
+    /// binary, and a quotient can land one leak away from what the real walk does at the edge.
     /// </summary>
     public int LeaksToBreak(float share)
     {
@@ -329,7 +355,7 @@ public sealed class TDOperatorMorale
 
         int n = 0;
         for (float v = m_Value; v < TDConstant.STRESS_MAX; n++)
-            v += TDConstant.STRESS_PER_LEAK * share * MultiplierOf(StateOf(v));
+            v += TDConstant.STRESS_PER_LEAK * share;
         return n;
     }
 }
