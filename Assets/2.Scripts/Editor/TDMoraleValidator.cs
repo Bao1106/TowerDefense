@@ -623,6 +623,7 @@ public static class TDMoraleValidator
         TDPressureProbe.BeginMatch("DEMO-1", 0, Difficulty.Hard, plans);
         waveStarted.Invoke(null, new object[] { 0 });
         TDPressureProbe.RecordStint("Knight", true, 10f, 0f, 22f, 7f, 15f, false, 1f, MoraleState.Steady);
+        TDPressureProbe.RecordDeath();
         lifeLost.Invoke(null, new object[] { Vector3.zero });
         lifeLost.Invoke(null, new object[] { Vector3.zero });
         waveStarted.Invoke(null, new object[] { 1 });
@@ -633,20 +634,21 @@ public static class TDMoraleValidator
         if (!header.Contains("DEMO-1") || !header.Contains("level 0") || !header.Contains("Hard"))
             f.Add($"[REPORT_HEADER] '{header.Trim()}' does not name the stage, level and difficulty");
 
-        // wave  boss  onField  limit  goldEarned  leaks  leaked  horde  livesLost  collapses
+        // wave  boss  onField  limit  goldEarned  leaks  leaked  horde  livesLost  collapses  deaths
         string[] Row(int wave)
         {
             foreach (var line in report.Split('\n'))
             {
                 var t = line.Split((char[])null, System.StringSplitOptions.RemoveEmptyEntries);
-                if (t.Length == 10 && t[0] == wave.ToString()) return t;
+                if (t.Length == 11 && t[0] == wave.ToString()) return t;
             }
             return null;
         }
         var w1 = Row(1); var w2 = Row(2);
-        if (w1 == null || w2 == null) { f.Add("[REPORT_ROWS] wave rows 1 and 2 not found with 10 columns"); return; }
+        if (w1 == null || w2 == null) { f.Add("[REPORT_ROWS] wave rows 1 and 2 not found with 11 columns"); return; }
         if (w1[1] != "-" || w2[1] != "B") f.Add($"[REPORT_BOSS] boss column: wave 1 '{w1[1]}', wave 2 '{w2[1]}', want '-' and 'B'");
         if (w1[8] != "2" || w2[8] != "0") f.Add($"[REPORT_LIVES] lives lost: wave 1 {w1[8]}, wave 2 {w2[8]}, want 2 and 0");
+        if (w1[10] != "1" || w2[10] != "0") f.Add($"[REPORT_DEATHS] deaths: wave 1 {w1[10]}, wave 2 {w2[10]}, want 1 and 0");
         if (!report.Contains("retreats: 0")) f.Add("[REPORT_RETREATS] no 'retreats: N' line");
         if (!report.Contains("leak +7.0 · spike +15.0")) f.Add("[REPORT_SOURCES] stint line does not split leak and spike stress");
     }
