@@ -59,6 +59,7 @@ public static class TDMoraleValidator
         A4(f);
         ReportContents(f);
         ZeroDamage(f);
+        FallAnnouncesBreak(f);
         LeakLog(f);
         Resolve(f);
         FocusScale(f);
@@ -665,6 +666,31 @@ public static class TDMoraleValidator
 
             op.TakeDamage(1f);
             if (GetField<float>(op, "m_LastHitTime") == -100f) f.Add("[ZERO_DAMAGE_CONTROL] a real hit did not register");
+        }
+        finally { Object.DestroyImmediate(go); }
+    }
+
+    // One fall, one spike (Tầng 2 §4.2). A leak breaks a melee inside the ENEMY's Update, and the
+    // walk-over blow (x3) can kill them the same frame, before their own TickMorale announces the
+    // break. Dying broken spikes nothing, so the fall itself must announce it, or the break goes
+    // unspiked and the collapse uncounted.
+    private static void FallAnnouncesBreak(List<string> f)
+    {
+        var announce = typeof(TDOperatorView).GetMethod("AnnounceFall", BindingFlags.Instance | BindingFlags.NonPublic);
+        var total = typeof(TDPressureProbe).GetField("s_TotalCollapses", BindingFlags.Static | BindingFlags.NonPublic);
+        if (announce == null || total == null) { f.Add("[REFLECT] TDOperatorView.AnnounceFall / TDPressureProbe.s_TotalCollapses missing"); return; }
+
+        var go = new GameObject("FallProbe") { hideFlags = HideFlags.HideAndDontSave };
+        try
+        {
+            var op = go.AddComponent<TDOperatorView>();
+            var broken = At(TDConstant.STRESS_MAX); // collapsed, and nobody has reacted to it yet
+            if (!SetField(f, op, "<Morale>k__BackingField", broken)) return;
+
+            int before = (int)total.GetValue(null);
+            announce.Invoke(op, null);
+            if ((int)total.GetValue(null) != before + 1) f.Add("[FALL_ANNOUNCES_BREAK] dying with an unannounced break recorded no collapse");
+            if (broken.ConsumeBreak()) f.Add("[FALL_CONSUMES_EDGE] the fall left the break pending");
         }
         finally { Object.DestroyImmediate(go); }
     }
