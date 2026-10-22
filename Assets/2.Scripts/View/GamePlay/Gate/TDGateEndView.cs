@@ -2,7 +2,7 @@ using TMPro;
 using UnityEngine;
 
 // Attached to the GateEnd prefab — requires a BoxCollider with isTrigger=true on the same object.
-// The LoseLife logic is handled in TDEnemyView when the enemy exhausts its path.
+// Lives are lost in TDEnemyView (TDPlayerLifeControl.LoseLives) when the enemy exhausts its path.
 // This trigger only plays a visual effect when the enemy physically enters the gate collider.
 public class TDGateEndView : MonoBehaviour
 {

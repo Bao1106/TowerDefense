@@ -273,8 +273,7 @@ public class TDEnemyView : MonoBehaviour
         else
         {
             m_HasReachedEnd = true;
-            TDGameEventBus.LifeLost(transform.position);
-            TDPlayerLifeControl.api.LoseLife();
+            TDPlayerLifeControl.api.LoseLives(1, transform.position);
             TDGameStateControl.api?.OnEnemyRemoved(); // an enemy escaping also counts as removed
             ReturnToPool();
         }

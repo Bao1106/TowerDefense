@@ -58,6 +58,7 @@ public static class TDMoraleValidator
         Pearson(f);
         A4(f);
         ReportContents(f);
+        Lives(f);
         ZeroDamage(f);
         FallAnnouncesBreak(f);
         RescuerPick(f);
@@ -622,6 +623,7 @@ public static class TDMoraleValidator
         TDPressureProbe.BeginMatch("DEMO-1", 0, Difficulty.Hard, plans);
         waveStarted.Invoke(null, new object[] { 0 });
         TDPressureProbe.RecordStint("Knight", true, 10f, 0f, 22f, 7f, 15f, false, 1f, MoraleState.Steady);
+        TDPressureProbe.RecordDeath();
         lifeLost.Invoke(null, new object[] { Vector3.zero });
         lifeLost.Invoke(null, new object[] { Vector3.zero });
         waveStarted.Invoke(null, new object[] { 1 });
@@ -632,22 +634,74 @@ public static class TDMoraleValidator
         if (!header.Contains("DEMO-1") || !header.Contains("level 0") || !header.Contains("Hard"))
             f.Add($"[REPORT_HEADER] '{header.Trim()}' does not name the stage, level and difficulty");
 
-        // wave  boss  onField  limit  goldEarned  leaks  leaked  horde  livesLost  collapses
+        // wave  boss  onField  limit  goldEarned  leaks  leaked  horde  livesLost  collapses  deaths
         string[] Row(int wave)
         {
             foreach (var line in report.Split('\n'))
             {
                 var t = line.Split((char[])null, System.StringSplitOptions.RemoveEmptyEntries);
-                if (t.Length == 10 && t[0] == wave.ToString()) return t;
+                if (t.Length == 11 && t[0] == wave.ToString()) return t;
             }
             return null;
         }
         var w1 = Row(1); var w2 = Row(2);
-        if (w1 == null || w2 == null) { f.Add("[REPORT_ROWS] wave rows 1 and 2 not found with 10 columns"); return; }
+        if (w1 == null || w2 == null) { f.Add("[REPORT_ROWS] wave rows 1 and 2 not found with 11 columns"); return; }
         if (w1[1] != "-" || w2[1] != "B") f.Add($"[REPORT_BOSS] boss column: wave 1 '{w1[1]}', wave 2 '{w2[1]}', want '-' and 'B'");
         if (w1[8] != "2" || w2[8] != "0") f.Add($"[REPORT_LIVES] lives lost: wave 1 {w1[8]}, wave 2 {w2[8]}, want 2 and 0");
+        if (w1[10] != "1" || w2[10] != "0") f.Add($"[REPORT_DEATHS] deaths: wave 1 {w1[10]}, wave 2 {w2[10]}, want 1 and 0");
         if (!report.Contains("retreats: 0")) f.Add("[REPORT_RETREATS] no 'retreats: N' line");
         if (!report.Contains("leak +7.0 · spike +15.0")) f.Add("[REPORT_SOURCES] stint line does not split leak and spike stress");
+    }
+
+    // Tầng 3 §4.1: every lost life goes through LoseLives: never below zero, and the match ends once.
+    // Edit Mode after a Play session can still have the probe and the effect manager subscribed, so
+    // the bus is stashed: a real GameOver would write a fake report, a real LifeLost spawns effects.
+    private static void Lives(List<string> f)
+    {
+        const BindingFlags S = BindingFlags.Static | BindingFlags.NonPublic;
+        var lostField = typeof(TDGameEventBus).GetField("OnLifeLost", S);
+        var overField = typeof(TDGameEventBus).GetField("OnGameOver", S);
+        if (lostField == null || overField == null) { f.Add("[REFLECT] TDGameEventBus.OnLifeLost / OnGameOver backing fields missing"); return; }
+
+        object savedLost = lostField.GetValue(null), savedOver = overField.GetValue(null);
+        int lost = 0, over = 0, overCb = 0, changed = 0;
+        try
+        {
+            lostField.SetValue(null, (System.Action<Vector3>)(_ => lost++));
+            overField.SetValue(null, (System.Action)(() => over++));
+
+            var life = new TDPlayerLifeControl();
+            life.onGameOver += () => overCb++;
+            life.onLifeChanged += _ => changed++;
+            life.Initialize();
+            int start = TDConstant.CONFIG_PLAYER_STARTING_LIVES;
+
+            changed = 0;
+            life.LoseLives(0, Vector3.zero);
+            life.LoseLives(-2, Vector3.zero);
+            if (life.CurrentLives != start || lost != 0 || changed != 0)
+                f.Add($"[LIVES_ZERO_COUNT] count ≤ 0 changed something: lives {life.CurrentLives}, LifeLost {lost}, onLifeChanged {changed}");
+
+            life.LoseLives(3, Vector3.zero);
+            if (life.CurrentLives != start - 3 || lost != 3 || over != 0)
+                f.Add($"[LIVES_DEATH_COST] lives {life.CurrentLives}, LifeLost {lost}, GameOver {over}; want {start - 3}, 3, 0");
+
+            life.LoseLives(life.CurrentLives - 2, Vector3.zero); // down to 2
+            lost = 0;
+            life.LoseLives(3, Vector3.zero);
+            if (life.CurrentLives != 0 || lost != 2 || over != 1 || overCb != 1)
+                f.Add($"[LIVES_FLOOR_ZERO] lives {life.CurrentLives}, LifeLost {lost}, GameOver {over}/{overCb}; want 0, 2, 1/1");
+
+            lost = 0;
+            life.LoseLives(1, Vector3.zero);
+            if (life.CurrentLives != 0 || lost != 0 || over != 1 || overCb != 1)
+                f.Add($"[LIVES_AFTER_GAMEOVER] lives {life.CurrentLives}, LifeLost {lost}, GameOver {over}/{overCb}; want 0, 0, 1/1");
+        }
+        finally
+        {
+            lostField.SetValue(null, savedLost);
+            overField.SetValue(null, savedOver);
+        }
     }
 
     // §06 · 3.1: a collapsed operator calms down after STRESS_BROKEN_CALM_SECONDS without a hit.
