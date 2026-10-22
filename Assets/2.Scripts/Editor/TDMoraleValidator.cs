@@ -864,11 +864,15 @@ public static class TDMoraleValidator
             var icon = TDMoraleIconView.Attach(go.transform);
             if (icon == null) { f.Add("[ICON_ATTACH] TDMoraleIconView.Attach returned null — sprites missing?"); return; }
 
+            // Checks the SHADER, not a material value: the canvas sets unity_GUIZTestMode itself on
+            // every draw, so a material's own value never reached the GPU (the first version of
+            // this test read that value and passed while the boss still hid the badge in play).
             foreach (var g in icon.GetComponentsInChildren<UnityEngine.UI.Graphic>(true))
             {
-                var mat = g is TMPro.TMP_Text t ? t.fontSharedMaterial : g.material;
-                if (mat == null || mat.GetInt("unity_GUIZTestMode") != (int)UnityEngine.Rendering.CompareFunction.Always)
-                    f.Add($"[ICON_ON_TOP] {g.name} is depth-tested: a model standing in front hides it");
+                bool onTop = g is TMPro.TMP_Text t
+                    ? t.fontSharedMaterial != null && t.fontSharedMaterial.shader.name.EndsWith("Overlay")
+                    : g.material != null && g.material.shader.name == TDMoraleIconView.ON_TOP_SHADER;
+                if (!onTop) f.Add($"[ICON_ON_TOP] {g.name} draws with a depth-tested shader: a model standing in front hides it");
             }
 
             icon.Refresh(At(10f));
@@ -886,6 +890,15 @@ public static class TDMoraleValidator
             bool shownCalm = outline != null && outline.enabled;
             if (!shownBroken || !rightColour || shownCalm)
                 f.Add($"[BROKEN_OUTLINE] outline {(outline != null ? "present" : "missing")}: on when Broken {shownBroken}, indigo {rightColour}, on when Calm {shownCalm}");
+
+            // A rescue inside the label's 1.5 s left "BROKEN" over a badge already back to Steady.
+            icon.PlayBreak();
+            icon.Refresh(At(TDConstant.STRESS_MAX));
+            bool keptWhileBroken = !float.IsNegativeInfinity(GetField<float>(icon, "m_BreakStart"));
+            icon.Refresh(At(10f));
+            bool clearedOnRecovery = float.IsNegativeInfinity(GetField<float>(icon, "m_BreakStart"));
+            if (!keptWhileBroken || !clearedOnRecovery)
+                f.Add($"[LABEL_CLEARS_ON_RECOVERY] kept while Broken {keptWhileBroken}, cleared once not Broken {clearedOnRecovery}");
         }
         finally { Object.DestroyImmediate(go); }
     }
@@ -895,7 +908,7 @@ public static class TDMoraleValidator
     private static void BreakTiming(List<string> f)
     {
         Near(f, "PUNCH_START", TDMoraleIconView.BreakPunch(0f), 1f);
-        Near(f, "PUNCH_PEAK", TDMoraleIconView.BreakPunch(0.175f), 1.6f);
+        Near(f, "PUNCH_PEAK", TDMoraleIconView.BreakPunch(0.175f), 1.5f); // ~81 px badge → ~121 px, under S1's 125
         Near(f, "PUNCH_END", TDMoraleIconView.BreakPunch(0.35f), 1f);
         Near(f, "PUNCH_AFTER", TDMoraleIconView.BreakPunch(1f), 1f);
         Near(f, "PUNCH_BEFORE", TDMoraleIconView.BreakPunch(-0.1f), 1f);

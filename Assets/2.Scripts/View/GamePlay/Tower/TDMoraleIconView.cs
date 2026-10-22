@@ -2,7 +2,6 @@ using System.Collections.Generic;
 using TDEnums;
 using TMPro;
 using UnityEngine;
-using UnityEngine.Rendering;
 using UnityEngine.UI;
 
 /// <summary>
@@ -49,7 +48,9 @@ public sealed class TDMoraleIconView : MonoBehaviour
     // ── Break moment (Tầng 4 §4.1) ──────────────────────────────────────────
     // Twice the leak beat in both size and length, so the two never read as the same event. A
     // fresh break looked exactly like one ten seconds old (screenshot 3) — this is what tells them apart.
-    private const float PUNCH_GAIN = 0.6f;
+    // 0.5, not the 0.6 first specced: the badge measured ~81 px at rest in play, not the 69 px
+    // computed, so 1.6 peaked at ~130 px; 1.5 lands at ~121 px, under the 125 px the screenshots set.
+    private const float PUNCH_GAIN = 0.5f;
     private const float PUNCH_SECONDS = 0.35f;
     private const float FLASH_SECONDS = 0.15f;
     private const float LABEL_BLINK = 0.15f;
@@ -59,6 +60,8 @@ public sealed class TDMoraleIconView : MonoBehaviour
     // Canvas units, one 1080p pixel ≈ 1.86 of them: text 36 px (Android's 12sp floor is ~33),
     // plate 165 × 48 px, its bottom 6 px above the badge.
     public const string LABEL_FONT_PATH = "Fonts/OpenSans-Bold SDF"; // the HUD's own face
+    public const string LABEL_MATERIAL_PATH = "Fonts/OpenSans-Bold SDF Overlay";
+    public const string ON_TOP_SHADER = "Custom/UI_AlwaysOnTop";
     private const float LABEL_FONT_UNITS = 67f;
     private static readonly Vector2 k_LabelPlate = new Vector2(307f, 89f);
     private const float LABEL_GAP_UNITS = 11f;
@@ -136,17 +139,24 @@ public sealed class TDMoraleIconView : MonoBehaviour
     private Image m_Outline;
 
     /// <summary>
-    /// The UI material with depth testing switched off. A world-space canvas is depth-tested like
-    /// any mesh, so a boss standing on the line hid the badge completely (Tầng 4 §1.2 A1) — the
-    /// one moment it mattered most. Shared by everything morale draws, the rescue arc included.
+    /// The UI material that ignores depth. A world-space canvas is depth-tested like any mesh, so a
+    /// boss standing on the line hid the badge completely (Tầng 4 §1.2 A1) — the one moment it
+    /// mattered most. Shared by everything morale draws, the rescue arc included.
+    ///
+    /// The shader has ZTest Always written into it; setting unity_GUIZTestMode on a material does
+    /// nothing, because the canvas writes that value itself on every draw. It is the shader the HP
+    /// bar already uses (HPBar_AlwaysOnTop.mat), which is also what keeps it in a build.
     /// </summary>
     public static Material OnTopMaterial
     {
         get
         {
             if (s_OnTop != null) return s_OnTop;
-            s_OnTop = new Material(Canvas.GetDefaultCanvasMaterial()) { name = "MoraleOnTop", hideFlags = HideFlags.HideAndDontSave };
-            s_OnTop.SetInt("unity_GUIZTestMode", (int)CompareFunction.Always);
+            var shader = Shader.Find(ON_TOP_SHADER);
+            if (shader == null) Debug.LogWarning($"[MoraleIcon] shader {ON_TOP_SHADER} missing; badges will be hidden behind models");
+            s_OnTop = shader != null
+                ? new Material(shader) { name = "MoraleOnTop", hideFlags = HideFlags.HideAndDontSave }
+                : Canvas.GetDefaultCanvasMaterial();
             return s_OnTop;
         }
     }
@@ -353,13 +363,18 @@ public sealed class TDMoraleIconView : MonoBehaviour
         m_Label.enabled = false;
     }
 
-    // A copy of the font's material with depth testing off. Not the font's own: the HUD uses that
-    // one and must keep drawing as it does.
+    // The label font's Overlay preset (TMP's ZTest Always shader). An asset under Resources rather
+    // than a copy made here: a shader only code asks for by name is stripped from a build. Not the
+    // font's own material — the HUD draws with that and must stay depth-tested as it is.
     private static Material LabelMaterial(Material fontMaterial)
     {
         if (s_LabelMaterial != null) return s_LabelMaterial;
-        s_LabelMaterial = new Material(fontMaterial) { name = "MoraleLabelOnTop", hideFlags = HideFlags.HideAndDontSave };
-        s_LabelMaterial.SetInt("unity_GUIZTestMode", (int)CompareFunction.Always);
+        s_LabelMaterial = Resources.Load<Material>(LABEL_MATERIAL_PATH);
+        if (s_LabelMaterial == null)
+        {
+            Debug.LogWarning($"[MoraleIcon] no label material at Resources/{LABEL_MATERIAL_PATH}; the label can be hidden behind models");
+            s_LabelMaterial = fontMaterial;
+        }
         return s_LabelMaterial;
     }
 
@@ -435,6 +450,10 @@ public sealed class TDMoraleIconView : MonoBehaviour
         m_Badge.localScale = Vector3.one * m_BadgeScale;
         if (m_Group != null) m_Group.alpha = weight.alpha;
         m_Outline.enabled = state == MoraleState.Broken;
+
+        // Rescued inside the label's 1.5 s: "BROKEN" over a badge already back to Steady says two
+        // things at once. The moment ends with the state it announced.
+        if (state != MoraleState.Broken) m_BreakStart = float.NegativeInfinity;
 
         Color colour = ColourFor(state);
 

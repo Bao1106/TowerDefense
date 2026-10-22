@@ -385,8 +385,16 @@ public static class TDBalanceValidator
     // a miss silently falls back to TMP's default face.
     private static void MoraleWired(List<string> f)
     {
-        if (Resources.Load<TMPro.TMP_FontAsset>(TDMoraleIconView.LABEL_FONT_PATH) == null)
+        var font = Resources.Load<TMPro.TMP_FontAsset>(TDMoraleIconView.LABEL_FONT_PATH);
+        if (font == null)
             f.Add($"[MORALE_LABEL_FONT] no TMP font at Resources/{TDMoraleIconView.LABEL_FONT_PATH}");
+
+        // The label's overlay material is an asset, not built at runtime: a shader that only code
+        // asks for by name is stripped from a build, and the label would fall back to depth-tested.
+        var labelMat = Resources.Load<Material>(TDMoraleIconView.LABEL_MATERIAL_PATH);
+        if (labelMat == null || !labelMat.shader.name.EndsWith("Overlay")
+            || (font != null && labelMat.GetTexture("_MainTex") != font.atlasTexture))
+            f.Add($"[MORALE_LABEL_MATERIAL] Resources/{TDMoraleIconView.LABEL_MATERIAL_PATH}: {(labelMat == null ? "missing" : labelMat.shader.name)}, want an Overlay preset of the label font's atlas");
 
         var all = LoadConfig<TDEffectConfig>()?.GetAll();
         if (all == null) { f.Add("[MORALE_SFX_WIRED] no Effect Config asset"); return; }
