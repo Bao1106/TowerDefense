@@ -64,6 +64,7 @@ public static class TDMoraleValidator
         MoraleCues(f);
         SfxVoices(f);
         IconRendering(f);
+        BreakTiming(f);
         RescuerPick(f);
         RescueReach(f);
         LeakLog(f);
@@ -886,6 +887,34 @@ public static class TDMoraleValidator
                 f.Add($"[BROKEN_OUTLINE] outline {(outline != null ? "present" : "missing")}: on when Broken {shownBroken}, indigo {rightColour}, on when Calm {shownCalm}");
         }
         finally { Object.DestroyImmediate(go); }
+    }
+
+    // Tầng 4 §4.1: the break moment's rhythm, as pure functions so the numbers the spec pins are
+    // checked here rather than only by eye in a screenshot.
+    private static void BreakTiming(List<string> f)
+    {
+        Near(f, "PUNCH_START", TDMoraleIconView.BreakPunch(0f), 1f);
+        Near(f, "PUNCH_PEAK", TDMoraleIconView.BreakPunch(0.175f), 1.6f);
+        Near(f, "PUNCH_END", TDMoraleIconView.BreakPunch(0.35f), 1f);
+        Near(f, "PUNCH_AFTER", TDMoraleIconView.BreakPunch(1f), 1f);
+        Near(f, "PUNCH_BEFORE", TDMoraleIconView.BreakPunch(-0.1f), 1f);
+
+        if (!TDMoraleIconView.BreakFlash(0.1f)) f.Add("[FLASH_ON] no white flash at 0.1 s");
+        if (TDMoraleIconView.BreakFlash(0.15f)) f.Add("[FLASH_OFF] still flashing at 0.15 s");
+
+        Near(f, "LABEL_ALPHA_FIRST_ON", TDMoraleIconView.LabelAlpha(0.05f), 1f);
+        Near(f, "LABEL_ALPHA_FIRST_OFF", TDMoraleIconView.LabelAlpha(0.2f), 0f);
+        Near(f, "LABEL_ALPHA_SECOND_ON", TDMoraleIconView.LabelAlpha(0.35f), 1f);
+        Near(f, "LABEL_ALPHA_SECOND_OFF", TDMoraleIconView.LabelAlpha(0.5f), 0f);
+        Near(f, "LABEL_ALPHA_HOLD", TDMoraleIconView.LabelAlpha(0.9f), 1f);
+        Near(f, "LABEL_ALPHA_FADE", TDMoraleIconView.LabelAlpha(1.35f), 0.5f);
+        Near(f, "LABEL_ALPHA_GONE", TDMoraleIconView.LabelAlpha(1.5f), 0f);
+        Near(f, "LABEL_ALPHA_AFTER", TDMoraleIconView.LabelAlpha(2f), 0f);
+
+        Near(f, "RING_RADIUS_MID", TDMoraleIconView.RingRadius(0.2f, 0.4f, 67f, 200f), 133.5f);
+        Near(f, "RING_RADIUS_CLAMP", TDMoraleIconView.RingRadius(1f, 0.4f, 67f, 200f), 200f);
+        Near(f, "RING_ALPHA_MID", TDMoraleIconView.RingAlpha(0.2f, 0.4f), 0.5f);
+        Near(f, "RING_ALPHA_END", TDMoraleIconView.RingAlpha(0.4f, 0.4f), 0f);
     }
 
     private static void Voice(List<string> f, string tag, bool[] playing, float[] startedAt, bool[] priority, bool want, int expect)

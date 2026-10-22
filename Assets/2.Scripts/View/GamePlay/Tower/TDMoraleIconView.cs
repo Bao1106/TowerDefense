@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using TDEnums;
+using TMPro;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.UI;
@@ -45,6 +46,29 @@ public sealed class TDMoraleIconView : MonoBehaviour
     // A tower platform measured #C6DAFC — the pale disc melted into it and only the symbol was left.
     private const float OUTLINE_UNITS = 5.6f;
 
+    // ── Break moment (Tầng 4 §4.1) ──────────────────────────────────────────
+    // Twice the leak beat in both size and length, so the two never read as the same event. A
+    // fresh break looked exactly like one ten seconds old (screenshot 3) — this is what tells them apart.
+    private const float PUNCH_GAIN = 0.6f;
+    private const float PUNCH_SECONDS = 0.35f;
+    private const float FLASH_SECONDS = 0.15f;
+    private const float LABEL_BLINK = 0.15f;
+    private const float LABEL_HOLD_UNTIL = 1.2f;
+    private const float LABEL_SECONDS = 1.5f;
+
+    // Canvas units, one 1080p pixel ≈ 1.86 of them: text 36 px (Android's 12sp floor is ~33),
+    // plate 165 × 48 px, its bottom 6 px above the badge.
+    public const string LABEL_FONT_PATH = "Fonts/OpenSans-Bold SDF"; // the HUD's own face
+    private const float LABEL_FONT_UNITS = 67f;
+    private static readonly Vector2 k_LabelPlate = new Vector2(307f, 89f);
+    private const float LABEL_GAP_UNITS = 11f;
+
+    // The halo leaves the badge rim and is spent by one cell (108 px), where the neighbour stands.
+    private const float RING_FROM_UNITS = 67f;
+    private const float HALO_MAX_RADIUS = 200f;
+    private const float HALO_SECONDS = 0.4f;
+    private const float HALO_THICKNESS_UNITS = 7.4f;
+
     // Stressed pulses. 2.4-5.5 seconds is all the warning that band gives under heavy
     // pressure (§10), so a static icon is not a signal — it has to move to be noticed.
     private const float PULSE_HZ = 3f;
@@ -83,8 +107,16 @@ public sealed class TDMoraleIconView : MonoBehaviour
     private static Sprite s_Disc;
     private static readonly Dictionary<float, Sprite> s_Rings = new();
     private static Material s_OnTop;
+    private static Material s_LabelMaterial;
+    private static Sprite s_Pill;
 
     private float m_LeakPulseStart = float.NegativeInfinity;
+    private float m_BreakStart = float.NegativeInfinity;
+    private float m_BadgeScale = 1f;
+    private Image m_Flash;
+    private Image m_Halo;
+    private Image m_LabelPlate;
+    private TextMeshProUGUI m_Label;
 
     private CanvasGroup m_Group;
     private float m_BaseScale;
@@ -241,6 +273,14 @@ public sealed class TDMoraleIconView : MonoBehaviour
         m_Disc.color = new Color(0.05f, 0.05f, 0.07f, 0.72f);
         ((RectTransform)m_Disc.transform).localScale = Vector3.one * DISC_SCALE;
 
+        // The break's white flash: a layer over the disc rather than a write to its colour, so
+        // the flash ending never has to know what Refresh would have put back.
+        m_Flash = NewImage("Flash", m_Badge);
+        m_Flash.sprite = DiscSprite();
+        m_Flash.color = Color.white;
+        m_Flash.enabled = false;
+        ((RectTransform)m_Flash.transform).localScale = Vector3.one * DISC_SCALE;
+
         // Broken's rim, the disc's size exactly, shown only in that state.
         m_Outline = NewImage("Outline", m_Badge);
         m_Outline.sprite = RingSprite(OUTLINE_UNITS / (PIXELS * DISC_SCALE * 0.5f));
@@ -259,6 +299,89 @@ public sealed class TDMoraleIconView : MonoBehaviour
         m_Face.type = Image.Type.Filled;
         m_Face.fillMethod = Image.FillMethod.Vertical;
         m_Face.fillOrigin = (int)Image.OriginVertical.Bottom; // drains from the top down
+
+        BuildBreakParts(rect);
+    }
+
+    // Halo and label sit on the root, beside the badge: neither grows with its punch, and the
+    // label stays the size the 12sp floor asked for.
+    private void BuildBreakParts(RectTransform root)
+    {
+        m_Halo = NewImage("Halo", root);
+        // ponytail: the band scales with the ring — thinner at the rim, 4 px at full size. A fixed
+        // pixel width means rebuilding a mesh every frame, for a ring that lives 0.4 s.
+        m_Halo.sprite = RingSprite(HALO_THICKNESS_UNITS / HALO_MAX_RADIUS);
+        Centre(m_Halo.rectTransform, Vector2.zero, Vector2.one * (2f * RING_FROM_UNITS));
+        m_Halo.enabled = false;
+
+        var platePos = new Vector2(0f, PIXELS * 0.5f + LABEL_GAP_UNITS + k_LabelPlate.y * 0.5f);
+        m_LabelPlate = NewImage("LabelPlate", root);
+        m_LabelPlate.sprite = PillSprite();
+        m_LabelPlate.color = Hex(TDConstant.COLOR_MORALE_BROKEN_DISC);
+        Centre(m_LabelPlate.rectTransform, platePos, k_LabelPlate);
+        m_LabelPlate.enabled = false;
+
+        var labelGo = new GameObject("Label", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+        var labelRect = (RectTransform)labelGo.transform;
+        labelRect.SetParent(root, worldPositionStays: false);
+        Centre(labelRect, platePos, k_LabelPlate);
+
+        m_Label = labelGo.GetComponent<TextMeshProUGUI>();
+        var font = Resources.Load<TMP_FontAsset>(LABEL_FONT_PATH);
+        if (font != null) m_Label.font = font;
+        m_Label.fontStyle = font != null ? FontStyles.Normal : FontStyles.Bold; // the HUD face is already bold
+        m_Label.text = "BROKEN";
+        m_Label.fontSize = LABEL_FONT_UNITS;
+        m_Label.alignment = TextAlignmentOptions.Center;
+        m_Label.enableWordWrapping = false;
+        m_Label.color = Hex(TDConstant.COLOR_MORALE_BROKEN);
+        m_Label.raycastTarget = false;
+        m_Label.fontSharedMaterial = LabelMaterial(m_Label.fontSharedMaterial);
+        m_Label.enabled = false;
+    }
+
+    // A copy of the font's material with depth testing off. Not the font's own: the HUD uses that
+    // one and must keep drawing as it does.
+    private static Material LabelMaterial(Material fontMaterial)
+    {
+        if (s_LabelMaterial != null) return s_LabelMaterial;
+        s_LabelMaterial = new Material(fontMaterial) { name = "MoraleLabelOnTop", hideFlags = HideFlags.HideAndDontSave };
+        s_LabelMaterial.SetInt("unity_GUIZTestMode", (int)CompareFunction.Always);
+        return s_LabelMaterial;
+    }
+
+    private static void Centre(RectTransform rt, Vector2 position, Vector2 size)
+    {
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = position;
+        rt.sizeDelta = size;
+    }
+
+    /// <summary>A capsule at the plate's own aspect (307:89), so it is drawn unsliced and undistorted.</summary>
+    private static Sprite PillSprite()
+    {
+        if (s_Pill != null) return s_Pill;
+
+        const int w = 256, h = 74;
+        const float r = h * 0.5f;
+        var tex = new Texture2D(w, h, TextureFormat.RGBA32, false)
+        {
+            hideFlags = HideFlags.HideAndDontSave,
+            filterMode = FilterMode.Bilinear,
+        };
+
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                // Distance to the capsule's spine: the segment between the two end-cap centres.
+                float cx = Mathf.Clamp(x + 0.5f, r, w - r);
+                float d = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), new Vector2(cx, r));
+                tex.SetPixel(x, y, new Color(1f, 1f, 1f, Mathf.Clamp01(r - d)));
+            }
+
+        tex.Apply();
+        s_Pill = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f));
+        return s_Pill;
     }
 
     private static Image NewImage(string name, RectTransform parent)
@@ -295,7 +418,8 @@ public sealed class TDMoraleIconView : MonoBehaviour
         var weight = k_Weight[Mathf.Clamp((int)state, 0, k_Weight.Length - 1)];
         float beat = (Time.time - m_LeakPulseStart) / LEAK_PULSE_SECONDS;
         float leak = beat >= 0f && beat < 1f ? LEAK_PULSE_GAIN * Mathf.Sin(beat * Mathf.PI) : 0f;
-        m_Badge.localScale = Vector3.one * (weight.scale * (1f + leak));
+        m_BadgeScale = weight.scale * (1f + leak); // applied in LateUpdate, under the break's punch
+        m_Badge.localScale = Vector3.one * m_BadgeScale;
         if (m_Group != null) m_Group.alpha = weight.alpha;
         m_Outline.enabled = state == MoraleState.Broken;
 
@@ -349,6 +473,55 @@ public sealed class TDMoraleIconView : MonoBehaviour
         }
     }
 
+    /// <summary>Starts the break moment (§4.1). Runs from LateUpdate, so it finishes even if they die.</summary>
+    public void PlayBreak() => m_BreakStart = Time.time;
+
+    /// <summary>The badge's extra scale at `t` seconds into a break: one sine bump to 1 + PUNCH_GAIN.</summary>
+    public static float BreakPunch(float t)
+        => t >= 0f && t < PUNCH_SECONDS ? 1f + PUNCH_GAIN * Mathf.Sin(Mathf.PI * t / PUNCH_SECONDS) : 1f;
+
+    public static bool BreakFlash(float t) => t >= 0f && t < FLASH_SECONDS;
+
+    /// <summary>Two blinks at the flash's rhythm, steady until LABEL_HOLD_UNTIL, then a linear fade.</summary>
+    public static float LabelAlpha(float t)
+    {
+        if (t < 0f || t >= LABEL_SECONDS) return 0f;
+        if (t < 4f * LABEL_BLINK) return (int)(t / LABEL_BLINK) % 2 == 0 ? 1f : 0f;
+        if (t < LABEL_HOLD_UNTIL) return 1f;
+        return 1f - (t - LABEL_HOLD_UNTIL) / (LABEL_SECONDS - LABEL_HOLD_UNTIL);
+    }
+
+    public static float RingRadius(float t, float duration, float from, float to)
+        => Mathf.Lerp(from, to, Mathf.Clamp01(t / duration));
+
+    public static float RingAlpha(float t, float duration) => Mathf.Clamp01(1f - t / duration);
+
+    private void AnimateBreak(float t)
+    {
+        m_Badge.localScale = Vector3.one * (m_BadgeScale * BreakPunch(t));
+
+        bool flash = BreakFlash(t);
+        if (m_Flash.enabled != flash) m_Flash.enabled = flash;
+
+        bool halo = t >= 0f && t < HALO_SECONDS;
+        if (m_Halo.enabled != halo) m_Halo.enabled = halo;
+        if (halo)
+        {
+            m_Halo.rectTransform.sizeDelta = Vector2.one * (2f * RingRadius(t, HALO_SECONDS, RING_FROM_UNITS, HALO_MAX_RADIUS));
+            m_Halo.color = new Color(1f, 1f, 1f, RingAlpha(t, HALO_SECONDS));
+        }
+
+        float a = LabelAlpha(t);
+        bool label = a > 0f;
+        if (m_Label.enabled != label) { m_Label.enabled = label; m_LabelPlate.enabled = label; }
+        if (label)
+        {
+            m_Label.alpha = a;
+            var plate = m_LabelPlate.color;
+            m_LabelPlate.color = new Color(plate.r, plate.g, plate.b, a);
+        }
+    }
+
     /// <summary>A leak just landed on this operator. Restarts the beat rather than stacking it.</summary>
     public void Pulse() => m_LeakPulseStart = Time.time;
 
@@ -390,5 +563,9 @@ public sealed class TDMoraleIconView : MonoBehaviour
         // so the icon has to re-assert its own world rotation every frame or it turns with them.
         transform.position = m_Owner.position + OFFSET;
         transform.rotation = Quaternion.Euler(30f, 0f, 0f);
+
+        // Here, not in Refresh: Refresh stops with TickMorale while the operator is dying, and a
+        // break announced by the fatal blow must still play out.
+        if (m_Badge != null) AnimateBreak(Time.time - m_BreakStart);
     }
 }

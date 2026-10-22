@@ -117,7 +117,7 @@ public static class TDBalanceValidator
         ReusedTarget(failures);
         ReusedBolt(failures);
         AuraVisual(failures, LoadConfig<TDFlyweightEnemyDataSettings>()?.GetAllEnemies());
-        MoraleSfxWired(failures);
+        MoraleWired(failures);
 
         Density(failures);
         Dominance(failures);
@@ -380,8 +380,14 @@ public static class TDBalanceValidator
     // priority flag — without the flag a break sting is the first sound a busy fight drops.
     // TDEffectConfig.api resolves through TDResourceObject, which only exists in a running scene,
     // so the asset is loaded the way AuraVisual's enemy data is.
-    private static void MoraleSfxWired(List<string> f)
+    //
+    // §4.1: the BROKEN label is built in code, so the HUD's font has to be reachable from Resources;
+    // a miss silently falls back to TMP's default face.
+    private static void MoraleWired(List<string> f)
     {
+        if (Resources.Load<TMPro.TMP_FontAsset>(TDMoraleIconView.LABEL_FONT_PATH) == null)
+            f.Add($"[MORALE_LABEL_FONT] no TMP font at Resources/{TDMoraleIconView.LABEL_FONT_PATH}");
+
         var all = LoadConfig<TDEffectConfig>()?.GetAll();
         if (all == null) { f.Add("[MORALE_SFX_WIRED] no Effect Config asset"); return; }
 

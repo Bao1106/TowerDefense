@@ -205,6 +205,7 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         Debug.Log($"[Morale] {m_Data?.operatorName} suy sụp tại {m_MyCell}");
         TDPressureProbe.RecordCollapse();
         TDGameEventBus.OperatorBroke(transform.position);
+        m_MoraleIcon?.PlayBreak();
         TDOperatorRegistry.api?.BroadcastSpike(m_MyCell, TDConstant.STRESS_ALLY_BREAK_SPIKE, wasBreak: true);
 
         // Collapse (§06 · 3.1). The one thing that has to happen ON the transition — everyone
