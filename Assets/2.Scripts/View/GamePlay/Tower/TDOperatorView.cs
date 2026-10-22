@@ -282,6 +282,13 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         TDGameEventBus.OperatorDied(m_MyCell);
         m_HPBarView?.Hide();
 
+        // A death costs lives (Tầng 3): leaving someone collapsed, or not rotating them out in
+        // time, is paid for in the loss condition. Last on purpose: if this takes the final life,
+        // GameOver fires inside LoseLives and the report is built right then, so the stint must
+        // already be closed (OnRemove) and the death already counted.
+        TDPressureProbe.RecordDeath();
+        TDPlayerLifeControl.api?.LoseLives(TDConstant.LIVES_PER_OPERATOR_DEATH, transform.position);
+
         // No Die trigger on this prefab's controller → nothing to wait for.
         if (!HasAnimatorTrigger(TDConstant.ANIM_TRIGGER_DIE))
         {

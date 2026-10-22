@@ -412,9 +412,15 @@ public static class TDConstant
     // operator who died stressed — one killed at 5 points paid nothing at all, and came back
     // instantly while the retreated one waited 8 seconds. Dying was the faster exit.
     //
-    // 2x retreat, so losing someone costs more than a whole wave interval without them. A
-    // placeholder for the permadeath of step 3.6, shaped like the thing it will become.
+    // 2x retreat, so losing someone costs more than a whole wave interval without them. Tầng 3
+    // kept it instead of permadeath: with 8 operators and 5 on the field, losing one for good
+    // ends the match (spec 2026-10-22 T2).
     public const float STRESS_DEATH_COUNTDOWN = 16.0f;
+
+    // ...and every death costs lives, so abandoning a collapsed operator or failing to rotate one
+    // out before their HP runs dry is paid for in the loss condition (Tầng 3 T1). Retreating costs
+    // nothing. The knob after playtest: 4 if winning matches still keep a median above 8 lives.
+    public const int LIVES_PER_OPERATOR_DEATH = 3;
 
     public const float STRESS_RESCUE_RELIEF = 50f;
 
