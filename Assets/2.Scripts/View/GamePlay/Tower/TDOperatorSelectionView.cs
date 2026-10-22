@@ -44,6 +44,9 @@ public class TDOperatorSelectionView : MonoBehaviour
     // What the Retreat corner says when it refuses a collapsed operator (§06: they cannot walk off).
     private const string RETREAT_BLOCKED_LABEL = "BROKEN";
 
+    // What the Rescue corner says on a collapsed operator with nobody close enough to rescue them.
+    private const string RESCUE_NO_ALLY_LABEL = "NO ALLY";
+
     private void Start()
     {
         EnhancedTouchSupport.Enable();
@@ -89,6 +92,14 @@ public class TDOperatorSelectionView : MonoBehaviour
         // it is open, silently: eight dictionary lookups, and only while something is selected.
         if (m_SelectedOperator != null)
         {
+#if UNITY_EDITOR
+            // Editor-only test hook: B breaks whoever is selected. Through a real leak (one big
+            // enough to fill the bar from zero), so the break is announced, counted and spiked as
+            // in play — for trying Rescue on a ranged operator, who almost never collapses on
+            // their own (playtest 2026-10-22). Their stint reports the extra leak stress.
+            if (Keyboard.current != null && Keyboard.current.bKey.wasPressedThisFrame)
+                m_SelectedOperator.ReceiveLeak(TDConstant.STRESS_MAX);
+#endif
             TDDiamondPanelView.Instance?.UpdateRescue(BuildRescueOption(m_SelectedOperator, log: false));
 
             // Same reason, other corner: they can collapse — or be rescued — while the panel is open.
@@ -170,23 +181,18 @@ public class TDOperatorSelectionView : MonoBehaviour
     {
         if (rescuer == null || TDOperatorRegistry.api == null || TDGridMainModel.api == null) return null;
 
-        // A collapsed operator cannot rescue anyone — they cannot even walk off by themselves.
-        // Worth logging rather than silently hiding: tapping the operator who NEEDS rescuing is
-        // the obvious thing to try, and the button appearing on the NEIGHBOUR instead is the
-        // least discoverable rule in this whole panel.
-        if (rescuer.IsCollapsed)
-        {
-            if (log) Debug.Log($"<color=cyan>[Rescue] {rescuer.Data?.operatorName} đang suy sụp — " +
-                      "bấm vào ĐỒNG ĐỘI TỈNH TÁO đứng kề, không phải vào chính nó</color>");
-            return null;
-        }
-
         var cell = TDGridMainModel.api.WorldToCell(rescuer.transform.position);
-        var targets = TDOperatorRegistry.api.GetRescueTargetsAround(cell);
+
+        // A collapsed operator cannot rescue anyone, but tapping them is the obvious thing to try:
+        // the 2026-10-22 playtest did exactly that and found no button, because it lived only on
+        // the neighbour. So their own panel offers the rescue too, and picks who pays for it.
+        if (rescuer.IsCollapsed) return BuildRescueFor(rescuer, cell, log);
+
+        var targets = TDOperatorRegistry.api.GetRescueTargetsFor(cell);
         if (targets.Count == 0)
         {
             if (log) Debug.Log($"<color=cyan>[Rescue] {rescuer.Data?.operatorName} tại {cell} — " +
-                      "không có ai suy sụp ở 8 ô kề → nút ẩn</color>");
+                      "không có ai suy sụp trong tầm cứu → nút ẩn</color>");
             return null;
         }
 
@@ -226,12 +232,71 @@ public class TDOperatorSelectionView : MonoBehaviour
         if (rescuer == null || TDOperatorRegistry.api == null || TDGridMainModel.api == null) return;
 
         var cell = TDGridMainModel.api.WorldToCell(rescuer.transform.position);
-        var targets = TDOperatorRegistry.api.GetRescueTargetsAround(cell);
+        var targets = TDOperatorRegistry.api.GetRescueTargetsFor(cell);
 
         if (targets.Count == 0) return;
         if (targets.Count == 1) { PerformRescue(rescuer, targets[0]); return; }
 
         BeginRescuePick(rescuer, targets);
+    }
+
+    /// <summary>
+    /// The Rescue corner on the collapsed operator themselves. With nobody close enough (RescueReach)
+    /// it stays visible but dead, saying "NO ALLY": the player tapped here to save them and must
+    /// learn why they cannot, not see nothing. Otherwise the same "49/50" plan as the rescuer's
+    /// side, counted from whoever is closest to paying.
+    /// </summary>
+    private TDDiamondPanelView.RescueOption BuildRescueFor(TDOperatorView target, Vector2Int cell, bool log)
+    {
+        var standing = TDOperatorRegistry.api.GetRescuersFor(cell, target);
+        var rescuer = PickRescuer(standing);
+
+        float bestSp = 0f;
+        foreach (var op in standing) bestSp = Mathf.Max(bestSp, op.Sp?.Current ?? 0f);
+
+        if (log) Debug.Log($"<color=cyan>[Rescue] {target.Data?.operatorName} đang suy sụp · {standing.Count} đồng đội trong tầm · " +
+                  (rescuer != null ? $"{rescuer.Data?.operatorName} sẽ cứu"
+                                   : $"chưa ai đủ SP ({bestSp:F1}/{TDConstant.RESCUE_SP_COST:F0})") + "</color>");
+
+        return new TDDiamondPanelView.RescueOption
+        {
+            ready = rescuer != null,
+            label = rescuer != null ? "RESCUE"
+                  : standing.Count == 0 ? RESCUE_NO_ALLY_LABEL
+                  : $"{Mathf.FloorToInt(bestSp)}/{TDConstant.RESCUE_SP_COST:F0}",
+            onRescue = () => RescueCollapsed(target),
+            // Captured rather than read live: Update rebuilds this option every frame anyway.
+            progress = () => bestSp / TDConstant.RESCUE_SP_COST,
+        };
+    }
+
+    private void RescueCollapsed(TDOperatorView target)
+    {
+        if (target == null || TDOperatorRegistry.api == null || TDGridMainModel.api == null) return;
+
+        // Picked again at the press, not when the panel opened: the world kept moving under it.
+        var cell = TDGridMainModel.api.WorldToCell(target.transform.position);
+        var rescuer = PickRescuer(TDOperatorRegistry.api.GetRescuersFor(cell, target));
+        if (rescuer != null) PerformRescue(rescuer, target);
+    }
+
+    /// <summary>
+    /// Who answers a Rescue pressed on the collapsed operator: the calmest neighbour who can pay,
+    /// since the rescuer takes RESCUE_RESCUER_STRESS; more SP on a tie. Null if nobody can pay.
+    /// </summary>
+    public static TDOperatorView PickRescuer(List<TDOperatorView> standing)
+    {
+        TDOperatorView best = null;
+        foreach (var op in standing)
+        {
+            if (op == null || op.IsCollapsed || op.Morale == null || op.Sp == null
+                || !op.Sp.CanAfford(TDConstant.RESCUE_SP_COST)) continue;
+
+            if (best == null || op.Morale.Value < best.Morale.Value
+                || (op.Morale.Value == best.Morale.Value && op.Sp.Current > best.Sp.Current))
+                best = op;
+        }
+        return best;
     }
 
     private void PerformRescue(TDOperatorView rescuer, TDOperatorView target)

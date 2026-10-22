@@ -113,24 +113,39 @@ public class TDOperatorRegistry
     }
 
     /// <summary>
-    /// Collapsed operators standing next to `cell` — the rescue candidates for whoever is there.
-    /// Chebyshev adjacency, matching how the pressure zone and the N3 spike already measure
-    /// "next to", so a player who has learned one range has learned all three.
+    /// How far (Chebyshev cells) a rescuer may stand from a collapsed `target`. It follows the
+    /// target: a melee is rescued from next to them, a ranged operator from RESCUE_REACH_RANGED,
+    /// because they stand on tower platforms off the road and nobody is ever next to them.
     /// </summary>
-    public List<TDOperatorView> GetRescueTargetsAround(Vector2Int cell)
+    public static int RescueReach(TDOperatorView target)
+        => target.Data != null && target.Data.deployZone == TDEnums.DeployZone.TowerZone ? TDConstant.RESCUE_REACH_RANGED : 1;
+
+    /// <summary>Standing operators close enough to rescue the collapsed `target` at `cell`.</summary>
+    public List<TDOperatorView> GetRescuersFor(Vector2Int cell, TDOperatorView target)
     {
+        int reach = RescueReach(target);
         var found = new List<TDOperatorView>();
-
-        for (int dx = -1; dx <= 1; dx++)
-            for (int dy = -1; dy <= 1; dy++)
-            {
-                if (dx == 0 && dy == 0) continue;
-                var view = GetOperatorView(new Vector2Int(cell.x + dx, cell.y + dy));
-                if (view != null && view.IsCollapsed) found.Add(view);
-            }
-
+        foreach (var kv in m_OperatorViews)
+        {
+            int d = Chebyshev(kv.Key, cell);
+            if (d >= 1 && d <= reach && kv.Value != null && !kv.Value.IsCollapsed) found.Add(kv.Value);
+        }
         return found;
     }
+
+    /// <summary>Collapsed operators that a rescuer standing at `cell` is close enough to rescue.</summary>
+    public List<TDOperatorView> GetRescueTargetsFor(Vector2Int cell)
+    {
+        var found = new List<TDOperatorView>();
+        foreach (var kv in m_OperatorViews)
+        {
+            int d = Chebyshev(kv.Key, cell);
+            if (d >= 1 && kv.Value != null && kv.Value.IsCollapsed && d <= RescueReach(kv.Value)) found.Add(kv.Value);
+        }
+        return found;
+    }
+
+    private static int Chebyshev(Vector2Int a, Vector2Int b) => Mathf.Max(Mathf.Abs(a.x - b.x), Mathf.Abs(a.y - b.y));
 
     /// <summary>A standing melee at `cell` with every block slot taken — the next arrival leaks.</summary>
     public bool IsFullAt(Vector2Int cell)

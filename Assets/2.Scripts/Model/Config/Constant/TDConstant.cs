@@ -428,6 +428,12 @@ public static class TDConstant
     public const float SP_PER_SECOND = 1f;
     public const float RESCUE_SP_COST = 50f;
 
+    // How far a rescuer may stand from a collapsed RANGED operator (Chebyshev cells); a melee is
+    // rescued only from next to them. Ranged stand on tower platforms off the road, and with reach
+    // 1 nobody ever stood close enough (playtest 2026-10-22). Equal to STRESS_SPIKE_RADIUS on
+    // purpose: whoever felt the ranged operator break can come and help.
+    public const int RESCUE_REACH_RANGED = 2;
+
     // What an operator walks onto the field carrying, the FIRST time they are deployed.
     //
     // Measured need, not a guess. A real match ran 85 seconds; at 1/s from zero the first rescue
