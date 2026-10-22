@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using TDEnums;
 using TMPro;
 using UnityEngine;
@@ -17,8 +16,6 @@ using UnityEngine.UI;
 /// </summary>
 public sealed class TDMoraleIconView : MonoBehaviour
 {
-    private const string SPRITE_PATH = "Sprites/Morale/icon_{0}_white";
-
     // Placed by hand in the Scene view and read back off the live transform. The offset is in
     // WORLD space, not local: the icon billboards to a fixed rotation while the operator turns
     // to face its target, so a local offset would swing the icon around them on every turn.
@@ -36,14 +33,6 @@ public sealed class TDMoraleIconView : MonoBehaviour
     // of the prefab's context. Small enough that adjacent cells (2 units apart) never touch.
     private const float WORLD_SIZE = 1.275f;
     private const int PIXELS = 128;
-
-    // Dark disc behind the face. Without it the icon competes with whatever tile happens to
-    // be under it; with it, every icon sits on the same background whatever the map does.
-    private const float DISC_SCALE = 1.05f;
-
-    // Broken's edge on pale ground (Tầng 4 §4.2): ~3 px at 1080p, where one canvas unit is ~0.54 px.
-    // A tower platform measured #C6DAFC — the pale disc melted into it and only the symbol was left.
-    private const float OUTLINE_UNITS = 5.6f;
 
     // ── Break moment (Tầng 4 §4.1) ──────────────────────────────────────────
     // Twice the leak beat in both size and length, so the two never read as the same event. A
@@ -78,18 +67,6 @@ public sealed class TDMoraleIconView : MonoBehaviour
     public const float STRESS_RING_SECONDS = 0.3f;
     private const float STRESS_RING_THICKNESS_UNITS = 3.7f;
 
-    // Stressed pulses. 2.4-5.5 seconds is all the warning that band gives under heavy
-    // pressure (§10), so a static icon is not a signal — it has to move to be noticed.
-    private const float PULSE_HZ = 3f;
-    private const float PULSE_DEPTH = 0.18f;
-
-    // Collapse throbs SLOWLY where Stressed flashes fast — a different kind of alarm, not a
-    // louder one, which is what the state is. It briefly also tilted the badge 28 degrees, but
-    // that was a workaround for having three sprites and four states: `icon_corrupt` carries the
-    // silhouette properly now, so the tilt is gone rather than kept as decoration.
-    private const float BROKEN_PULSE_HZ = 0.8f;
-    private const float BROKEN_PULSE_DEPTH = 0.28f;
-
     // Visual weight tracks how much attention the band actually deserves. Calm is the common
     // case, so at full size the icon spends most of a match shouting "nothing is wrong" —
     // measured at 1080p it is 69px wide against a 76px operator, louder than the enemies it
@@ -112,9 +89,6 @@ public sealed class TDMoraleIconView : MonoBehaviour
     private const float LEAK_PULSE_GAIN = 0.25f;
     private const float LEAK_PULSE_SECONDS = 0.2f;
 
-    private static Sprite[] s_Sprites;
-    private static Sprite s_Disc;
-    private static readonly Dictionary<float, Sprite> s_Rings = new();
     private static Material s_OnTop;
     private static Material s_LabelMaterial;
     private static Sprite s_Pill;
@@ -133,10 +107,7 @@ public sealed class TDMoraleIconView : MonoBehaviour
     private float m_BaseScale;
     private Transform m_Owner;
     private RectTransform m_Badge;
-    private Image m_Disc;
-    private Image m_Backdrop;
-    private Image m_Face;
-    private Image m_Outline;
+    private TDMoraleBadge m_Parts; // disc, rim, backdrop, face — shared with the slot-bar card
 
     /// <summary>
     /// The UI material that ignores depth. A world-space canvas is depth-tested like any mesh, so a
@@ -160,74 +131,10 @@ public sealed class TDMoraleIconView : MonoBehaviour
             return s_OnTop;
         }
     }
-    private MoraleState m_Shown = (MoraleState)(-1);
-
-    /// <summary>
-    /// Solid circle, generated once rather than shipped as an asset — it is one shape with
-    /// no art direction in it, and a generated texture cannot go missing from a folder.
-    /// </summary>
-    private static Sprite DiscSprite()
-    {
-        if (s_Disc != null) return s_Disc;
-
-        const int size = 64;
-        const float r = size * 0.5f;
-        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
-        {
-            hideFlags = HideFlags.HideAndDontSave,
-            filterMode = FilterMode.Bilinear,
-        };
-
-        for (int y = 0; y < size; y++)
-            for (int x = 0; x < size; x++)
-            {
-                float d = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), new Vector2(r, r));
-                // One pixel of feather on the rim, otherwise the circle reads as jagged
-                // once it is scaled up to three quarters of a cell.
-                float a = Mathf.Clamp01(r - d);
-                tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
-            }
-
-        tex.Apply();
-        s_Disc = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
-        return s_Disc;
-    }
-
-    /// <summary>
-    /// A ring whose band is `thickness` of its radius, generated once per thickness for the same
-    /// reason as the disc. 256 px so the thinnest band still has a few texels to feather.
-    /// </summary>
-    private static Sprite RingSprite(float thickness)
-    {
-        if (s_Rings.TryGetValue(thickness, out var cached) && cached != null) return cached;
-
-        const int size = 256;
-        const float r = size * 0.5f;
-        float inner = r * (1f - thickness);
-        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
-        {
-            hideFlags = HideFlags.HideAndDontSave,
-            filterMode = FilterMode.Bilinear,
-        };
-
-        for (int y = 0; y < size; y++)
-            for (int x = 0; x < size; x++)
-            {
-                float d = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), new Vector2(r, r));
-                float a = Mathf.Clamp01(r - d) * Mathf.Clamp01(d - inner); // feathered on both rims
-                tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
-            }
-
-        tex.Apply();
-        var sprite = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
-        s_Rings[thickness] = sprite;
-        return sprite;
-    }
-
     /// <summary>Creates the icon under `owner` and returns it. Null if the art is missing.</summary>
     public static TDMoraleIconView Attach(Transform owner)
     {
-        if (!LoadSprites()) return null;
+        if (!TDMoraleBadge.LoadSprites()) return null;
 
         var go = new GameObject("MoraleIcon");
         go.transform.SetParent(owner, worldPositionStays: false);
@@ -235,22 +142,6 @@ public sealed class TDMoraleIconView : MonoBehaviour
         var view = go.AddComponent<TDMoraleIconView>();
         view.Build(owner);
         return view;
-    }
-
-    private static bool LoadSprites()
-    {
-        if (s_Sprites != null) return s_Sprites[0] != null;
-
-        s_Sprites = new Sprite[4];
-        s_Sprites[(int)MoraleState.Calm] = Resources.Load<Sprite>(string.Format(SPRITE_PATH, "calm"));
-        s_Sprites[(int)MoraleState.Steady] = Resources.Load<Sprite>(string.Format(SPRITE_PATH, "steady"));
-        s_Sprites[(int)MoraleState.Stressed] = Resources.Load<Sprite>(string.Format(SPRITE_PATH, "stressed"));
-        s_Sprites[(int)MoraleState.Broken] = Resources.Load<Sprite>(string.Format(SPRITE_PATH, "corrupt"));
-
-        if (s_Sprites[0] == null)
-            Debug.LogWarning($"<color=orange>[MoraleIcon] sprites not found under Resources/{string.Format(SPRITE_PATH, "calm")}</color>");
-
-        return s_Sprites[0] != null;
     }
 
     private void Build(Transform owner)
@@ -285,38 +176,16 @@ public sealed class TDMoraleIconView : MonoBehaviour
         m_Badge.offsetMin = Vector2.zero;
         m_Badge.offsetMax = Vector2.zero;
 
-        // Disc first, so everything else sits on a known background instead of on the map.
-        m_Disc = NewImage("Disc", m_Badge);
-        m_Disc.sprite = DiscSprite();
-        m_Disc.color = new Color(0.05f, 0.05f, 0.07f, 0.72f);
-        ((RectTransform)m_Disc.transform).localScale = Vector3.one * DISC_SCALE;
+        m_Parts = TDMoraleBadge.Build(m_Badge, OnTopMaterial);
 
         // The break's white flash: a layer over the disc rather than a write to its colour, so
         // the flash ending never has to know what Refresh would have put back.
         m_Flash = NewImage("Flash", m_Badge);
-        m_Flash.sprite = DiscSprite();
+        m_Flash.sprite = TDMoraleBadge.DiscSprite();
         m_Flash.color = Color.white;
         m_Flash.enabled = false;
-        ((RectTransform)m_Flash.transform).localScale = Vector3.one * DISC_SCALE;
-
-        // Broken's rim, the disc's size exactly, shown only in that state.
-        m_Outline = NewImage("Outline", m_Badge);
-        m_Outline.sprite = RingSprite(OUTLINE_UNITS / (PIXELS * DISC_SCALE * 0.5f));
-        m_Outline.color = Hex(TDConstant.COLOR_MORALE_BROKEN);
-        m_Outline.enabled = false;
-        ((RectTransform)m_Outline.transform).localScale = Vector3.one * DISC_SCALE;
-
-        // Backdrop: the same face at low alpha. It keeps the silhouette readable while the
-        // coloured layer drains away, so an operator near the end of a band still shows
-        // WHICH band rather than fading to nothing.
-        m_Backdrop = NewImage("Backdrop", m_Badge);
-        m_Backdrop.color = new Color(1f, 1f, 1f, 0.25f);
-
-        // Face: the coloured layer, drained top-down as stress fills the band.
-        m_Face = NewImage("Face", m_Badge);
-        m_Face.type = Image.Type.Filled;
-        m_Face.fillMethod = Image.FillMethod.Vertical;
-        m_Face.fillOrigin = (int)Image.OriginVertical.Bottom; // drains from the top down
+        m_Flash.rectTransform.localScale = Vector3.one * TDMoraleBadge.DISC_SCALE;
+        m_Flash.rectTransform.SetSiblingIndex(m_Parts.Disc.GetSiblingIndex() + 1);
 
         BuildBreakParts(rect);
     }
@@ -328,19 +197,19 @@ public sealed class TDMoraleIconView : MonoBehaviour
         m_Halo = NewImage("Halo", root);
         // ponytail: the band scales with the ring — thinner at the rim, 4 px at full size. A fixed
         // pixel width means rebuilding a mesh every frame, for a ring that lives 0.4 s.
-        m_Halo.sprite = RingSprite(HALO_THICKNESS_UNITS / HALO_MAX_RADIUS);
+        m_Halo.sprite = TDMoraleBadge.RingSprite(HALO_THICKNESS_UNITS / HALO_MAX_RADIUS);
         Centre(m_Halo.rectTransform, Vector2.zero, Vector2.one * (2f * RING_FROM_UNITS));
         m_Halo.enabled = false;
 
         m_StressRing = NewImage("StressRing", root);
-        m_StressRing.sprite = RingSprite(STRESS_RING_THICKNESS_UNITS / STRESS_RING_MAX_RADIUS);
+        m_StressRing.sprite = TDMoraleBadge.RingSprite(STRESS_RING_THICKNESS_UNITS / STRESS_RING_MAX_RADIUS);
         Centre(m_StressRing.rectTransform, Vector2.zero, Vector2.one * (2f * RING_FROM_UNITS));
         m_StressRing.enabled = false;
 
         var platePos = new Vector2(0f, PIXELS * 0.5f + LABEL_GAP_UNITS + k_LabelPlate.y * 0.5f);
         m_LabelPlate = NewImage("LabelPlate", root);
         m_LabelPlate.sprite = PillSprite();
-        m_LabelPlate.color = Hex(TDConstant.COLOR_MORALE_BROKEN_DISC);
+        m_LabelPlate.color = TDMoraleBadge.Hex(TDConstant.COLOR_MORALE_BROKEN_DISC);
         Centre(m_LabelPlate.rectTransform, platePos, k_LabelPlate);
         m_LabelPlate.enabled = false;
 
@@ -357,7 +226,7 @@ public sealed class TDMoraleIconView : MonoBehaviour
         m_Label.fontSize = LABEL_FONT_UNITS;
         m_Label.alignment = TextAlignmentOptions.Center;
         m_Label.enableWordWrapping = false;
-        m_Label.color = Hex(TDConstant.COLOR_MORALE_BROKEN);
+        m_Label.color = TDMoraleBadge.Hex(TDConstant.COLOR_MORALE_BROKEN);
         m_Label.raycastTarget = false;
         m_Label.fontSharedMaterial = LabelMaterial(m_Label.fontSharedMaterial);
         m_Label.enabled = false;
@@ -431,17 +300,10 @@ public sealed class TDMoraleIconView : MonoBehaviour
     /// <summary>Feeds the icon from morale. Called once per frame by TDOperatorView.</summary>
     public void Refresh(TDOperatorMorale morale)
     {
-        if (morale == null || m_Face == null) return;
+        if (morale == null || m_Parts == null) return;
 
         var state = morale.State;
-
-        if (state != m_Shown)
-        {
-            m_Shown = state;
-            var sprite = s_Sprites[(int)state];
-            m_Face.sprite = sprite;
-            m_Backdrop.sprite = sprite;
-        }
+        m_Parts.Refresh(morale); // sprite, fill, colours, rim — the same on the slot-bar card
 
         var weight = k_Weight[Mathf.Clamp((int)state, 0, k_Weight.Length - 1)];
         float beat = (Time.time - m_LeakPulseStart) / LEAK_PULSE_SECONDS;
@@ -449,60 +311,10 @@ public sealed class TDMoraleIconView : MonoBehaviour
         m_BadgeScale = weight.scale * (1f + leak); // applied in LateUpdate, under the break's punch
         m_Badge.localScale = Vector3.one * m_BadgeScale;
         if (m_Group != null) m_Group.alpha = weight.alpha;
-        m_Outline.enabled = state == MoraleState.Broken;
 
         // Rescued inside the label's 1.5 s: "BROKEN" over a badge already back to Steady says two
         // things at once. The moment ends with the state it announced.
         if (state != MoraleState.Broken) m_BreakStart = float.NegativeInfinity;
-
-        Color colour = ColourFor(state);
-
-        if (state == MoraleState.Broken)
-        {
-            // The corrupt sprite now carries the state on its own, so the fill goes back to full:
-            // this is not progress through a band, it is a symbol that either applies or does not.
-            m_Face.fillAmount = 1f;
-
-            // Inverted badge — the symbol takes #3C3180 and the disc goes pale. Measured, not
-            // chosen: dark indigo on the asphalt operators stand on scores 1.23:1, and no darker
-            // shade escapes it either, because Calm/Steady/Stressed already hold greyscale
-            // 175/148/100 and everything below Stressed lands on the road at 74.
-            m_Face.color = colour;
-            m_Backdrop.color = new Color(colour.r, colour.g, colour.b, 0.35f);
-
-            // A SLOW deep throb — not silence. The first version simply stopped pulsing, so the
-            // one channel shouting "urgent" all through Stressed switched OFF at the exact moment
-            // things became worst. Stillness after motion reads as calming down; that is an
-            // inverted signal, which is worse than none. Motion must never stop as things get
-            // worse — only change its rhythm. 0.8 Hz against Stressed's 3 Hz reads as a different
-            // kind of alarm rather than a louder one, which is what this state is.
-            float slow = 0.5f + 0.5f * Mathf.Sin(Time.time * BROKEN_PULSE_HZ * Mathf.PI * 2f);
-            var pale = Hex(TDConstant.COLOR_MORALE_BROKEN_DISC);
-            m_Disc.color = new Color(pale.r, pale.g, pale.b, 0.80f + BROKEN_PULSE_DEPTH * slow);
-            return;
-        }
-
-        // Fill shows progress THROUGH the current band, not overall stress. That is what
-        // makes the icon useful at a glance: full means "just arrived here", empty means
-        // "about to get worse", regardless of which band you are in.
-        m_Face.fillAmount = 1f - BandProgress(morale.Value, state);
-
-        m_Face.color = colour;
-        m_Backdrop.color = new Color(1f, 1f, 1f, 0.25f);
-
-        if (state == MoraleState.Stressed)
-        {
-            // The one band that colours the DISC itself, at a deeper shade than the face,
-            // and pulses. Two channels change at once — hue and motion — because this band
-            // lasts 2.4-5.5 seconds under pressure and a single cue is not enough warning.
-            float pulse = 0.5f + 0.5f * Mathf.Sin(Time.time * PULSE_HZ * Mathf.PI * 2f);
-            m_Disc.color = new Color(colour.r * 0.45f, colour.g * 0.25f, colour.b * 0.25f,
-                                     0.78f + PULSE_DEPTH * pulse);
-        }
-        else
-        {
-            m_Disc.color = new Color(0.05f, 0.05f, 0.07f, 0.72f);
-        }
     }
 
     /// <summary>Where `owner`'s badge floats, for things drawn to or from it (the rescue arc).</summary>
@@ -521,7 +333,7 @@ public sealed class TDMoraleIconView : MonoBehaviour
         if (!on) return;
 
         m_StressRing.rectTransform.sizeDelta = Vector2.one * (2f * RingRadius(t, STRESS_RING_SECONDS, RING_FROM_UNITS, STRESS_RING_MAX_RADIUS));
-        var red = Hex(TDConstant.COLOR_MORALE_STRESSED);
+        var red = TDMoraleBadge.Hex(TDConstant.COLOR_MORALE_STRESSED);
         m_StressRing.color = new Color(red.r, red.g, red.b, RingAlpha(t, STRESS_RING_SECONDS));
     }
 
@@ -573,36 +385,6 @@ public sealed class TDMoraleIconView : MonoBehaviour
 
     /// <summary>A leak just landed on this operator. Restarts the beat rather than stacking it.</summary>
     public void Pulse() => m_LeakPulseStart = Time.time;
-
-    /// <summary>0 at the start of the current band, 1 at its top edge.</summary>
-    private static float BandProgress(float value, MoraleState state)
-    {
-        float lo = state switch
-        {
-            MoraleState.Steady => TDConstant.STRESS_CALM_MAX,
-            MoraleState.Stressed => TDConstant.STRESS_STEADY_MAX,
-            _ => 0f,
-        };
-        float hi = state switch
-        {
-            MoraleState.Calm => TDConstant.STRESS_CALM_MAX,
-            MoraleState.Steady => TDConstant.STRESS_STEADY_MAX,
-            _ => TDConstant.STRESS_MAX,
-        };
-
-        return Mathf.Clamp01((value - lo) / Mathf.Max(0.01f, hi - lo));
-    }
-
-    private static Color ColourFor(MoraleState state) => Hex(state switch
-    {
-        MoraleState.Calm => TDConstant.COLOR_MORALE_CALM,
-        MoraleState.Steady => TDConstant.COLOR_MORALE_STEADY,
-        MoraleState.Broken => TDConstant.COLOR_MORALE_BROKEN,
-        _ => TDConstant.COLOR_MORALE_STRESSED,
-    });
-
-    private static Color Hex(string hex)
-        => ColorUtility.TryParseHtmlString(hex, out var c) ? c : Color.white;
 
     private void LateUpdate()
     {

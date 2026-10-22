@@ -64,6 +64,7 @@ public static class TDMoraleValidator
         MoraleCues(f);
         SfxVoices(f);
         IconRendering(f);
+        BadgeLayers(f);
         BreakTiming(f);
         RescueArc(f);
         RescuerPick(f);
@@ -901,6 +902,38 @@ public static class TDMoraleValidator
                 f.Add($"[LABEL_CLEARS_ON_RECOVERY] kept while Broken {keptWhileBroken}, cleared once not Broken {clearedOnRecovery}");
         }
         finally { Object.DestroyImmediate(go); }
+    }
+
+    // Tầng 4b §4.3: the badge's four layers come from TDMoraleBadge, the one piece the floating icon
+    // and the slot-bar card share. Order matters — each layer sits on the one before, and the break's
+    // flash goes right over the disc — and no layer may take a tap: on the card it lies over the button.
+    private static void BadgeLayers(List<string> f)
+    {
+        var go = new GameObject("BadgeProbe", typeof(RectTransform)) { hideFlags = HideFlags.HideAndDontSave };
+        try
+        {
+            var badge = TDMoraleBadge.Build((RectTransform)go.transform, null);
+            if (badge == null) { f.Add("[BADGE_LAYERS] Build returned null"); return; }
+
+            string built = ChildNames(go.transform);
+            if (built != "Disc,Outline,Backdrop,Face") f.Add($"[BADGE_LAYERS] built {built}, want Disc,Outline,Backdrop,Face");
+            foreach (var g in go.GetComponentsInChildren<UnityEngine.UI.Graphic>(true))
+                if (g.raycastTarget) f.Add($"[BADGE_LAYERS] {g.name} takes raycasts");
+
+            var icon = TDMoraleIconView.Attach(go.transform);
+            var inIcon = icon != null ? icon.transform.Find("Badge") : null;
+            string iconLayers = inIcon != null ? ChildNames(inIcon) : "none";
+            if (iconLayers != "Disc,Flash,Outline,Backdrop,Face")
+                f.Add($"[BADGE_LAYERS] icon Badge has {iconLayers}, want Disc,Flash,Outline,Backdrop,Face");
+        }
+        finally { Object.DestroyImmediate(go); }
+    }
+
+    private static string ChildNames(Transform parent)
+    {
+        var names = new List<string>();
+        foreach (Transform child in parent) names.Add(child.name);
+        return string.Join(",", names);
     }
 
     // Tầng 4 §4.1: the break moment's rhythm, as pure functions so the numbers the spec pins are
