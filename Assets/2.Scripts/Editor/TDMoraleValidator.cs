@@ -65,6 +65,7 @@ public static class TDMoraleValidator
         SfxVoices(f);
         IconRendering(f);
         BadgeLayers(f);
+        GreyLevels(f);
         BreakTiming(f);
         RescueArc(f);
         RescuerPick(f);
@@ -927,6 +928,35 @@ public static class TDMoraleValidator
                 f.Add($"[BADGE_LAYERS] icon Badge has {iconLayers}, want Disc,Flash,Outline,Backdrop,Face");
         }
         finally { Object.DestroyImmediate(go); }
+    }
+
+    // Tầng 4b §4.4 (C8): in greyscale Steady and Stressed both read as "dark disc with a face" (Tầng 4
+    // A5). Their discs now take their own colour, opaque, so the four discs sit at four grey levels
+    // whatever the ground under them: Calm < Stressed < Steady < Broken, each step at least 40 apart.
+    private static void GreyLevels(List<string> f)
+    {
+        float Luma(Color c) => 255f * (0.299f * c.r + 0.587f * c.g + 0.114f * c.b);
+
+        float calm = Luma(TDMoraleBadge.DiscColour(MoraleState.Calm, 0f));
+        float stressedLow = Luma(TDMoraleBadge.DiscColour(MoraleState.Stressed, 1f)); // darkest point of the pulse
+        float stressedHigh = Luma(TDMoraleBadge.DiscColour(MoraleState.Stressed, 0f));
+        float steady = Luma(TDMoraleBadge.DiscColour(MoraleState.Steady, 0f));
+        float broken = Luma(TDMoraleBadge.DiscColour(MoraleState.Broken, 0f));
+
+        Near(f, "C8_GREY_CALM", calm, 13f, 3f);
+        Near(f, "C8_GREY_STRESSED_LOW", stressedLow, 70f, 3f);
+        Near(f, "C8_GREY_STRESSED_HIGH", stressedHigh, 100f, 3f);
+        Near(f, "C8_GREY_STEADY", steady, 148f, 3f);
+        Near(f, "C8_GREY_BROKEN", broken, 205f, 3f);
+        if (stressedLow - calm < 40f || steady - stressedHigh < 40f || broken - steady < 40f)
+            f.Add($"[C8_GREY_LEVELS] gaps calm→stressed {stressedLow - calm:F0}, stressed→steady {steady - stressedHigh:F0}, steady→broken {broken - steady:F0}; want ≥ 40 each");
+
+        if (TDMoraleBadge.DiscColour(MoraleState.Steady, 0f).a < 0.999f || TDMoraleBadge.DiscColour(MoraleState.Stressed, 0.5f).a < 0.999f)
+            f.Add("[C8_GREY_LEVELS] Steady/Stressed disc is not opaque, so its grey depends on the ground");
+
+        ColorUtility.TryParseHtmlString(TDMoraleBadge.COLOR_MORALE_FACE_ON_FILL, out var dark);
+        if (TDMoraleBadge.FaceColour(MoraleState.Steady) != dark || TDMoraleBadge.FaceColour(MoraleState.Stressed) != dark)
+            f.Add($"[C8_GREY_LEVELS] face on a filled disc is {TDMoraleBadge.FaceColour(MoraleState.Steady)} / {TDMoraleBadge.FaceColour(MoraleState.Stressed)}, want {TDMoraleBadge.COLOR_MORALE_FACE_ON_FILL}");
     }
 
     private static string ChildNames(Transform parent)

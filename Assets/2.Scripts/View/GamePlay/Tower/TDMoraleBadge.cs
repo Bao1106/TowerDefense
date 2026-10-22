@@ -27,7 +27,6 @@ public sealed class TDMoraleBadge
     // Stressed pulses. 2.4-5.5 seconds is all the warning that band gives under heavy
     // pressure (§10), so a static icon is not a signal — it has to move to be noticed.
     private const float PULSE_HZ = 3f;
-    private const float PULSE_DEPTH = 0.18f;
 
     // Collapse throbs SLOWLY where Stressed flashes fast — a different kind of alarm, not a
     // louder one, which is what the state is. It briefly also tilted the badge 28 degrees, but
@@ -121,54 +120,32 @@ public sealed class TDMoraleBadge
         }
 
         m_Outline.enabled = state == MoraleState.Broken;
-        Color colour = ColourFor(state);
+        Color face = FaceColour(state);
+        m_Face.color = face;
 
-        if (state == MoraleState.Broken)
-        {
-            // The corrupt sprite now carries the state on its own, so the fill goes back to full:
-            // this is not progress through a band, it is a symbol that either applies or does not.
-            m_Face.fillAmount = 1f;
+        // The corrupt sprite carries Broken on its own, so its fill stays full: that is not progress
+        // through a band, it is a symbol that either applies or does not. Elsewhere the fill shows
+        // progress THROUGH the current band, not overall stress: full means "just arrived here",
+        // empty means "about to get worse", whichever band you are in.
+        m_Face.fillAmount = state == MoraleState.Broken ? 1f : 1f - BandProgress(morale.Value, state);
 
-            // Inverted badge — the symbol takes #3C3180 and the disc goes pale. Measured, not
-            // chosen: dark indigo on the asphalt operators stand on scores 1.23:1, and no darker
-            // shade escapes it either, because Calm/Steady/Stressed already hold greyscale
-            // 175/148/100 and everything below Stressed lands on the road at 74.
-            m_Face.color = colour;
-            m_Backdrop.color = new Color(colour.r, colour.g, colour.b, 0.35f);
+        // The backdrop keeps the silhouette as the face drains: the face's own colour, faint, except on
+        // Calm's dark disc, where a faint white reads better than a faint green.
+        m_Backdrop.color = state == MoraleState.Calm
+            ? new Color(1f, 1f, 1f, 0.25f)
+            : new Color(face.r, face.g, face.b, 0.35f);
 
-            // A SLOW deep throb — not silence. The first version simply stopped pulsing, so the
-            // one channel shouting "urgent" all through Stressed switched OFF at the exact moment
-            // things became worst. Stillness after motion reads as calming down; that is an
-            // inverted signal, which is worse than none. Motion must never stop as things get
-            // worse — only change its rhythm. 0.8 Hz against Stressed's 3 Hz reads as a different
-            // kind of alarm rather than a louder one, which is what this state is.
-            float slow = 0.5f + 0.5f * Mathf.Sin(Time.time * BROKEN_PULSE_HZ * Mathf.PI * 2f);
-            var pale = Hex(TDConstant.COLOR_MORALE_BROKEN_DISC);
-            m_Disc.color = new Color(pale.r, pale.g, pale.b, 0.80f + BROKEN_PULSE_DEPTH * slow);
-            return;
-        }
-
-        // Fill shows progress THROUGH the current band, not overall stress. That is what
-        // makes the icon useful at a glance: full means "just arrived here", empty means
-        // "about to get worse", regardless of which band you are in.
-        m_Face.fillAmount = 1f - BandProgress(morale.Value, state);
-
-        m_Face.color = colour;
-        m_Backdrop.color = new Color(1f, 1f, 1f, 0.25f);
-
-        if (state == MoraleState.Stressed)
-        {
-            // The one band that colours the DISC itself, at a deeper shade than the face,
-            // and pulses. Two channels change at once — hue and motion — because this band
-            // lasts 2.4-5.5 seconds under pressure and a single cue is not enough warning.
-            float pulse = 0.5f + 0.5f * Mathf.Sin(Time.time * PULSE_HZ * Mathf.PI * 2f);
-            m_Disc.color = new Color(colour.r * 0.45f, colour.g * 0.25f, colour.b * 0.25f,
-                                     0.78f + PULSE_DEPTH * pulse);
-        }
-        else
-        {
-            m_Disc.color = k_DarkDisc;
-        }
+        // Broken: inverted badge — the symbol takes #3C3180 and the disc goes pale. Measured, not
+        // chosen: dark indigo on the asphalt operators stand on scores 1.23:1, and no darker shade
+        // escapes it, because everything below Stressed lands on the road at 74. It throbs SLOWLY —
+        // not silence: stillness after Stressed's motion would read as calming down. 0.8 Hz against
+        // Stressed's 3 Hz reads as a different kind of alarm rather than a louder one.
+        //
+        // Stressed: two channels at once — hue and motion — because this band lasts 2.4-5.5 seconds
+        // under pressure and a single cue is not enough warning.
+        float hz = state == MoraleState.Broken ? BROKEN_PULSE_HZ : PULSE_HZ;
+        float pulse = 0.5f + 0.5f * Mathf.Sin(Time.time * hz * Mathf.PI * 2f);
+        m_Disc.color = DiscColour(state, pulse);
     }
 
     /// <summary>
@@ -232,6 +209,43 @@ public sealed class TDMoraleBadge
         s_Rings[thickness] = sprite;
         return sprite;
     }
+
+    // How far Stressed's pulse darkens its disc: grey ~100 down to ~70. Its disc is opaque now, so the
+    // pulse moves brightness instead of alpha — an alpha pulse would let the ground show through.
+    public const float STRESSED_DARKEN = 0.3f;
+
+    // The face drawn on a filled disc (Steady, Stressed): near-black, so the symbol stays the darkest
+    // thing in the badge and reads against both the orange (~148) and the red (~100) beneath it.
+    public const string COLOR_MORALE_FACE_ON_FILL = "#14141A";
+
+    /// <summary>
+    /// The disc's colour for `state`, `pulse01` being where that state's own pulse is (0..1). In
+    /// greyscale the four discs sit at ~13 / ~148 / 100→70 / ~205 (Tầng 4b §4.4): Steady and Stressed
+    /// used to share the same dark disc, so a greyscale glance told them apart by face shape alone.
+    /// Filled discs are opaque so their grey does not depend on whatever tile they hover over.
+    /// </summary>
+    public static Color DiscColour(MoraleState state, float pulse01)
+    {
+        switch (state)
+        {
+            case MoraleState.Steady:
+                return Hex(TDConstant.COLOR_MORALE_STEADY);
+            case MoraleState.Stressed:
+                var red = Hex(TDConstant.COLOR_MORALE_STRESSED) * (1f - STRESSED_DARKEN * pulse01);
+                red.a = 1f;
+                return red;
+            case MoraleState.Broken:
+                var pale = Hex(TDConstant.COLOR_MORALE_BROKEN_DISC);
+                pale.a = 0.80f + BROKEN_PULSE_DEPTH * pulse01;
+                return pale;
+            default:
+                return k_DarkDisc;
+        }
+    }
+
+    /// <summary>The face's colour: the state's own on a dark or pale disc, near-black on a filled one.</summary>
+    public static Color FaceColour(MoraleState state)
+        => state == MoraleState.Steady || state == MoraleState.Stressed ? Hex(COLOR_MORALE_FACE_ON_FILL) : ColourFor(state);
 
     public static Color Hex(string hex)
         => ColorUtility.TryParseHtmlString(hex, out var c) ? c : Color.white;
