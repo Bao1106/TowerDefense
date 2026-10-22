@@ -60,6 +60,7 @@ public static class TDMoraleValidator
         ReportContents(f);
         ZeroDamage(f);
         FallAnnouncesBreak(f);
+        RescuerPick(f);
         LeakLog(f);
         Resolve(f);
         FocusScale(f);
@@ -693,6 +694,52 @@ public static class TDMoraleValidator
             if (broken.ConsumeBreak()) f.Add("[FALL_CONSUMES_EDGE] the fall left the break pending");
         }
         finally { Object.DestroyImmediate(go); }
+    }
+
+    // Rescue pressed on the collapsed operator picks the rescuer for the player (playtest
+    // 2026-10-22): the calmest neighbour who can pay, since they take RESCUE_RESCUER_STRESS; more
+    // SP on a tie; nobody if nobody can pay; never someone who is collapsed themselves.
+    private static void RescuerPick(List<string> f)
+    {
+        var made = new List<GameObject>();
+        TDOperatorView Op(string name, float stress, float sp)
+        {
+            var go = new GameObject(name) { hideFlags = HideFlags.HideAndDontSave };
+            made.Add(go);
+            var op = go.AddComponent<TDOperatorView>();
+            var pool = new TDOperatorSp();
+            pool.Tick(sp - TDConstant.SP_INITIAL);
+            SetField(f, op, "<Morale>k__BackingField", At(stress));
+            SetField(f, op, "<Sp>k__BackingField", pool);
+            return op;
+        }
+
+        try
+        {
+            var calm = Op("calm", 20f, TDConstant.RESCUE_SP_COST);
+            var tense = Op("tense", 60f, 100f);
+            var poor = Op("poor", 0f, TDConstant.RESCUE_SP_COST - 1f);
+            var twin = Op("twin", 20f, 80f);
+            var edgy = Op("edgy", 90f, 100f);
+
+            // Still collapsed while calming down on their own, and CALMER than edgy: only the
+            // collapsed check, not the stress order, keeps them out.
+            var broken = Op("broken", TDConstant.STRESS_MAX, 100f);
+            k_SetValue.Invoke(broken.Morale, new object[] { TDConstant.STRESS_STEADY_MAX + 1f });
+
+            Pick(f, "RESCUER_PICK_CALMEST", new() { tense, calm, poor }, calm);
+            Pick(f, "RESCUER_PICK_TIE_MORE_SP", new() { calm, twin }, twin);
+            Pick(f, "RESCUER_PICK_NONE_READY", new() { poor }, null);
+            if (!broken.IsCollapsed) f.Add("[RESCUER_PICK_SETUP] the calming operator is not collapsed");
+            Pick(f, "RESCUER_PICK_SKIPS_COLLAPSED", new() { broken, edgy }, edgy);
+        }
+        finally { foreach (var go in made) Object.DestroyImmediate(go); }
+    }
+
+    private static void Pick(List<string> f, string tag, List<TDOperatorView> standing, TDOperatorView want)
+    {
+        var got = TDOperatorSelectionView.PickRescuer(standing);
+        if (got != want) f.Add($"[{tag}] picked {(got != null ? got.name : "nobody")}, want {(want != null ? want.name : "nobody")}");
     }
 
     // Spec §5.6: blockCount is how many a melee HOLDS, attackType is how many it STRIKES.

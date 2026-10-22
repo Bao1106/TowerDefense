@@ -113,11 +113,12 @@ public class TDOperatorRegistry
     }
 
     /// <summary>
-    /// Collapsed operators standing next to `cell` — the rescue candidates for whoever is there.
-    /// Chebyshev adjacency, matching how the pressure zone and the N3 spike already measure
-    /// "next to", so a player who has learned one range has learned all three.
+    /// Operators next to `cell` that are collapsed (rescue targets for whoever stands there) or
+    /// standing (rescuers for whoever lies there). Chebyshev adjacency, matching how the pressure
+    /// zone and the N3 spike already measure "next to", so a player who has learned one range has
+    /// learned all three.
     /// </summary>
-    public List<TDOperatorView> GetRescueTargetsAround(Vector2Int cell)
+    public List<TDOperatorView> GetOperatorsAround(Vector2Int cell, bool collapsed)
     {
         var found = new List<TDOperatorView>();
 
@@ -126,7 +127,7 @@ public class TDOperatorRegistry
             {
                 if (dx == 0 && dy == 0) continue;
                 var view = GetOperatorView(new Vector2Int(cell.x + dx, cell.y + dy));
-                if (view != null && view.IsCollapsed) found.Add(view);
+                if (view != null && view.IsCollapsed == collapsed) found.Add(view);
             }
 
         return found;
