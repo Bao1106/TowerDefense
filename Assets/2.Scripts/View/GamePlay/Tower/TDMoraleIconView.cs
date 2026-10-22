@@ -486,6 +486,9 @@ public sealed class TDMoraleIconView : MonoBehaviour
         }
     }
 
+    /// <summary>Where `owner`'s badge floats, for things drawn to or from it (the rescue arc).</summary>
+    public static Vector3 BadgeAnchor(Transform owner) => owner.position + OFFSET;
+
     /// <summary>Starts the break moment (§4.1). Runs from LateUpdate, so it finishes even if they die.</summary>
     public void PlayBreak() => m_BreakStart = Time.time;
 

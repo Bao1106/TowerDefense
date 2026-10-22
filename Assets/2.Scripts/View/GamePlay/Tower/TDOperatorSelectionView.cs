@@ -311,6 +311,7 @@ public class TDOperatorSelectionView : MonoBehaviour
 
         rescuer.Morale.PayRescueStress();
         target.Morale.OnRescue();
+        TDRescueArcView.Play(TDMoraleIconView.BadgeAnchor(rescuer.transform), TDMoraleIconView.BadgeAnchor(target.transform));
 
         Debug.Log($"<color=cyan>[Rescue] {rescuer.Data?.operatorName} cứu {target.Data?.operatorName} — " +
                   $"người cứu {rescuer.Morale.Value:F0} stress / {rescuer.Sp.Current:F0} SP · " +

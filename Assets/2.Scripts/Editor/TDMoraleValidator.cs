@@ -65,6 +65,7 @@ public static class TDMoraleValidator
         SfxVoices(f);
         IconRendering(f);
         BreakTiming(f);
+        RescueArc(f);
         RescuerPick(f);
         RescueReach(f);
         LeakLog(f);
@@ -923,6 +924,21 @@ public static class TDMoraleValidator
         float stressSeconds = TDMoraleIconView.STRESS_RING_SECONDS, haloSeconds = TDMoraleIconView.HALO_SECONDS;
         if (stressRadius >= haloRadius || stressSeconds >= haloSeconds)
             f.Add($"[STRESS_WEAKER_THAN_BREAK] Stressed ring {stressRadius}/{stressSeconds}s vs break halo {haloRadius}/{haloSeconds}s");
+    }
+
+    // Tầng 4 §4.6: the arc leaves the rescuer's badge, lands on the rescued one's, and peaks
+    // `height` above the midpoint — the shape that says who answered whom.
+    private static void RescueArc(List<string> f)
+    {
+        var a = Vector3.zero;
+        var b = new Vector3(4f, 0f, 2f);
+        if (Vector3.Distance(TDRescueArcView.ArcPoint(a, b, 1f, 0f), a) > 0.001f
+            || Vector3.Distance(TDRescueArcView.ArcPoint(a, b, 1f, 1f), b) > 0.001f)
+            f.Add($"[ARC_ENDS] ends at {TDRescueArcView.ArcPoint(a, b, 1f, 0f)} / {TDRescueArcView.ArcPoint(a, b, 1f, 1f)}, want {a} / {b}");
+
+        var peak = (a + b) * 0.5f + Vector3.up;
+        var got = TDRescueArcView.ArcPoint(a, b, 1f, 0.5f);
+        if (Vector3.Distance(got, peak) > 0.001f) f.Add($"[ARC_PEAK] midpoint {got}, want {peak}");
     }
 
     private static void Voice(List<string> f, string tag, bool[] playing, float[] startedAt, bool[] priority, bool want, int expect)
