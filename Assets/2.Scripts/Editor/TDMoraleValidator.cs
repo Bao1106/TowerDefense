@@ -62,6 +62,7 @@ public static class TDMoraleValidator
         ZeroDamage(f);
         FallAnnouncesBreak(f);
         MoraleCues(f);
+        SfxVoices(f);
         RescuerPick(f);
         RescueReach(f);
         LeakLog(f);
@@ -837,6 +838,24 @@ public static class TDMoraleValidator
 
     private static bool Arm(List<string> f, TDOperatorView op, TDOperatorMorale morale, MoraleState last)
         => SetField(f, op, "<Morale>k__BackingField", morale) & SetField(f, op, "m_LastMoraleState", last);
+
+    // Tầng 4 C6: with all voices busy a morale cue takes the oldest ordinary sound's voice. It never
+    // takes another priority sound's voice, and an ordinary sound is still dropped as before.
+    private static void SfxVoices(List<string> f)
+    {
+        const bool T = true, F = false;
+        Voice(f, "SFX_PICK_FREE", new[] { T, F, T }, new[] { 0f, 0f, 0f }, new[] { F, F, F }, false, 1);
+        Voice(f, "SFX_PICK_STEAL_OLDEST", new[] { T, T, T }, new[] { 3f, 1f, 2f }, new[] { F, F, F }, true, 1);
+        Voice(f, "SFX_PICK_NORMAL_DROPPED", new[] { T, T, T }, new[] { 3f, 1f, 2f }, new[] { F, F, F }, false, -1);
+        Voice(f, "SFX_PICK_KEEPS_PRIORITY", new[] { T, T, T }, new[] { 0f, 5f, 1f }, new[] { T, F, T }, true, 1);
+        Voice(f, "SFX_PICK_ALL_PRIORITY", new[] { T, T, T }, new[] { 0f, 5f, 1f }, new[] { T, T, T }, true, -1);
+    }
+
+    private static void Voice(List<string> f, string tag, bool[] playing, float[] startedAt, bool[] priority, bool want, int expect)
+    {
+        int got = TDSFXPlayer.PickVoice(playing, startedAt, priority, want);
+        if (got != expect) f.Add($"[{tag}] picked voice {got}, want {expect}");
+    }
 
     // Rescue pressed on the collapsed operator picks the rescuer for the player (playtest
     // 2026-10-22): the calmest neighbour who can pay, since they take RESCUE_RESCUER_STRESS; more

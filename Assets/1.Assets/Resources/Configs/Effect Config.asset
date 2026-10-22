@@ -20,6 +20,7 @@ MonoBehaviour:
     impactVfxPrefab: {fileID: 0}
     sfxClip: {fileID: 8300000, guid: b5a036baf6f4e2b46b904a8a64fee29b, type: 3}
     sfxVolume: 0.7
+    sfxPriority: 0
     cameraShake: 0
     shakeStrength: 0.3
     shakeDuration: 0.25
@@ -30,6 +31,7 @@ MonoBehaviour:
     impactVfxPrefab: {fileID: 0}
     sfxClip: {fileID: 8300000, guid: 0357662b9caaa06429b2aec0570de988, type: 3}
     sfxVolume: 0.65
+    sfxPriority: 0
     cameraShake: 0
     shakeStrength: 0.3
     shakeDuration: 0.25
@@ -40,6 +42,7 @@ MonoBehaviour:
     impactVfxPrefab: {fileID: 0}
     sfxClip: {fileID: 8300000, guid: 5ae6cb8852e223a4eaead8bad1f43a0e, type: 3}
     sfxVolume: 0.75
+    sfxPriority: 0
     cameraShake: 0
     shakeStrength: 0.3
     shakeDuration: 0.25
@@ -50,6 +53,7 @@ MonoBehaviour:
     impactVfxPrefab: {fileID: 0}
     sfxClip: {fileID: 8300000, guid: 0b773d52f908e6440b20d2dd56d2ab56, type: 3}
     sfxVolume: 0.85
+    sfxPriority: 0
     cameraShake: 0
     shakeStrength: 0.3
     shakeDuration: 0.25
@@ -60,6 +64,7 @@ MonoBehaviour:
     impactVfxPrefab: {fileID: 0}
     sfxClip: {fileID: 8300000, guid: d9553bea23efec6429f903595c4b4067, type: 3}
     sfxVolume: 0.6
+    sfxPriority: 0
     cameraShake: 0
     shakeStrength: 0.3
     shakeDuration: 0.25
@@ -70,6 +75,7 @@ MonoBehaviour:
     impactVfxPrefab: {fileID: 0}
     sfxClip: {fileID: 8300000, guid: 40ef23bb03d6a544f9ad883d704d793a, type: 3}
     sfxVolume: 0.6
+    sfxPriority: 0
     cameraShake: 0
     shakeStrength: 0.3
     shakeDuration: 0.25
@@ -80,6 +86,7 @@ MonoBehaviour:
     impactVfxPrefab: {fileID: 0}
     sfxClip: {fileID: 8300000, guid: d6e6eaada50d458458ad5cb6ad7be1a6, type: 3}
     sfxVolume: 0.6
+    sfxPriority: 0
     cameraShake: 0
     shakeStrength: 0.3
     shakeDuration: 0.25
@@ -90,6 +97,7 @@ MonoBehaviour:
     impactVfxPrefab: {fileID: 1574516568193800055, guid: 0c17caf37164f094db6ad281f8b1854b, type: 3}
     sfxClip: {fileID: 8300000, guid: fe3412617031a8c4783ad80c56a5bddb, type: 3}
     sfxVolume: 0.6
+    sfxPriority: 0
     cameraShake: 0
     shakeStrength: 0.3
     shakeDuration: 0.25
@@ -100,6 +108,7 @@ MonoBehaviour:
     impactVfxPrefab: {fileID: 6750108211637369354, guid: b33f4bd9e42101c4386e3de2043edf48, type: 3}
     sfxClip: {fileID: 8300000, guid: c852c3c5e8011bd4ca86d55eb6c8b218, type: 3}
     sfxVolume: 0.6
+    sfxPriority: 0
     cameraShake: 0
     shakeStrength: 0.3
     shakeDuration: 0.25
@@ -110,6 +119,7 @@ MonoBehaviour:
     impactVfxPrefab: {fileID: 0}
     sfxClip: {fileID: 8300000, guid: 14ccccdc0d414b2489fc1a8a5e06f91e, type: 3}
     sfxVolume: 0.55
+    sfxPriority: 0
     cameraShake: 0
     shakeStrength: 0.3
     shakeDuration: 0.25
@@ -120,6 +130,7 @@ MonoBehaviour:
     impactVfxPrefab: {fileID: 0}
     sfxClip: {fileID: 8300000, guid: 4bda7f3b6c413004482ff74041bef074, type: 3}
     sfxVolume: 0.7
+    sfxPriority: 0
     cameraShake: 0
     shakeStrength: 0.3
     shakeDuration: 0.25
@@ -130,6 +141,7 @@ MonoBehaviour:
     impactVfxPrefab: {fileID: 0}
     sfxClip: {fileID: 8300000, guid: c19c7a2d241b7ea43b1eda50638b5654, type: 3}
     sfxVolume: 0.65
+    sfxPriority: 0
     cameraShake: 0
     shakeStrength: 0.3
     shakeDuration: 0.25
@@ -140,6 +152,40 @@ MonoBehaviour:
     impactVfxPrefab: {fileID: 0}
     sfxClip: {fileID: 8300000, guid: aa63559ee612d1643bf204225dc78fac, type: 3}
     sfxVolume: 0.7
+    sfxPriority: 0
+    cameraShake: 0
+    shakeStrength: 0.3
+    shakeDuration: 0.25
+  - key: 16
+    onlySfx: 1
+    vfxPrefab: {fileID: 0}
+    vfxPrefab2: {fileID: 0}
+    impactVfxPrefab: {fileID: 0}
+    sfxClip: {fileID: 8300000, guid: e6730ba9e0b0ce54d8c247b58707ca81, type: 3}
+    sfxVolume: 0.7
+    sfxPriority: 1
+    cameraShake: 0
+    shakeStrength: 0.3
+    shakeDuration: 0.25
+  - key: 17
+    onlySfx: 1
+    vfxPrefab: {fileID: 0}
+    vfxPrefab2: {fileID: 0}
+    impactVfxPrefab: {fileID: 0}
+    sfxClip: {fileID: 8300000, guid: df97cb26881538a4c95550c54afbd036, type: 3}
+    sfxVolume: 0.9
+    sfxPriority: 1
+    cameraShake: 0
+    shakeStrength: 0.3
+    shakeDuration: 0.25
+  - key: 18
+    onlySfx: 1
+    vfxPrefab: {fileID: 0}
+    vfxPrefab2: {fileID: 0}
+    impactVfxPrefab: {fileID: 0}
+    sfxClip: {fileID: 8300000, guid: 60b23b2c6e526c041b22a448e80bbb0e, type: 3}
+    sfxVolume: 0.6
+    sfxPriority: 1
     cameraShake: 0
     shakeStrength: 0.3
     shakeDuration: 0.25

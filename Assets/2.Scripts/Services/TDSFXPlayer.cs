@@ -7,6 +7,11 @@ public class TDSFXPlayer
     private readonly Dictionary<int, float> m_LastTime = new();
     private Transform m_Root;
 
+    // Per voice, kept across calls so picking one allocates nothing — Play runs on every swing.
+    private readonly bool[] m_Playing = new bool[TDConstant.SFX_POOL_SIZE];
+    private readonly float[] m_StartedAt = new float[TDConstant.SFX_POOL_SIZE];
+    private readonly bool[] m_IsPriority = new bool[TDConstant.SFX_POOL_SIZE];
+
     public void Init()
     {
         if (m_Root != null) return;
@@ -24,7 +29,24 @@ public class TDSFXPlayer
         }
     }
 
-    public void Play(AudioClip clip, float volume = 1f)
+    /// <summary>
+    /// The voice a sound should take: the first free one; failing that, a priority sound takes the
+    /// ordinary sound that started earliest. -1 means drop it. A priority sound never takes another
+    /// priority sound's voice — two break stings cutting each other off would lose both.
+    /// </summary>
+    public static int PickVoice(bool[] playing, float[] startedAt, bool[] isPriority, bool wantPriority)
+    {
+        for (int i = 0; i < playing.Length; i++)
+            if (!playing[i]) return i;
+        if (!wantPriority) return -1;
+
+        int oldest = -1;
+        for (int i = 0; i < playing.Length; i++)
+            if (!isPriority[i] && (oldest < 0 || startedAt[i] < startedAt[oldest])) oldest = i;
+        return oldest;
+    }
+
+    public void Play(AudioClip clip, float volume = 1f, bool priority = false)
     {
         if (clip == null || TDAudioPrefs.IsSfxMuted) return;
 
@@ -36,11 +58,19 @@ public class TDSFXPlayer
         for (int i = 0; i < TDConstant.SFX_POOL_SIZE; i++)
         {
             var src = m_Pool[i];
-            if (src == null || src.isPlaying) continue;
-            src.clip = clip;
-            src.volume = volume;
-            src.Play();
-            return;
+            m_Playing[i] = src == null || src.isPlaying;
+            if (src == null) m_IsPriority[i] = true; // a missing source is never picked and never taken
         }
+
+        int v = PickVoice(m_Playing, m_StartedAt, m_IsPriority, priority);
+        if (v < 0) return;
+
+        var voice = m_Pool[v];
+        voice.Stop(); // a taken voice cuts its old sound off rather than mixing into it
+        voice.clip = clip;
+        voice.volume = volume;
+        voice.Play();
+        m_StartedAt[v] = now;
+        m_IsPriority[v] = priority;
     }
 }
