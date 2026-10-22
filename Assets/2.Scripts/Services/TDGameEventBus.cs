@@ -17,6 +17,9 @@ public static class TDGameEventBus
     public static event Action<Vector3, OperatorType> OnOperatorAttacked;
     public static event Action<Vector3, OperatorType> OnOperatorImpacted;
     public static event Action<Vector2Int> OnOperatorDied;
+    public static event Action<Vector3> OnOperatorStressed;
+    public static event Action<Vector3> OnOperatorBroke;
+    public static event Action<Vector3> OnOperatorRecovered;
 
     // ── Player ────────────────────────────────────────────────────────────────
     public static event Action<Vector3> OnLifeLost;
@@ -56,6 +59,15 @@ public static class TDGameEventBus
 
     public static void OperatorDied(Vector2Int cell)
         => OnOperatorDied?.Invoke(cell);
+
+    public static void OperatorStressed(Vector3 pos)
+        => OnOperatorStressed?.Invoke(pos);
+
+    public static void OperatorBroke(Vector3 pos)
+        => OnOperatorBroke?.Invoke(pos);
+
+    public static void OperatorRecovered(Vector3 pos)
+        => OnOperatorRecovered?.Invoke(pos);
 
     public static void LifeLost(Vector3 pos)
         => OnLifeLost?.Invoke(pos);

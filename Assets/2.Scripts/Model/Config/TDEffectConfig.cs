@@ -17,6 +17,9 @@ public class EffectDef
     // SFX — always shown
     public AudioClip sfxClip;
     [Range(0f, 1f)] public float sfxVolume = 1f;
+    // Takes the voice of the oldest ordinary sound when all are busy. For the few cues that must
+    // never be lost in a fight — a break happens exactly when the most enemies are hitting and dying.
+    public bool sfxPriority;
 
     // Camera Shake — hidden when onlySfx = true
     public bool cameraShake;

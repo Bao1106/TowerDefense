@@ -66,6 +66,15 @@ namespace TDEnums
         Broken     // 100 — cannot block, attack or retreat; takes triple damage
     }
 
+    // Which band change is worth telling the player about (Tầng 4 §4.5). The break itself is not
+    // here: it has its own edge (TDOperatorMorale.ConsumeBreak), and its own louder cue.
+    public enum MoraleCue
+    {
+        None,
+        Stressed,  // climbed into Stressed: the warning
+        Recovered, // left Broken while still on the field: the relief
+    }
+
     // Class archetype — defines behavior (deploy zone, block count, attack style).
     // The specific identity of each operator is stored in OperatorData.operatorName.
     // ARCHETYPE, deliberately not identity. Several operators legitimately share one — Striker,
@@ -109,6 +118,11 @@ namespace TDEnums
         GameOver,
         UnitPickup, // unit lifted from the slot bar (PointerDown)
         TowerPlaced, // tower / operator successfully placed
+
+        // Numbered on purpose: Effect Config stores the int, so these must never shift.
+        OperatorStressed = 16, // climbed into Stressed
+        OperatorBroke = 17, // collapsed
+        OperatorRecovered = 18, // left Broken while still on the field
     }
 
     public enum BorderSide

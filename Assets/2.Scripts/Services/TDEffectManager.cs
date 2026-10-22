@@ -46,6 +46,9 @@ public static class TDEffectManager
         TDGameEventBus.OnGameOver += OnGameOver;
         TDGameEventBus.OnUnitPickup += OnUnitPickup;
         TDGameEventBus.OnTowerPlaced += OnTowerPlaced;
+        TDGameEventBus.OnOperatorStressed += OnOperatorStressed;
+        TDGameEventBus.OnOperatorBroke += OnOperatorBroke;
+        TDGameEventBus.OnOperatorRecovered += OnOperatorRecovered;
 
         if (TDEnemyPathMainControl.api != null)
             TDEnemyPathMainControl.api.onGroupsReady += CacheGatePositions;
@@ -63,6 +66,9 @@ public static class TDEffectManager
         TDGameEventBus.OnGameOver -= OnGameOver;
         TDGameEventBus.OnUnitPickup -= OnUnitPickup;
         TDGameEventBus.OnTowerPlaced -= OnTowerPlaced;
+        TDGameEventBus.OnOperatorStressed -= OnOperatorStressed;
+        TDGameEventBus.OnOperatorBroke -= OnOperatorBroke;
+        TDGameEventBus.OnOperatorRecovered -= OnOperatorRecovered;
 
         if (TDEnemyPathMainControl.api != null)
             TDEnemyPathMainControl.api.onGroupsReady -= CacheGatePositions;
@@ -116,6 +122,11 @@ public static class TDEffectManager
     private static void OnUnitPickup() => PlaySfxOnly(GameEventKey.UnitPickup);
     private static void OnTowerPlaced() => PlaySfxOnly(GameEventKey.TowerPlaced);
 
+    // Morale cues are sound only: the badge already shows them (Tầng 4 §4.5).
+    private static void OnOperatorStressed(Vector3 _) => PlaySfxOnly(GameEventKey.OperatorStressed);
+    private static void OnOperatorBroke(Vector3 _) => PlaySfxOnly(GameEventKey.OperatorBroke);
+    private static void OnOperatorRecovered(Vector3 _) => PlaySfxOnly(GameEventKey.OperatorRecovered);
+
     private static void OnWaveStarted(int _)
     {
         foreach (var gatePos in s_GatePositions)
@@ -130,7 +141,7 @@ public static class TDEffectManager
 
         SpawnVFX(def.vfxPrefab, pos);
         SpawnVFX(def.vfxPrefab2, pos);
-        TDAudioService.SFX.Play(def.sfxClip, def.sfxVolume);
+        TDAudioService.SFX.Play(def.sfxClip, def.sfxVolume, def.sfxPriority);
 
         if (def.cameraShake)
             MainCam?.transform
@@ -141,7 +152,7 @@ public static class TDEffectManager
     private static void PlaySfxOnly(GameEventKey key)
     {
         if (!s_Effects.TryGetValue(key, out var def)) return;
-        TDAudioService.SFX.Play(def.sfxClip, def.sfxVolume);
+        TDAudioService.SFX.Play(def.sfxClip, def.sfxVolume, def.sfxPriority);
     }
 
     private static void PlayImpact(GameEventKey key, Vector3 impactPos)

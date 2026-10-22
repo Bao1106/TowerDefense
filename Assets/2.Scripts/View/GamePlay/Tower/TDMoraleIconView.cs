@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using TDEnums;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -23,7 +25,7 @@ public sealed class TDMoraleIconView : MonoBehaviour
     //
     // Up-and-right of the operator rather than centred over the head — the retreat panel opens
     // centred, so the thing telling the player WHETHER to pull out would sit under the thing
-    // used to DO it. On screen (camera pitched 30°) that lands ~0.55 up and ~0.47 right of the
+    // used to DO it. On screen (camera pitched 40°) that lands ~0.55 up and ~0.47 right of the
     // operator's feet; the -0.855 on z is what carries it 1.3 units toward the camera, clear of
     // the model it was otherwise buried in.
     private static readonly Vector3 OFFSET = new Vector3(0.465f, 1.125f, -0.855f);
@@ -38,6 +40,43 @@ public sealed class TDMoraleIconView : MonoBehaviour
     // Dark disc behind the face. Without it the icon competes with whatever tile happens to
     // be under it; with it, every icon sits on the same background whatever the map does.
     private const float DISC_SCALE = 1.05f;
+
+    // Broken's edge on pale ground (Tầng 4 §4.2): ~3 px at 1080p, where one canvas unit is ~0.54 px.
+    // A tower platform measured #C6DAFC — the pale disc melted into it and only the symbol was left.
+    private const float OUTLINE_UNITS = 5.6f;
+
+    // ── Break moment (Tầng 4 §4.1) ──────────────────────────────────────────
+    // Twice the leak beat in both size and length, so the two never read as the same event. A
+    // fresh break looked exactly like one ten seconds old (screenshot 3) — this is what tells them apart.
+    // 0.5, not the 0.6 first specced: the badge measured ~81 px at rest in play, not the 69 px
+    // computed, so 1.6 peaked at ~130 px; 1.5 lands at ~121 px, under the 125 px the screenshots set.
+    private const float PUNCH_GAIN = 0.5f;
+    private const float PUNCH_SECONDS = 0.35f;
+    private const float FLASH_SECONDS = 0.15f;
+    private const float LABEL_BLINK = 0.15f;
+    private const float LABEL_HOLD_UNTIL = 1.2f;
+    private const float LABEL_SECONDS = 1.5f;
+
+    // Canvas units, one 1080p pixel ≈ 1.86 of them: text 36 px (Android's 12sp floor is ~33),
+    // plate 165 × 48 px, its bottom 6 px above the badge.
+    public const string LABEL_FONT_PATH = "Fonts/OpenSans-Bold SDF"; // the HUD's own face
+    public const string LABEL_MATERIAL_PATH = "Fonts/OpenSans-Bold SDF Overlay";
+    public const string ON_TOP_SHADER = "Custom/UI_AlwaysOnTop";
+    private const float LABEL_FONT_UNITS = 67f;
+    private static readonly Vector2 k_LabelPlate = new Vector2(307f, 89f);
+    private const float LABEL_GAP_UNITS = 11f;
+
+    // The halo leaves the badge rim and is spent by one cell (108 px), where the neighbour stands.
+    private const float RING_FROM_UNITS = 67f;
+    public const float HALO_MAX_RADIUS = 200f;
+    public const float HALO_SECONDS = 0.4f;
+    private const float HALO_THICKNESS_UNITS = 7.4f;
+
+    // Entering Stressed (§4.3) is a warning, not an alarm: thinner, smaller and shorter than the
+    // break's halo — 80 px, 2 px, 0.3 s — and the badge itself does not punch.
+    public const float STRESS_RING_MAX_RADIUS = 148f;
+    public const float STRESS_RING_SECONDS = 0.3f;
+    private const float STRESS_RING_THICKNESS_UNITS = 3.7f;
 
     // Stressed pulses. 2.4-5.5 seconds is all the warning that band gives under heavy
     // pressure (§10), so a static icon is not a signal — it has to move to be noticed.
@@ -75,15 +114,52 @@ public sealed class TDMoraleIconView : MonoBehaviour
 
     private static Sprite[] s_Sprites;
     private static Sprite s_Disc;
+    private static readonly Dictionary<float, Sprite> s_Rings = new();
+    private static Material s_OnTop;
+    private static Material s_LabelMaterial;
+    private static Sprite s_Pill;
 
     private float m_LeakPulseStart = float.NegativeInfinity;
+    private float m_BreakStart = float.NegativeInfinity;
+    private float m_StressedStart = float.NegativeInfinity;
+    private Image m_StressRing;
+    private float m_BadgeScale = 1f;
+    private Image m_Flash;
+    private Image m_Halo;
+    private Image m_LabelPlate;
+    private TextMeshProUGUI m_Label;
 
     private CanvasGroup m_Group;
     private float m_BaseScale;
     private Transform m_Owner;
+    private RectTransform m_Badge;
     private Image m_Disc;
     private Image m_Backdrop;
     private Image m_Face;
+    private Image m_Outline;
+
+    /// <summary>
+    /// The UI material that ignores depth. A world-space canvas is depth-tested like any mesh, so a
+    /// boss standing on the line hid the badge completely (Tầng 4 §1.2 A1) — the one moment it
+    /// mattered most. Shared by everything morale draws, the rescue arc included.
+    ///
+    /// The shader has ZTest Always written into it; setting unity_GUIZTestMode on a material does
+    /// nothing, because the canvas writes that value itself on every draw. It is the shader the HP
+    /// bar already uses (HPBar_AlwaysOnTop.mat), which is also what keeps it in a build.
+    /// </summary>
+    public static Material OnTopMaterial
+    {
+        get
+        {
+            if (s_OnTop != null) return s_OnTop;
+            var shader = Shader.Find(ON_TOP_SHADER);
+            if (shader == null) Debug.LogWarning($"[MoraleIcon] shader {ON_TOP_SHADER} missing; badges will be hidden behind models");
+            s_OnTop = shader != null
+                ? new Material(shader) { name = "MoraleOnTop", hideFlags = HideFlags.HideAndDontSave }
+                : Canvas.GetDefaultCanvasMaterial();
+            return s_OnTop;
+        }
+    }
     private MoraleState m_Shown = (MoraleState)(-1);
 
     /// <summary>
@@ -115,6 +191,37 @@ public sealed class TDMoraleIconView : MonoBehaviour
         tex.Apply();
         s_Disc = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
         return s_Disc;
+    }
+
+    /// <summary>
+    /// A ring whose band is `thickness` of its radius, generated once per thickness for the same
+    /// reason as the disc. 256 px so the thinnest band still has a few texels to feather.
+    /// </summary>
+    private static Sprite RingSprite(float thickness)
+    {
+        if (s_Rings.TryGetValue(thickness, out var cached) && cached != null) return cached;
+
+        const int size = 256;
+        const float r = size * 0.5f;
+        float inner = r * (1f - thickness);
+        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
+        {
+            hideFlags = HideFlags.HideAndDontSave,
+            filterMode = FilterMode.Bilinear,
+        };
+
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                float d = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), new Vector2(r, r));
+                float a = Mathf.Clamp01(r - d) * Mathf.Clamp01(d - inner); // feathered on both rims
+                tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+            }
+
+        tex.Apply();
+        var sprite = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
+        s_Rings[thickness] = sprite;
+        return sprite;
     }
 
     /// <summary>Creates the icon under `owner` and returns it. Null if the art is missing.</summary>
@@ -168,23 +275,141 @@ public sealed class TDMoraleIconView : MonoBehaviour
         // the Stressed disc pulse keeps modulating its own alpha underneath, untouched.
         m_Group = gameObject.AddComponent<CanvasGroup>();
 
+        // The badge's own scale (band weight, leak beat) lives on this child, not on the root,
+        // so what sits beside the badge — the BROKEN label, the rings — is not scaled with it.
+        var badgeGo = new GameObject("Badge", typeof(RectTransform));
+        m_Badge = (RectTransform)badgeGo.transform;
+        m_Badge.SetParent(rect, worldPositionStays: false);
+        m_Badge.anchorMin = Vector2.zero;
+        m_Badge.anchorMax = Vector2.one;
+        m_Badge.offsetMin = Vector2.zero;
+        m_Badge.offsetMax = Vector2.zero;
+
         // Disc first, so everything else sits on a known background instead of on the map.
-        m_Disc = NewImage("Disc", rect);
+        m_Disc = NewImage("Disc", m_Badge);
         m_Disc.sprite = DiscSprite();
         m_Disc.color = new Color(0.05f, 0.05f, 0.07f, 0.72f);
         ((RectTransform)m_Disc.transform).localScale = Vector3.one * DISC_SCALE;
 
+        // The break's white flash: a layer over the disc rather than a write to its colour, so
+        // the flash ending never has to know what Refresh would have put back.
+        m_Flash = NewImage("Flash", m_Badge);
+        m_Flash.sprite = DiscSprite();
+        m_Flash.color = Color.white;
+        m_Flash.enabled = false;
+        ((RectTransform)m_Flash.transform).localScale = Vector3.one * DISC_SCALE;
+
+        // Broken's rim, the disc's size exactly, shown only in that state.
+        m_Outline = NewImage("Outline", m_Badge);
+        m_Outline.sprite = RingSprite(OUTLINE_UNITS / (PIXELS * DISC_SCALE * 0.5f));
+        m_Outline.color = Hex(TDConstant.COLOR_MORALE_BROKEN);
+        m_Outline.enabled = false;
+        ((RectTransform)m_Outline.transform).localScale = Vector3.one * DISC_SCALE;
+
         // Backdrop: the same face at low alpha. It keeps the silhouette readable while the
         // coloured layer drains away, so an operator near the end of a band still shows
         // WHICH band rather than fading to nothing.
-        m_Backdrop = NewImage("Backdrop", rect);
+        m_Backdrop = NewImage("Backdrop", m_Badge);
         m_Backdrop.color = new Color(1f, 1f, 1f, 0.25f);
 
         // Face: the coloured layer, drained top-down as stress fills the band.
-        m_Face = NewImage("Face", rect);
+        m_Face = NewImage("Face", m_Badge);
         m_Face.type = Image.Type.Filled;
         m_Face.fillMethod = Image.FillMethod.Vertical;
         m_Face.fillOrigin = (int)Image.OriginVertical.Bottom; // drains from the top down
+
+        BuildBreakParts(rect);
+    }
+
+    // Halo and label sit on the root, beside the badge: neither grows with its punch, and the
+    // label stays the size the 12sp floor asked for.
+    private void BuildBreakParts(RectTransform root)
+    {
+        m_Halo = NewImage("Halo", root);
+        // ponytail: the band scales with the ring — thinner at the rim, 4 px at full size. A fixed
+        // pixel width means rebuilding a mesh every frame, for a ring that lives 0.4 s.
+        m_Halo.sprite = RingSprite(HALO_THICKNESS_UNITS / HALO_MAX_RADIUS);
+        Centre(m_Halo.rectTransform, Vector2.zero, Vector2.one * (2f * RING_FROM_UNITS));
+        m_Halo.enabled = false;
+
+        m_StressRing = NewImage("StressRing", root);
+        m_StressRing.sprite = RingSprite(STRESS_RING_THICKNESS_UNITS / STRESS_RING_MAX_RADIUS);
+        Centre(m_StressRing.rectTransform, Vector2.zero, Vector2.one * (2f * RING_FROM_UNITS));
+        m_StressRing.enabled = false;
+
+        var platePos = new Vector2(0f, PIXELS * 0.5f + LABEL_GAP_UNITS + k_LabelPlate.y * 0.5f);
+        m_LabelPlate = NewImage("LabelPlate", root);
+        m_LabelPlate.sprite = PillSprite();
+        m_LabelPlate.color = Hex(TDConstant.COLOR_MORALE_BROKEN_DISC);
+        Centre(m_LabelPlate.rectTransform, platePos, k_LabelPlate);
+        m_LabelPlate.enabled = false;
+
+        var labelGo = new GameObject("Label", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+        var labelRect = (RectTransform)labelGo.transform;
+        labelRect.SetParent(root, worldPositionStays: false);
+        Centre(labelRect, platePos, k_LabelPlate);
+
+        m_Label = labelGo.GetComponent<TextMeshProUGUI>();
+        var font = Resources.Load<TMP_FontAsset>(LABEL_FONT_PATH);
+        if (font != null) m_Label.font = font;
+        m_Label.fontStyle = font != null ? FontStyles.Normal : FontStyles.Bold; // the HUD face is already bold
+        m_Label.text = "BROKEN";
+        m_Label.fontSize = LABEL_FONT_UNITS;
+        m_Label.alignment = TextAlignmentOptions.Center;
+        m_Label.enableWordWrapping = false;
+        m_Label.color = Hex(TDConstant.COLOR_MORALE_BROKEN);
+        m_Label.raycastTarget = false;
+        m_Label.fontSharedMaterial = LabelMaterial(m_Label.fontSharedMaterial);
+        m_Label.enabled = false;
+    }
+
+    // The label font's Overlay preset (TMP's ZTest Always shader). An asset under Resources rather
+    // than a copy made here: a shader only code asks for by name is stripped from a build. Not the
+    // font's own material — the HUD draws with that and must stay depth-tested as it is.
+    private static Material LabelMaterial(Material fontMaterial)
+    {
+        if (s_LabelMaterial != null) return s_LabelMaterial;
+        s_LabelMaterial = Resources.Load<Material>(LABEL_MATERIAL_PATH);
+        if (s_LabelMaterial == null)
+        {
+            Debug.LogWarning($"[MoraleIcon] no label material at Resources/{LABEL_MATERIAL_PATH}; the label can be hidden behind models");
+            s_LabelMaterial = fontMaterial;
+        }
+        return s_LabelMaterial;
+    }
+
+    private static void Centre(RectTransform rt, Vector2 position, Vector2 size)
+    {
+        rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = position;
+        rt.sizeDelta = size;
+    }
+
+    /// <summary>A capsule at the plate's own aspect (307:89), so it is drawn unsliced and undistorted.</summary>
+    private static Sprite PillSprite()
+    {
+        if (s_Pill != null) return s_Pill;
+
+        const int w = 256, h = 74;
+        const float r = h * 0.5f;
+        var tex = new Texture2D(w, h, TextureFormat.RGBA32, false)
+        {
+            hideFlags = HideFlags.HideAndDontSave,
+            filterMode = FilterMode.Bilinear,
+        };
+
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                // Distance to the capsule's spine: the segment between the two end-cap centres.
+                float cx = Mathf.Clamp(x + 0.5f, r, w - r);
+                float d = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), new Vector2(cx, r));
+                tex.SetPixel(x, y, new Color(1f, 1f, 1f, Mathf.Clamp01(r - d)));
+            }
+
+        tex.Apply();
+        s_Pill = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f));
+        return s_Pill;
     }
 
     private static Image NewImage(string name, RectTransform parent)
@@ -199,6 +424,7 @@ public sealed class TDMoraleIconView : MonoBehaviour
 
         var img = go.GetComponent<Image>();
         img.raycastTarget = false;
+        img.material = OnTopMaterial;
         return img;
     }
 
@@ -220,8 +446,14 @@ public sealed class TDMoraleIconView : MonoBehaviour
         var weight = k_Weight[Mathf.Clamp((int)state, 0, k_Weight.Length - 1)];
         float beat = (Time.time - m_LeakPulseStart) / LEAK_PULSE_SECONDS;
         float leak = beat >= 0f && beat < 1f ? LEAK_PULSE_GAIN * Mathf.Sin(beat * Mathf.PI) : 0f;
-        transform.localScale = Vector3.one * (m_BaseScale * weight.scale * (1f + leak));
+        m_BadgeScale = weight.scale * (1f + leak); // applied in LateUpdate, under the break's punch
+        m_Badge.localScale = Vector3.one * m_BadgeScale;
         if (m_Group != null) m_Group.alpha = weight.alpha;
+        m_Outline.enabled = state == MoraleState.Broken;
+
+        // Rescued inside the label's 1.5 s: "BROKEN" over a badge already back to Steady says two
+        // things at once. The moment ends with the state it announced.
+        if (state != MoraleState.Broken) m_BreakStart = float.NegativeInfinity;
 
         Color colour = ColourFor(state);
 
@@ -273,6 +505,72 @@ public sealed class TDMoraleIconView : MonoBehaviour
         }
     }
 
+    /// <summary>Where `owner`'s badge floats, for things drawn to or from it (the rescue arc).</summary>
+    public static Vector3 BadgeAnchor(Transform owner) => owner.position + OFFSET;
+
+    /// <summary>Starts the break moment (§4.1). Runs from LateUpdate, so it finishes even if they die.</summary>
+    public void PlayBreak() => m_BreakStart = Time.time;
+
+    /// <summary>One thin red ring for the climb into Stressed (§4.3).</summary>
+    public void PlayStressed() => m_StressedStart = Time.time;
+
+    private void AnimateStressRing(float t)
+    {
+        bool on = t >= 0f && t < STRESS_RING_SECONDS;
+        if (m_StressRing.enabled != on) m_StressRing.enabled = on;
+        if (!on) return;
+
+        m_StressRing.rectTransform.sizeDelta = Vector2.one * (2f * RingRadius(t, STRESS_RING_SECONDS, RING_FROM_UNITS, STRESS_RING_MAX_RADIUS));
+        var red = Hex(TDConstant.COLOR_MORALE_STRESSED);
+        m_StressRing.color = new Color(red.r, red.g, red.b, RingAlpha(t, STRESS_RING_SECONDS));
+    }
+
+    /// <summary>The badge's extra scale at `t` seconds into a break: one sine bump to 1 + PUNCH_GAIN.</summary>
+    public static float BreakPunch(float t)
+        => t >= 0f && t < PUNCH_SECONDS ? 1f + PUNCH_GAIN * Mathf.Sin(Mathf.PI * t / PUNCH_SECONDS) : 1f;
+
+    public static bool BreakFlash(float t) => t >= 0f && t < FLASH_SECONDS;
+
+    /// <summary>Two blinks at the flash's rhythm, steady until LABEL_HOLD_UNTIL, then a linear fade.</summary>
+    public static float LabelAlpha(float t)
+    {
+        if (t < 0f || t >= LABEL_SECONDS) return 0f;
+        if (t < 4f * LABEL_BLINK) return (int)(t / LABEL_BLINK) % 2 == 0 ? 1f : 0f;
+        if (t < LABEL_HOLD_UNTIL) return 1f;
+        return 1f - (t - LABEL_HOLD_UNTIL) / (LABEL_SECONDS - LABEL_HOLD_UNTIL);
+    }
+
+    public static float RingRadius(float t, float duration, float from, float to)
+        => Mathf.Lerp(from, to, Mathf.Clamp01(t / duration));
+
+    public static float RingAlpha(float t, float duration) => Mathf.Clamp01(1f - t / duration);
+
+    private void AnimateBreak(float t)
+    {
+        m_Badge.localScale = Vector3.one * (m_BadgeScale * BreakPunch(t));
+
+        bool flash = BreakFlash(t);
+        if (m_Flash.enabled != flash) m_Flash.enabled = flash;
+
+        bool halo = t >= 0f && t < HALO_SECONDS;
+        if (m_Halo.enabled != halo) m_Halo.enabled = halo;
+        if (halo)
+        {
+            m_Halo.rectTransform.sizeDelta = Vector2.one * (2f * RingRadius(t, HALO_SECONDS, RING_FROM_UNITS, HALO_MAX_RADIUS));
+            m_Halo.color = new Color(1f, 1f, 1f, RingAlpha(t, HALO_SECONDS));
+        }
+
+        float a = LabelAlpha(t);
+        bool label = a > 0f;
+        if (m_Label.enabled != label) { m_Label.enabled = label; m_LabelPlate.enabled = label; }
+        if (label)
+        {
+            m_Label.alpha = a;
+            var plate = m_LabelPlate.color;
+            m_LabelPlate.color = new Color(plate.r, plate.g, plate.b, a);
+        }
+    }
+
     /// <summary>A leak just landed on this operator. Restarts the beat rather than stacking it.</summary>
     public void Pulse() => m_LeakPulseStart = Time.time;
 
@@ -314,5 +612,11 @@ public sealed class TDMoraleIconView : MonoBehaviour
         // so the icon has to re-assert its own world rotation every frame or it turns with them.
         transform.position = m_Owner.position + OFFSET;
         transform.rotation = Quaternion.Euler(30f, 0f, 0f);
+
+        // Here, not in Refresh: Refresh stops with TickMorale while the operator is dying, and a
+        // break announced by the fatal blow must still play out.
+        if (m_Badge == null) return;
+        AnimateBreak(Time.time - m_BreakStart);
+        AnimateStressRing(Time.time - m_StressedStart);
     }
 }

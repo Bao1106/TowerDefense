@@ -117,6 +117,7 @@ public static class TDBalanceValidator
         ReusedTarget(failures);
         ReusedBolt(failures);
         AuraVisual(failures, LoadConfig<TDFlyweightEnemyDataSettings>()?.GetAllEnemies());
+        MoraleWired(failures);
 
         Density(failures);
         Dominance(failures);
@@ -373,6 +374,38 @@ public static class TDBalanceValidator
         var ring = fi.GetValue(view) as GameObject;
         if (ring == null || ring.name != "FearRing")
             f.Add($"[HERALD_AURA_WIRED] m_AuraVisual is {(ring == null ? "unset" : ring.name)}, want FearRing");
+    }
+
+    // Tầng 4 §4.5: the three morale cues are wired in the Effect Config, each with a clip and the
+    // priority flag — without the flag a break sting is the first sound a busy fight drops.
+    // TDEffectConfig.api resolves through TDResourceObject, which only exists in a running scene,
+    // so the asset is loaded the way AuraVisual's enemy data is.
+    //
+    // §4.1: the BROKEN label is built in code, so the HUD's font has to be reachable from Resources;
+    // a miss silently falls back to TMP's default face.
+    private static void MoraleWired(List<string> f)
+    {
+        var font = Resources.Load<TMPro.TMP_FontAsset>(TDMoraleIconView.LABEL_FONT_PATH);
+        if (font == null)
+            f.Add($"[MORALE_LABEL_FONT] no TMP font at Resources/{TDMoraleIconView.LABEL_FONT_PATH}");
+
+        // The label's overlay material is an asset, not built at runtime: a shader that only code
+        // asks for by name is stripped from a build, and the label would fall back to depth-tested.
+        var labelMat = Resources.Load<Material>(TDMoraleIconView.LABEL_MATERIAL_PATH);
+        if (labelMat == null || !labelMat.shader.name.EndsWith("Overlay")
+            || (font != null && labelMat.GetTexture("_MainTex") != font.atlasTexture))
+            f.Add($"[MORALE_LABEL_MATERIAL] Resources/{TDMoraleIconView.LABEL_MATERIAL_PATH}: {(labelMat == null ? "missing" : labelMat.shader.name)}, want an Overlay preset of the label font's atlas");
+
+        var all = LoadConfig<TDEffectConfig>()?.GetAll();
+        if (all == null) { f.Add("[MORALE_SFX_WIRED] no Effect Config asset"); return; }
+
+        foreach (var key in new[] { GameEventKey.OperatorStressed, GameEventKey.OperatorBroke, GameEventKey.OperatorRecovered })
+        {
+            var defs = all.Where(d => d.key == key).ToList();
+            if (defs.Count != 1) { f.Add($"[MORALE_SFX_WIRED] {key}: {defs.Count} entries, want 1"); continue; }
+            if (defs[0].sfxClip == null || !defs[0].sfxPriority)
+                f.Add($"[MORALE_SFX_WIRED] {key}: clip {(defs[0].sfxClip == null ? "missing" : defs[0].sfxClip.name)}, priority {defs[0].sfxPriority}");
+        }
     }
 
     // Spec §5.7: the difficulty sets the opening purse, and it is the only writer. The HUD's

@@ -61,6 +61,11 @@ public static class TDMoraleValidator
         Lives(f);
         ZeroDamage(f);
         FallAnnouncesBreak(f);
+        MoraleCues(f);
+        SfxVoices(f);
+        IconRendering(f);
+        BreakTiming(f);
+        RescueArc(f);
         RescuerPick(f);
         RescueReach(f);
         LeakLog(f);
@@ -734,11 +739,16 @@ public static class TDMoraleValidator
     {
         var announce = typeof(TDOperatorView).GetMethod("AnnounceFall", BindingFlags.Instance | BindingFlags.NonPublic);
         var total = typeof(TDPressureProbe).GetField("s_TotalCollapses", BindingFlags.Static | BindingFlags.NonPublic);
-        if (announce == null || total == null) { f.Add("[REFLECT] TDOperatorView.AnnounceFall / TDPressureProbe.s_TotalCollapses missing"); return; }
+        var brokeField = typeof(TDGameEventBus).GetField("OnOperatorBroke", BindingFlags.Static | BindingFlags.NonPublic);
+        if (announce == null || total == null || brokeField == null) { f.Add("[REFLECT] TDOperatorView.AnnounceFall / TDPressureProbe.s_TotalCollapses / TDGameEventBus.OnOperatorBroke missing"); return; }
 
+        // Stashed as in Lives: a live effect manager would play the break sting from a validator run.
+        object savedBroke = brokeField.GetValue(null);
+        int broke = 0;
         var go = new GameObject("FallProbe") { hideFlags = HideFlags.HideAndDontSave };
         try
         {
+            brokeField.SetValue(null, (System.Action<Vector3>)(_ => broke++));
             var op = go.AddComponent<TDOperatorView>();
             var broken = At(TDConstant.STRESS_MAX); // collapsed, and nobody has reacted to it yet
             if (!SetField(f, op, "<Morale>k__BackingField", broken)) return;
@@ -747,8 +757,207 @@ public static class TDMoraleValidator
             announce.Invoke(op, null);
             if ((int)total.GetValue(null) != before + 1) f.Add("[FALL_ANNOUNCES_BREAK] dying with an unannounced break recorded no collapse");
             if (broken.ConsumeBreak()) f.Add("[FALL_CONSUMES_EDGE] the fall left the break pending");
+            if (broke != 1) f.Add($"[FALL_RAISES_BROKE] the fall raised OnOperatorBroke {broke} times, want 1");
+        }
+        finally
+        {
+            brokeField.SetValue(null, savedBroke);
+            Object.DestroyImmediate(go);
+        }
+    }
+
+    // Tầng 4 §4.5: which transitions deserve a cue. The break has its own edge (AnnounceBreak), so
+    // CueFor only answers "warning on the way up" and "relief on the way out of a collapse".
+    private static void MoraleCues(List<string> f)
+    {
+        Cue(f, "CUE_STEADY_STRESSED", MoraleState.Steady, MoraleState.Stressed, MoraleCue.Stressed);
+        Cue(f, "CUE_CALM_STRESSED", MoraleState.Calm, MoraleState.Stressed, MoraleCue.Stressed);
+        Cue(f, "CUE_STRESSED_BROKEN", MoraleState.Stressed, MoraleState.Broken, MoraleCue.None);
+        Cue(f, "CUE_STEADY_BROKEN", MoraleState.Steady, MoraleState.Broken, MoraleCue.None);
+        Cue(f, "CUE_BROKEN_STEADY", MoraleState.Broken, MoraleState.Steady, MoraleCue.Recovered);
+        Cue(f, "CUE_BROKEN_STRESSED", MoraleState.Broken, MoraleState.Stressed, MoraleCue.Recovered);
+        Cue(f, "CUE_STRESSED_STEADY", MoraleState.Stressed, MoraleState.Steady, MoraleCue.None);
+        Cue(f, "CUE_CALM_CALM", MoraleState.Calm, MoraleState.Calm, MoraleCue.None);
+        Cue(f, "CUE_BROKEN_BROKEN", MoraleState.Broken, MoraleState.Broken, MoraleCue.None);
+
+        // Effect Config stores these as ints: a key that moves silently plays the wrong sound.
+        if ((int)GameEventKey.OperatorStressed != 16 || (int)GameEventKey.OperatorBroke != 17 || (int)GameEventKey.OperatorRecovered != 18)
+            f.Add($"[EVENT_KEY_VALUES] {(int)GameEventKey.OperatorStressed}/{(int)GameEventKey.OperatorBroke}/{(int)GameEventKey.OperatorRecovered}, want 16/17/18");
+
+        TickCues(f);
+    }
+
+    private static void Cue(List<string> f, string tag, MoraleState prev, MoraleState now, MoraleCue want)
+    {
+        var got = TDOperatorMorale.CueFor(prev, now);
+        if (got != want) f.Add($"[{tag}] {prev}→{now} gave {got}, want {want}");
+    }
+
+    // The view raises the cues frame to frame, whatever moved the stress in between.
+    private static void TickCues(List<string> f)
+    {
+        const BindingFlags S = BindingFlags.Static | BindingFlags.NonPublic;
+        var stressedField = typeof(TDGameEventBus).GetField("OnOperatorStressed", S);
+        var recoveredField = typeof(TDGameEventBus).GetField("OnOperatorRecovered", S);
+        var tick = typeof(TDOperatorView).GetMethod("TickMorale", BindingFlags.Instance | BindingFlags.NonPublic);
+        if (stressedField == null || recoveredField == null || tick == null) { f.Add("[REFLECT] TDGameEventBus.OnOperatorStressed / OnOperatorRecovered / TDOperatorView.TickMorale missing"); return; }
+
+        object savedStressed = stressedField.GetValue(null), savedRecovered = recoveredField.GetValue(null);
+        int stressed = 0, recovered = 0;
+        var go = new GameObject("CueProbe") { hideFlags = HideFlags.HideAndDontSave };
+        try
+        {
+            stressedField.SetValue(null, (System.Action<Vector3>)(_ => stressed++));
+            recoveredField.SetValue(null, (System.Action<Vector3>)(_ => recovered++));
+            var op = go.AddComponent<TDOperatorView>();
+            object[] frame = { 0.016f };
+
+            if (!Arm(f, op, At(70f), MoraleState.Steady)) return;
+            tick.Invoke(op, frame);
+            tick.Invoke(op, frame);
+            if (stressed != 1) f.Add($"[TICK_RAISES_STRESSED] Steady→Stressed raised {stressed} cues over two ticks, want 1");
+
+            var rescued = At(TDConstant.STRESS_MAX);
+            rescued.ConsumeBreak();
+            rescued.OnRescue();
+            if (rescued.IsBroken) { f.Add("[TICK_SETUP] OnRescue did not release the collapse"); return; }
+            stressed = 0;
+            if (!Arm(f, op, rescued, MoraleState.Broken)) return;
+            tick.Invoke(op, frame);
+            if (recovered != 1 || stressed != 0) f.Add($"[TICK_RAISES_RECOVERED] leaving Broken raised {recovered} recovered / {stressed} stressed, want 1 / 0");
+
+            recovered = 0;
+            if (!Arm(f, op, At(50f), MoraleState.Stressed)) return;
+            tick.Invoke(op, frame);
+            if (stressed != 0 || recovered != 0) f.Add($"[TICK_SILENT_DOWN] Stressed→Steady raised {stressed} / {recovered}, want 0 / 0");
+        }
+        finally
+        {
+            stressedField.SetValue(null, savedStressed);
+            recoveredField.SetValue(null, savedRecovered);
+            Object.DestroyImmediate(go);
+        }
+    }
+
+    private static bool Arm(List<string> f, TDOperatorView op, TDOperatorMorale morale, MoraleState last)
+        => SetField(f, op, "<Morale>k__BackingField", morale) & SetField(f, op, "m_LastMoraleState", last);
+
+    // Tầng 4 C6: with all voices busy a morale cue takes the oldest ordinary sound's voice. It never
+    // takes another priority sound's voice, and an ordinary sound is still dropped as before.
+    private static void SfxVoices(List<string> f)
+    {
+        const bool T = true, F = false;
+        Voice(f, "SFX_PICK_FREE", new[] { T, F, T }, new[] { 0f, 0f, 0f }, new[] { F, F, F }, false, 1);
+        Voice(f, "SFX_PICK_STEAL_OLDEST", new[] { T, T, T }, new[] { 3f, 1f, 2f }, new[] { F, F, F }, true, 1);
+        Voice(f, "SFX_PICK_NORMAL_DROPPED", new[] { T, T, T }, new[] { 3f, 1f, 2f }, new[] { F, F, F }, false, -1);
+        Voice(f, "SFX_PICK_KEEPS_PRIORITY", new[] { T, T, T }, new[] { 0f, 5f, 1f }, new[] { T, F, T }, true, 1);
+        Voice(f, "SFX_PICK_ALL_PRIORITY", new[] { T, T, T }, new[] { 0f, 5f, 1f }, new[] { T, T, T }, true, -1);
+    }
+
+    // Tầng 4 §4.2, §4.4: the badge draws over 3D models — a boss standing on the line hid it
+    // completely — and its scale lives on a "Badge" child, so what sits beside it is not scaled too.
+    private static void IconRendering(List<string> f)
+    {
+        var go = new GameObject("IconProbe") { hideFlags = HideFlags.HideAndDontSave };
+        try
+        {
+            var icon = TDMoraleIconView.Attach(go.transform);
+            if (icon == null) { f.Add("[ICON_ATTACH] TDMoraleIconView.Attach returned null — sprites missing?"); return; }
+
+            // Checks the SHADER, not a material value: the canvas sets unity_GUIZTestMode itself on
+            // every draw, so a material's own value never reached the GPU (the first version of
+            // this test read that value and passed while the boss still hid the badge in play).
+            foreach (var g in icon.GetComponentsInChildren<UnityEngine.UI.Graphic>(true))
+            {
+                bool onTop = g is TMPro.TMP_Text t
+                    ? t.fontSharedMaterial != null && t.fontSharedMaterial.shader.name.EndsWith("Overlay")
+                    : g.material != null && g.material.shader.name == TDMoraleIconView.ON_TOP_SHADER;
+                if (!onTop) f.Add($"[ICON_ON_TOP] {g.name} draws with a depth-tested shader: a model standing in front hides it");
+            }
+
+            icon.Refresh(At(10f));
+            var badge = icon.transform.Find("Badge");
+            float baseScale = GetField<float>(icon, "m_BaseScale");
+            if (badge == null || Mathf.Abs(icon.transform.localScale.x - baseScale) > 1e-6f)
+                f.Add($"[ICON_BADGE_SCALED] root scale {icon.transform.localScale.x:F5} vs base {baseScale:F5}, Badge child {(badge != null ? "present" : "missing")}");
+
+            var outline = badge != null ? badge.Find("Outline")?.GetComponent<UnityEngine.UI.Image>() : null;
+            ColorUtility.TryParseHtmlString(TDConstant.COLOR_MORALE_BROKEN, out var indigo);
+            icon.Refresh(At(TDConstant.STRESS_MAX));
+            bool shownBroken = outline != null && outline.enabled;
+            bool rightColour = outline != null && Mathf.Abs(outline.color.r - indigo.r) + Mathf.Abs(outline.color.g - indigo.g) + Mathf.Abs(outline.color.b - indigo.b) < 0.03f;
+            icon.Refresh(At(10f));
+            bool shownCalm = outline != null && outline.enabled;
+            if (!shownBroken || !rightColour || shownCalm)
+                f.Add($"[BROKEN_OUTLINE] outline {(outline != null ? "present" : "missing")}: on when Broken {shownBroken}, indigo {rightColour}, on when Calm {shownCalm}");
+
+            // A rescue inside the label's 1.5 s left "BROKEN" over a badge already back to Steady.
+            icon.PlayBreak();
+            icon.Refresh(At(TDConstant.STRESS_MAX));
+            bool keptWhileBroken = !float.IsNegativeInfinity(GetField<float>(icon, "m_BreakStart"));
+            icon.Refresh(At(10f));
+            bool clearedOnRecovery = float.IsNegativeInfinity(GetField<float>(icon, "m_BreakStart"));
+            if (!keptWhileBroken || !clearedOnRecovery)
+                f.Add($"[LABEL_CLEARS_ON_RECOVERY] kept while Broken {keptWhileBroken}, cleared once not Broken {clearedOnRecovery}");
         }
         finally { Object.DestroyImmediate(go); }
+    }
+
+    // Tầng 4 §4.1: the break moment's rhythm, as pure functions so the numbers the spec pins are
+    // checked here rather than only by eye in a screenshot.
+    private static void BreakTiming(List<string> f)
+    {
+        Near(f, "PUNCH_START", TDMoraleIconView.BreakPunch(0f), 1f);
+        Near(f, "PUNCH_PEAK", TDMoraleIconView.BreakPunch(0.175f), 1.5f); // ~81 px badge → ~121 px, under S1's 125
+        Near(f, "PUNCH_END", TDMoraleIconView.BreakPunch(0.35f), 1f);
+        Near(f, "PUNCH_AFTER", TDMoraleIconView.BreakPunch(1f), 1f);
+        Near(f, "PUNCH_BEFORE", TDMoraleIconView.BreakPunch(-0.1f), 1f);
+
+        if (!TDMoraleIconView.BreakFlash(0.1f)) f.Add("[FLASH_ON] no white flash at 0.1 s");
+        if (TDMoraleIconView.BreakFlash(0.15f)) f.Add("[FLASH_OFF] still flashing at 0.15 s");
+
+        Near(f, "LABEL_ALPHA_FIRST_ON", TDMoraleIconView.LabelAlpha(0.05f), 1f);
+        Near(f, "LABEL_ALPHA_FIRST_OFF", TDMoraleIconView.LabelAlpha(0.2f), 0f);
+        Near(f, "LABEL_ALPHA_SECOND_ON", TDMoraleIconView.LabelAlpha(0.35f), 1f);
+        Near(f, "LABEL_ALPHA_SECOND_OFF", TDMoraleIconView.LabelAlpha(0.5f), 0f);
+        Near(f, "LABEL_ALPHA_HOLD", TDMoraleIconView.LabelAlpha(0.9f), 1f);
+        Near(f, "LABEL_ALPHA_FADE", TDMoraleIconView.LabelAlpha(1.35f), 0.5f);
+        Near(f, "LABEL_ALPHA_GONE", TDMoraleIconView.LabelAlpha(1.5f), 0f);
+        Near(f, "LABEL_ALPHA_AFTER", TDMoraleIconView.LabelAlpha(2f), 0f);
+
+        Near(f, "RING_RADIUS_MID", TDMoraleIconView.RingRadius(0.2f, 0.4f, 67f, 200f), 133.5f);
+        Near(f, "RING_RADIUS_CLAMP", TDMoraleIconView.RingRadius(1f, 0.4f, 67f, 200f), 200f);
+        Near(f, "RING_ALPHA_MID", TDMoraleIconView.RingAlpha(0.2f, 0.4f), 0.5f);
+        Near(f, "RING_ALPHA_END", TDMoraleIconView.RingAlpha(0.4f, 0.4f), 0f);
+
+        // §4.3: entering Stressed is a warning, so its ring must stay clearly under the break's.
+        Near(f, "STRESS_RING_RADIUS_MID", TDMoraleIconView.RingRadius(0.15f, 0.3f, 67f, 148f), 107.5f);
+        Near(f, "STRESS_RING_ALPHA_END", TDMoraleIconView.RingAlpha(0.3f, 0.3f), 0f);
+        float stressRadius = TDMoraleIconView.STRESS_RING_MAX_RADIUS, haloRadius = TDMoraleIconView.HALO_MAX_RADIUS;
+        float stressSeconds = TDMoraleIconView.STRESS_RING_SECONDS, haloSeconds = TDMoraleIconView.HALO_SECONDS;
+        if (stressRadius >= haloRadius || stressSeconds >= haloSeconds)
+            f.Add($"[STRESS_WEAKER_THAN_BREAK] Stressed ring {stressRadius}/{stressSeconds}s vs break halo {haloRadius}/{haloSeconds}s");
+    }
+
+    // Tầng 4 §4.6: the arc leaves the rescuer's badge, lands on the rescued one's, and peaks
+    // `height` above the midpoint — the shape that says who answered whom.
+    private static void RescueArc(List<string> f)
+    {
+        var a = Vector3.zero;
+        var b = new Vector3(4f, 0f, 2f);
+        if (Vector3.Distance(TDRescueArcView.ArcPoint(a, b, 1f, 0f), a) > 0.001f
+            || Vector3.Distance(TDRescueArcView.ArcPoint(a, b, 1f, 1f), b) > 0.001f)
+            f.Add($"[ARC_ENDS] ends at {TDRescueArcView.ArcPoint(a, b, 1f, 0f)} / {TDRescueArcView.ArcPoint(a, b, 1f, 1f)}, want {a} / {b}");
+
+        var peak = (a + b) * 0.5f + Vector3.up;
+        var got = TDRescueArcView.ArcPoint(a, b, 1f, 0.5f);
+        if (Vector3.Distance(got, peak) > 0.001f) f.Add($"[ARC_PEAK] midpoint {got}, want {peak}");
+    }
+
+    private static void Voice(List<string> f, string tag, bool[] playing, float[] startedAt, bool[] priority, bool want, int expect)
+    {
+        int got = TDSFXPlayer.PickVoice(playing, startedAt, priority, want);
+        if (got != expect) f.Add($"[{tag}] picked voice {got}, want {expect}");
     }
 
     // Rescue pressed on the collapsed operator picks the rescuer for the player (playtest
