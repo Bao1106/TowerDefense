@@ -72,6 +72,7 @@ public static class TDMoraleValidator
         RescueArc(f);
         RescuerPick(f);
         RescueReach(f);
+        RescueHint(f);
         LeakLog(f);
         Resolve(f);
         FocusScale(f);
@@ -1211,6 +1212,60 @@ public static class TDMoraleValidator
             Seq(f, "RESCUE_REACH_TARGETS_MELEE_AT_1", Names(reg.GetRescueTargetsFor(new Vector2Int(6, 1))), "melee");
         }
         finally { foreach (var go in made) Object.DestroyImmediate(go); }
+    }
+
+    // Playtests 2026-10-22: a new player does not know a broken unit can be tapped for a rescue,
+    // so the tutorial says so on the first two breaks, counted in PlayerPrefs like its other hints.
+    private static void RescueHint(List<string> f)
+    {
+        const BindingFlags I = BindingFlags.Instance | BindingFlags.NonPublic;
+        const BindingFlags S = BindingFlags.Static | BindingFlags.NonPublic;
+        var brokeField = typeof(TDGameEventBus).GetField("OnOperatorBroke", S);
+        var hintField = typeof(TDFloatingHint).GetField("m_Instance", S);
+        var keyField = typeof(TDTutorialView).GetField("PREFS_HINT_RESCUE", S);
+        var start = typeof(TDTutorialView).GetMethod("Start", I);
+        var destroy = typeof(TDTutorialView).GetMethod("OnDestroy", I);
+        if (brokeField == null || hintField == null || keyField == null || start == null || destroy == null)
+        { f.Add("[REFLECT] TDGameEventBus.OnOperatorBroke / TDFloatingHint.m_Instance / TDTutorialView.PREFS_HINT_RESCUE / Start / OnDestroy missing"); return; }
+
+        // The player's real counter is put back afterwards, and the hint is a bare component with no
+        // text (Show returns early), so the run neither builds a hint into the open scene nor plays one.
+        string key = (string)keyField.GetValue(null);
+        bool hadKey = PlayerPrefs.HasKey(key);
+        int savedCount = PlayerPrefs.GetInt(key, 0);
+        object savedBroke = brokeField.GetValue(null);
+        object savedHint = hintField.GetValue(null);
+        var go = new GameObject("RescueHintProbe") { hideFlags = HideFlags.HideAndDontSave };
+        TDTutorialView tutorial = null;
+        try
+        {
+            brokeField.SetValue(null, null);
+            hintField.SetValue(null, go.AddComponent<TDFloatingHint>());
+            PlayerPrefs.DeleteKey(key);
+            tutorial = go.AddComponent<TDTutorialView>();
+            start.Invoke(tutorial, null);
+
+            var raise = brokeField.GetValue(null) as System.Action<Vector3>;
+            if (raise == null) { f.Add("[RESCUE_HINT_LISTENS] the tutorial does not listen to OnOperatorBroke"); return; }
+            int[] want = { 1, 2, 2 };
+            for (int i = 0; i < want.Length; i++)
+            {
+                raise(Vector3.zero);
+                int got = PlayerPrefs.GetInt(key, 0);
+                if (got != want[i]) f.Add($"[RESCUE_HINT_COUNT] break {i + 1} left the counter at {got}, want {want[i]}");
+            }
+
+            destroy.Invoke(tutorial, null);
+            if (brokeField.GetValue(null) != null) f.Add("[RESCUE_HINT_UNSUBSCRIBES] the tutorial still listens to OnOperatorBroke after OnDestroy");
+        }
+        finally
+        {
+            if (tutorial != null) destroy.Invoke(tutorial, null); // also drops the other events Start hooked
+            brokeField.SetValue(null, savedBroke);
+            hintField.SetValue(null, savedHint);
+            if (hadKey) PlayerPrefs.SetInt(key, savedCount); else PlayerPrefs.DeleteKey(key);
+            Object.DestroyImmediate(go);
+        }
     }
 
     private static void Pick(List<string> f, string tag, List<TDOperatorView> standing, TDOperatorView want)

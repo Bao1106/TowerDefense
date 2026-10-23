@@ -13,6 +13,7 @@ using UnityEngine.UI;
 ///   #2 — Floating hint "Drag to choose facing direction" after the drop (Phase 2)
 ///   #4 — Floating hint "Drag onto a highlighted cell" when ghost spawned (Phase 1)
 ///   #5 — Floating hint "Tap a placed unit to retreat" after first unit placed
+///   #6 — Floating hint "Tap the BROKEN unit to rescue it" on the first two breaks
 ///
 /// PlayerPrefs flags namespaced td_tutorial_v1_* so a future "v2" can re-trigger.
 /// </summary>
@@ -22,9 +23,11 @@ public class TDTutorialView : MonoBehaviour
     private const string PREFS_HINT_PHASE1   = "td_tutorial_v1_phase1";
     private const string PREFS_HINT_PHASE2   = "td_tutorial_v1_phase2";
     private const string PREFS_HINT_RETREAT  = "td_tutorial_v1_retreat";
+    private const string PREFS_HINT_RESCUE   = "td_tutorial_v1_rescue";
 
     private const int HINT_PHASE_MAX_SHOW   = 3;
     private const int HINT_RETREAT_MAX_SHOW = 2;
+    private const int HINT_RESCUE_MAX_SHOW  = 2;
     private const float IDLE_WAIT_FOR_HAND  = 5f;
     private const float HAND_LOOP_DURATION  = 3f;
 
@@ -45,6 +48,7 @@ public class TDTutorialView : MonoBehaviour
         TDGameEventBus.OnUnitPickup  += OnUnitPickup;
         TDGameEventBus.OnDeployDrop  += OnDeployDrop;
         TDGameEventBus.OnTowerPlaced += OnTowerPlaced;
+        TDGameEventBus.OnOperatorBroke += OnOperatorBroke;
 
         m_LastInteraction = Time.unscaledTime;
         if (!m_TutorialDone)
@@ -56,6 +60,7 @@ public class TDTutorialView : MonoBehaviour
         TDGameEventBus.OnUnitPickup  -= OnUnitPickup;
         TDGameEventBus.OnDeployDrop  -= OnDeployDrop;
         TDGameEventBus.OnTowerPlaced -= OnTowerPlaced;
+        TDGameEventBus.OnOperatorBroke -= OnOperatorBroke;
         m_HandSequence?.Kill();
     }
 
@@ -103,6 +108,13 @@ public class TDTutorialView : MonoBehaviour
         }
         TDFloatingHint.ShowLimited(PREFS_HINT_RETREAT, HINT_RETREAT_MAX_SHOW,
                                    "Tap a placed unit to retreat", 3f);
+    }
+
+    // Shown longer than the others: a break lands mid-fight, when the screen is busiest.
+    private void OnOperatorBroke(Vector3 _)
+    {
+        TDFloatingHint.ShowLimited(PREFS_HINT_RESCUE, HINT_RESCUE_MAX_SHOW,
+                                   "Tap the BROKEN unit to rescue it", 4f);
     }
 
     // ── Hand demo (#1) ─────────────────────────────────────────────────────────
