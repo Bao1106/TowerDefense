@@ -128,6 +128,7 @@ public static class TDBalanceValidator
         Outline(failures);
         BoardPalette(failures);
         BoardFloor(failures);
+        HighlightColors(failures);
 
         Density(failures);
         Dominance(failures);
@@ -844,6 +845,21 @@ public static class TDBalanceValidator
         var mats = sidewalk == null ? new Material[0] : sidewalk.GetComponentsInChildren<Renderer>(true).SelectMany(r => r.sharedMaterials).ToArray();
         if (!mats.Any(m => m != null && m.name == "Toon_Floor")) f.Add("[A2_FLOOR] SM_Gen_Env_Sidewalk_01 does not use Toon_Floor");
         if (mats.Any(m => m != null && m.name == "Toon_Generic_Road")) f.Add("[A2_FLOOR] SM_Gen_Env_Sidewalk_01 still uses Toon_Generic_Road");
+    }
+
+    // Spec §4: one green for every deploy tile, strong enough that a lit TowerZone under it still gains 40 green
+    // (measurements/raw/2026-10-23-a2/highlight-calib.png), and the range orange measured from Arknights.
+    private static readonly Color k_DeployGreen = new Color(0.369f, 1.000f, 0.495f, 0.95f);
+    private static readonly Color k_RangeOrange = new Color(0xCF / 255f, 0x71 / 255f, 0x27 / 255f, 0.6f);
+
+    private static void HighlightColors(List<string> f)
+    {
+        foreach (var (name, want) in new[] { ("TowerHighlight", k_DeployGreen), ("RangeHighlight", k_RangeOrange) })
+        {
+            var m = AssetDatabase.LoadAssetAtPath<Material>($"Assets/1.Assets/Resources/Materials/{name}.mat");
+            var c = m == null ? Color.clear : m.GetColor("_BaseColor");
+            if (m == null || !Near(c, want) || Mathf.Abs(c.a - want.a) > 0.01f) f.Add($"[A2_HIGHLIGHT] {name} {c} want {want}");
+        }
     }
 
     private static T LoadConfig<T>() where T : ScriptableObject
