@@ -14,9 +14,16 @@ public static class TDToonConverter
     public const string TEMPLATE_PATH = "Assets/1.Assets/Materials/Toon/Toon_OperatorKnight.mat";
     public const string OUTPUT_DIR = "Assets/1.Assets/Materials/Toon";
     public const string TOON_SHADER = "Toon Shaders Pro/URP/Toon";
+    private const string GAMEPLAY_SCENE = "Assets/3.Scenes/DTGamePlay.unity";
 
-    // Gates glow on purpose, their label is text, and the selection ring is its own effect.
-    private static readonly string[] k_Exempt = { "Universal Render Pipeline/Unlit", "TextMeshPro/Mobile/Distance Field", "Custom/SelectionIndicator" };
+    // Gates glow on purpose, their label is text, and the selection ring is its own effect; the
+    // backdrop mountains and the sky dome are unlit silhouettes that no light should shade. Synty's
+    // triplanar shader projects grass over dirt in world space, which a UV-mapped toon twin flattens.
+    private static readonly string[] k_Exempt =
+    {
+        "Universal Render Pipeline/Unlit", "TextMeshPro/Mobile/Distance Field", "Custom/SelectionIndicator",
+        "Synty/Generic_ParticlesUnlit", "Unlit/Texture", "Synty/PolygonShader",
+    };
 
     // Sidekick keeps its colours in _ColorMap, URP Lit in _BaseMap, Synty in _Albedo_Map.
     private static readonly string[] k_AlbedoProps = { "_ColorMap", "_BaseMap", "_Albedo_Map", "_MainTex" };
@@ -101,6 +108,34 @@ public static class TDToonConverter
         return list.Where(p => p != null).Distinct().ToList();
     }
 
+    // Stages pick tiles and props through a visual config; the gameplay scene wires the defaults the
+    // others fall back on. Units are UnitPrefabs' business, so they are left out here.
+    public static List<GameObject> MapPrefabs()
+    {
+        // The default road tile reaches the scene through TDResourceObject, by this name, not as a reference.
+        var list = new List<GameObject> { AssetDatabase.LoadAssetAtPath<GameObject>($"Assets/1.Assets/Resources/Prefabs/{TDConstant.PREFAB_PATH}.prefab") };
+        var stages = Load<TDStageRepository>()?.GetAll();
+        if (stages != null)
+            foreach (var v in stages.Where(s => s != null && s.VisualConfig != null).Select(s => s.VisualConfig).Distinct())
+            {
+                list.Add(v.PathTilePrefab);
+                list.Add(v.TowerZonePrefab);
+                list.Add(v.ObstacleTilePrefab);
+                if (v.ObstaclePrefabs != null) list.AddRange(v.ObstaclePrefabs);
+            }
+
+        foreach (var dep in AssetDatabase.GetDependencies(GAMEPLAY_SCENE, false))
+        {
+            if (!dep.EndsWith(".prefab")) continue;
+            var go = AssetDatabase.LoadAssetAtPath<GameObject>(dep);
+            if (go != null && go.GetComponentsInChildren<Renderer>(true).Any(r => r is MeshRenderer || r is SkinnedMeshRenderer))
+                list.Add(go);
+        }
+
+        var units = new HashSet<GameObject>(UnitPrefabs());
+        return list.Where(p => p != null && !units.Contains(p)).Distinct().ToList();
+    }
+
     public static List<string> NonToon(GameObject prefab)
     {
         var lines = new List<string>();
@@ -122,6 +157,15 @@ public static class TDToonConverter
         int n = UnitPrefabs().Sum(p => Apply(p, template));
         AssetDatabase.SaveAssets();
         Debug.Log($"[TDToonConverter] {n} material slots switched to toon");
+    }
+
+    [MenuItem("Tools/TD/Apply Toon To Map")]
+    private static void ApplyToMap()
+    {
+        var template = AssetDatabase.LoadAssetAtPath<Material>(TEMPLATE_PATH);
+        int n = MapPrefabs().Sum(p => Apply(p, template));
+        AssetDatabase.SaveAssets();
+        Debug.Log($"[TDToonConverter] {n} map material slots switched to toon");
     }
 
     private static T Load<T>() where T : ScriptableObject

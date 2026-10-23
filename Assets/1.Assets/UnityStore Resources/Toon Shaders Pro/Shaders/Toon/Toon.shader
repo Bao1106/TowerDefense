@@ -251,7 +251,8 @@ Shader "Toon Shaders Pro/URP/Toon"
 
                 // Set up BRDF data for lighting calculations.
                 BRDFData brdfData;
-                ToonBRDFData(baseColor.rgb, metallic, specular, smoothness, baseColor.a, brdfData);
+                // TD: baseColor multiplies the lighting below; feeding it here too squared the albedo.
+                ToonBRDFData(half3(1, 1, 1), metallic, specular, smoothness, baseColor.a, brdfData);
 
                 // Calculate global illumination.
                 MixRealtimeAndBakedGI(mainLight, inputData.normalWS, inputData.bakedGI, inputData.shadowMask);

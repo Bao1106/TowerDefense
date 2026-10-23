@@ -121,6 +121,8 @@ public static class TDBalanceValidator
         HpBarOnTop(failures);
         EndSfxWired(failures);
         ToonUnits(failures);
+        ToonMap(failures);
+        ToonAlbedoOnce(failures);
 
         Density(failures);
         Dominance(failures);
@@ -743,6 +745,31 @@ public static class TDBalanceValidator
             Object.DestroyImmediate(colour);
             Object.DestroyImmediate(main);
         }
+    }
+
+    // The map joins the same set: tiles and props, from every stage's visual config and the scene's defaults.
+    private static void ToonMap(List<string> f)
+    {
+        var map = TDToonConverter.MapPrefabs();
+        if (map.Count < 18) f.Add($"[TOON_MAP_SOURCE] MapPrefabs() returned {map.Count}, want >= 18 (12 props, 6 tiles)");
+        foreach (var p in map)
+            foreach (var line in TDToonConverter.NonToon(p))
+                f.Add($"[TOON_MAP] {line}");
+
+        // Cliffs blend grass over dirt by world projection; their mesh UVs all sit on one texel.
+        var tri = AssetDatabase.LoadAssetAtPath<Material>("Assets/1.Assets/UnityStore Resources/Synty/PolygonGeneric/Materials/Generic_Triplanar_Grass_01.mat");
+        if (tri == null || TDToonConverter.ToonFor(tri, AssetDatabase.LoadAssetAtPath<Material>(TDToonConverter.TEMPLATE_PATH)) != tri)
+            f.Add("[TOON_TRIPLANAR_KEPT] Generic_Triplanar_Grass_01 gets a toon twin; it would render as one flat colour");
+    }
+
+    // The pack's ForwardLit multiplies the colour texture in at the end, so feeding it to the BRDF as well
+    // squared it and dark textures rendered near black. A pack reimport would bring that back.
+    private static void ToonAlbedoOnce(List<string> f)
+    {
+        var shader = Shader.Find(TDToonConverter.TOON_SHADER);
+        string src = shader == null ? "" : System.IO.File.ReadAllText(AssetDatabase.GetAssetPath(shader));
+        if (!src.Contains("ToonBRDFData(half3(1, 1, 1),"))
+            f.Add("[TOON_ALBEDO_ONCE] Toon.shader ForwardLit feeds baseColor to ToonBRDFData; albedo is applied twice");
     }
 
     private static T LoadConfig<T>() where T : ScriptableObject
