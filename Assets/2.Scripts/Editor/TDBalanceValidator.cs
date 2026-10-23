@@ -126,6 +126,8 @@ public static class TDBalanceValidator
         ToonMap(failures);
         ToonAlbedoOnce(failures);
         Outline(failures);
+        BoardPalette(failures);
+        BoardFloor(failures);
 
         Density(failures);
         Dominance(failures);
@@ -800,6 +802,48 @@ public static class TDBalanceValidator
         foreach (var p in TDToonConverter.MapPrefabs())
             foreach (var r in p.GetComponentsInChildren<Renderer>(true))
                 if (r.gameObject.layer == layer) f.Add($"[OUTLINE_NOT_MAP] {p.name}/{r.name}");
+    }
+
+    // Spec §3: the material values that put each board role on its on-screen target under DTGamePlay's light
+    // (calibrated 2026-10-23, measurements/raw/2026-10-23-a2/calib-final.png). Road and grass need more gain
+    // than a base colour can carry, so the rest rides on the HDR light tint.
+    private static readonly (string path, Color baseColor, Color lightTint, bool flat)[] k_BoardPalette =
+    {
+        (TDToonConverter.OUTPUT_DIR + "/Toon_TowerZone.mat", new Color(0.379f, 0.469f, 0.472f), Color.white, true),
+        (TDToonConverter.OUTPUT_DIR + "/Toon_Generic_Road.mat", new Color(0.777f, 0.920f, 1.000f), new Color(1.774f, 1.774f, 1.774f), false),
+        (TDToonConverter.OUTPUT_DIR + "/Toon_Generic_Grass.mat", new Color(0.421f, 0.433f, 1.000f), new Color(2.136f, 2.136f, 2.136f), false),
+        (TDToonConverter.OUTPUT_DIR + "/Toon_Generic_01_A.mat", new Color(0.712f, 0.799f, 0.799f), Color.white, false),
+        (TDToonConverter.OUTPUT_DIR + "/Toon_Floor.mat", new Color(0.295f, 0.372f, 0.429f), Color.white, false),
+    };
+    private static readonly Color k_BoardShadowTint = new Color(0.22f, 0.27f, 0.36f);
+    private const string SIDEWALK_PREFAB = "Assets/1.Assets/UnityStore Resources/Synty/PolygonGeneric/Prefabs/Environment/SM_Gen_Env_Sidewalk_01.prefab";
+
+    private static bool Near(Color a, Color b) => Mathf.Abs(a.r - b.r) <= 0.01f && Mathf.Abs(a.g - b.g) <= 0.01f && Mathf.Abs(a.b - b.b) <= 0.01f;
+
+    private static void BoardPalette(List<string> f)
+    {
+        foreach (var (path, baseColor, lightTint, flat) in k_BoardPalette)
+        {
+            var m = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (m == null) { f.Add($"[A2_PALETTE] {System.IO.Path.GetFileName(path)} missing"); continue; }
+            if (!Near(m.GetColor("_BaseColor"), baseColor)) f.Add($"[A2_PALETTE] {m.name} base {m.GetColor("_BaseColor")} want {baseColor}");
+            if (!Near(m.GetColor("_LightTint"), lightTint)) f.Add($"[A2_PALETTE] {m.name} light {m.GetColor("_LightTint")} want {lightTint}");
+            if (!Near(m.GetColor("_ShadowTint"), k_BoardShadowTint)) f.Add($"[A2_PALETTE] {m.name} shadow {m.GetColor("_ShadowTint")} want {k_BoardShadowTint}");
+            var map = m.GetTexture("_BaseMap");
+            if (flat != (map == null)) f.Add($"[A2_PALETTE] {m.name} flat {flat} but base map {(map == null ? "none" : map.name)}");
+        }
+    }
+
+    // The floor between tiles is CityGround's sidewalk tiles. They shared the road twin, so road and floor
+    // could not take different colours; the floor gets its own.
+    private static void BoardFloor(List<string> f)
+    {
+        if (!AssetDatabase.GetDependencies("Assets/3.Scenes/DTGamePlay.unity", false).Contains(SIDEWALK_PREFAB))
+            f.Add("[A2_FLOOR] DTGamePlay floor is no longer SM_Gen_Env_Sidewalk_01");
+        var sidewalk = AssetDatabase.LoadAssetAtPath<GameObject>(SIDEWALK_PREFAB);
+        var mats = sidewalk == null ? new Material[0] : sidewalk.GetComponentsInChildren<Renderer>(true).SelectMany(r => r.sharedMaterials).ToArray();
+        if (!mats.Any(m => m != null && m.name == "Toon_Floor")) f.Add("[A2_FLOOR] SM_Gen_Env_Sidewalk_01 does not use Toon_Floor");
+        if (mats.Any(m => m != null && m.name == "Toon_Generic_Road")) f.Add("[A2_FLOOR] SM_Gen_Env_Sidewalk_01 still uses Toon_Generic_Road");
     }
 
     private static T LoadConfig<T>() where T : ScriptableObject
