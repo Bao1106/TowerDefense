@@ -564,8 +564,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: bdb4de0e812c9d14ba7fd35a0412a2ed, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_HPBarView: {fileID: 4510884812365849404}
-  m_SelectionIndicator: {fileID: 5344437683049044361}
 --- !u!136 &8246460229747565016
 CapsuleCollider:
   m_ObjectHideFlags: 0
@@ -945,7 +943,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1033946118846639348}
   - component: {fileID: 6666955500080455216}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: mesh
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -6688,6 +6686,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: Sword
       objectReference: {fileID: 0}
+    - target: {fileID: 8692619622981138938, guid: 2fa60857586233043ab8a3235b6166d4, type: 3}
+      propertyPath: m_Layer
+      value: 7
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -6800,14 +6802,3 @@ RectTransform:
   m_CorrespondingSourceObject: {fileID: 5880794381835082782, guid: ede60b16dc5489647b8fe0a2817eb496, type: 3}
   m_PrefabInstance: {fileID: 5910191635457065201}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &4510884812365849404 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 7826365740522546125, guid: ede60b16dc5489647b8fe0a2817eb496, type: 3}
-  m_PrefabInstance: {fileID: 5910191635457065201}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8cee2377382177b4abaa5ccb55745154, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 

@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 4980576054563488}
   - component: {fileID: 33164471835960852}
   - component: {fileID: 23370428235742150}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: MissileG_Stand00
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -61,7 +61,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: df80e43d0e98e934e90be1493ab2cb20, type: 2}
+  - {fileID: 2100000, guid: ba29bc6796cf3e4419d8b7f208bf5119, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -5044,7 +5044,7 @@ GameObject:
   - component: {fileID: 4740727780306184}
   - component: {fileID: 33949809796670132}
   - component: {fileID: 23690510231910756}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: MissileG_Plate00
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -5094,7 +5094,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: df80e43d0e98e934e90be1493ab2cb20, type: 2}
+  - {fileID: 2100000, guid: ba29bc6796cf3e4419d8b7f208bf5119, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -5127,7 +5127,7 @@ GameObject:
   - component: {fileID: 4309332902545386}
   - component: {fileID: 33005568285027660}
   - component: {fileID: 23322526923859668}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: MissileG_Barrel02
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -5178,7 +5178,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: df80e43d0e98e934e90be1493ab2cb20, type: 2}
+  - {fileID: 2100000, guid: ba29bc6796cf3e4419d8b7f208bf5119, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -5211,7 +5211,7 @@ GameObject:
   - component: {fileID: 4292514004918154}
   - component: {fileID: 33194210513705670}
   - component: {fileID: 23675282597185254}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: MissileG_Radar00
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -5261,7 +5261,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: df80e43d0e98e934e90be1493ab2cb20, type: 2}
+  - {fileID: 2100000, guid: ba29bc6796cf3e4419d8b7f208bf5119, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -5328,7 +5328,7 @@ GameObject:
   - component: {fileID: 4382916264655094}
   - component: {fileID: 33786550800228560}
   - component: {fileID: 23691712806358410}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: MissileG_Cap00
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -5378,7 +5378,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: df80e43d0e98e934e90be1493ab2cb20, type: 2}
+  - {fileID: 2100000, guid: ba29bc6796cf3e4419d8b7f208bf5119, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0

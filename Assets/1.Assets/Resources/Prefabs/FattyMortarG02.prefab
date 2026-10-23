@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 4373445518375580}
   - component: {fileID: 33840300612622006}
   - component: {fileID: 23941884859443162}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: MortarG_Plate00
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -61,7 +61,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: df80e43d0e98e934e90be1493ab2cb20, type: 2}
+  - {fileID: 2100000, guid: ba29bc6796cf3e4419d8b7f208bf5119, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -159,7 +159,7 @@ GameObject:
   - component: {fileID: 4270541250786502}
   - component: {fileID: 33378125457189656}
   - component: {fileID: 23272282394494464}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: MortarG_Stand00
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -209,7 +209,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: df80e43d0e98e934e90be1493ab2cb20, type: 2}
+  - {fileID: 2100000, guid: ba29bc6796cf3e4419d8b7f208bf5119, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -312,7 +312,7 @@ GameObject:
   - component: {fileID: 4459613001278838}
   - component: {fileID: 33209607633507614}
   - component: {fileID: 23577946485987034}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: MortarG_Barrel02
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -363,7 +363,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: df80e43d0e98e934e90be1493ab2cb20, type: 2}
+  - {fileID: 2100000, guid: ba29bc6796cf3e4419d8b7f208bf5119, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0

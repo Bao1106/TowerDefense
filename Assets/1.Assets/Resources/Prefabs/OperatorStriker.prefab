@@ -1345,7 +1345,7 @@ GameObject:
   m_Component:
   - component: {fileID: 5221737959743261673}
   - component: {fileID: 9076166805459050758}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: mesh
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1387,7 +1387,7 @@ SkinnedMeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 1efa51a237ff22943bc800f0410db9ca, type: 2}
+  - {fileID: 2100000, guid: 23d268e2cdc1f8a4091172cfafb706a9, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -6475,7 +6475,7 @@ GameObject:
   - component: {fileID: 7192691888499547052}
   - component: {fileID: 1035578558229237678}
   - component: {fileID: 3126708497029953076}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: Spear01
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -6525,7 +6525,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: f323cced30244554986ee5e9f5dd8b67, type: 2}
+  - {fileID: 2100000, guid: a06a79412760cc54da9d8b03d7f1d4d4, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0

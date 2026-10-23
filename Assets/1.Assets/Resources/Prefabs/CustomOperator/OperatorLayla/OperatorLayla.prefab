@@ -1164,8 +1164,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: bdb4de0e812c9d14ba7fd35a0412a2ed, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_HPBarView: {fileID: 8109112866688975884}
-  m_SelectionIndicator: {fileID: 8140405821013908459}
 --- !u!1 &1795929014474211794
 GameObject:
   m_ObjectHideFlags: 0
@@ -2242,7 +2240,7 @@ GameObject:
   m_Component:
   - component: {fileID: 6683874637220199449}
   - component: {fileID: 2528229072387960227}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: mesh
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -2284,7 +2282,7 @@ SkinnedMeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: a42c9e8e8d9ef354496d15dc128a612c, type: 2}
+  - {fileID: 2100000, guid: 1cc143cbfeba22145ae532444669c0e3, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -7364,9 +7362,17 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 5580506048869291652}
     m_Modifications:
+    - target: {fileID: 896709672987199760, guid: 60ec2cc1a69bbc14d8728ead33e23f59, type: 3}
+      propertyPath: m_Materials.Array.data[0]
+      value: 
+      objectReference: {fileID: 2100000, guid: a06a79412760cc54da9d8b03d7f1d4d4, type: 2}
     - target: {fileID: 1689198140833441989, guid: 60ec2cc1a69bbc14d8728ead33e23f59, type: 3}
       propertyPath: m_Name
       value: Spear03
+      objectReference: {fileID: 0}
+    - target: {fileID: 1689198140833441989, guid: 60ec2cc1a69bbc14d8728ead33e23f59, type: 3}
+      propertyPath: m_Layer
+      value: 7
       objectReference: {fileID: 0}
     - target: {fileID: 2034198143080395391, guid: 60ec2cc1a69bbc14d8728ead33e23f59, type: 3}
       propertyPath: m_LocalPosition.x
@@ -7520,14 +7526,3 @@ RectTransform:
   m_CorrespondingSourceObject: {fileID: 5880794381835082782, guid: ede60b16dc5489647b8fe0a2817eb496, type: 3}
   m_PrefabInstance: {fileID: 2023678762740737985}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &8109112866688975884 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 7826365740522546125, guid: ede60b16dc5489647b8fe0a2817eb496, type: 3}
-  m_PrefabInstance: {fileID: 2023678762740737985}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8cee2377382177b4abaa5ccb55745154, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 

@@ -1,8 +1,10 @@
 using System.Collections.Generic;
 using System.Linq;
 using TDEnums;
+using ToonShadersPro.URP;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 /// <summary>
 /// Assertions over the pure balance math that has no scene dependency.
@@ -120,6 +122,10 @@ public static class TDBalanceValidator
         MoraleWired(failures);
         HpBarOnTop(failures);
         EndSfxWired(failures);
+        ToonUnits(failures);
+        ToonMap(failures);
+        ToonAlbedoOnce(failures);
+        Outline(failures);
 
         Density(failures);
         Dominance(failures);
@@ -686,6 +692,116 @@ public static class TDBalanceValidator
 
     // Straight from the asset database: the configs' .api routes through a scene object and
     // is null outside play mode (same reason as TDMoraleValidator.LoadOperatorConfig).
+    // Polish A1: every model a match puts on screen shades with the one toon material set, so an
+    // operator added with its pack shader fails here instead of on camera.
+    private static void ToonUnits(List<string> f)
+    {
+        var units = TDToonConverter.UnitPrefabs();
+        if (units.Count < 22) f.Add($"[TOON_UNITS_SOURCE] UnitPrefabs() returned {units.Count}, want >= 22 (8 operators, 6 enemies, 5 turrets, 3 bullets)");
+        foreach (var p in units)
+            foreach (var line in TDToonConverter.NonToon(p))
+                f.Add($"[TOON_UNITS] {line}");
+
+        var template = AssetDatabase.LoadAssetAtPath<Material>(TDToonConverter.TEMPLATE_PATH);
+        if (template == null) { f.Add($"[TOON_TEMPLATE] no material at {TDToonConverter.TEMPLATE_PATH}"); return; }
+
+        // A cut-out leaf turned opaque is a black square, and a second run must reuse what the first made.
+        var probe = new Material(Shader.Find("Universal Render Pipeline/Lit")) { name = "TDToonProbe", hideFlags = HideFlags.HideAndDontSave };
+        probe.SetFloat("_AlphaClip", 1f);
+        probe.SetFloat("_Cutoff", 0.4f);
+        probe.EnableKeyword("_ALPHATEST_ON");
+        string made = $"{TDToonConverter.OUTPUT_DIR}/Toon_{probe.name}.mat";
+        try
+        {
+            var toon = TDToonConverter.ToonFor(probe, template);
+            if (toon == null || toon.shader.name != TDToonConverter.TOON_SHADER)
+            { f.Add($"[TOON_FOR] gave {(toon == null ? "null" : toon.shader.name)}, want {TDToonConverter.TOON_SHADER}"); return; }
+            if (toon.GetFloat("_AlphaClip") != 1f || !Mathf.Approximately(toon.GetFloat("_Cutoff"), 0.4f) || !toon.IsKeywordEnabled("_ALPHATEST_ON"))
+                f.Add($"[TOON_KEEPS_ALPHA_CLIP] clip {toon.GetFloat("_AlphaClip")}, cutoff {toon.GetFloat("_Cutoff")}, keyword {toon.IsKeywordEnabled("_ALPHATEST_ON")}, want 1 / 0.4 / on");
+            if (TDToonConverter.ToonFor(probe, template) != toon) f.Add("[TOON_IDEMPOTENT] a second ToonFor made another material");
+            if (TDToonConverter.ToonFor(toon, template) != toon) f.Add("[TOON_IDEMPOTENT] ToonFor of a toon material did not return it");
+        }
+        finally
+        {
+            AssetDatabase.DeleteAsset(made);
+            Object.DestroyImmediate(probe);
+        }
+
+        var enemy = LoadConfig<TDFlyweightEnemyDataSettings>()?.GetAllEnemies().FirstOrDefault()?.prefab;
+        if (enemy != null && TDToonConverter.Apply(enemy, template) != 0) f.Add($"[TOON_IDEMPOTENT] Apply changed {enemy.name}, which is already toon");
+
+        // Sidekick keeps its colours in _ColorMap; its _MainTex is the pack's starter map.
+        var sidekick = Shader.Find("Shader Graphs/Sidekick_ShaderGraph");
+        if (sidekick == null) { f.Add("[TOON_ALBEDO_ORDER] Sidekick shader not found"); return; }
+        var colour = new Texture2D(1, 1) { hideFlags = HideFlags.HideAndDontSave };
+        var main = new Texture2D(1, 1) { hideFlags = HideFlags.HideAndDontSave };
+        var mat = new Material(sidekick) { hideFlags = HideFlags.HideAndDontSave };
+        try
+        {
+            mat.SetTexture("_ColorMap", colour);
+            mat.SetTexture("_MainTex", main);
+            if (TDToonConverter.AlbedoOf(mat) != colour) f.Add("[TOON_ALBEDO_ORDER] AlbedoOf a Sidekick material did not pick _ColorMap");
+        }
+        finally
+        {
+            Object.DestroyImmediate(mat);
+            Object.DestroyImmediate(colour);
+            Object.DestroyImmediate(main);
+        }
+    }
+
+    // The map joins the same set: tiles and props, from every stage's visual config and the scene's defaults.
+    private static void ToonMap(List<string> f)
+    {
+        var map = TDToonConverter.MapPrefabs();
+        if (map.Count < 18) f.Add($"[TOON_MAP_SOURCE] MapPrefabs() returned {map.Count}, want >= 18 (12 props, 6 tiles)");
+        foreach (var p in map)
+            foreach (var line in TDToonConverter.NonToon(p))
+                f.Add($"[TOON_MAP] {line}");
+
+        // Cliffs blend grass over dirt by world projection; their mesh UVs all sit on one texel.
+        var tri = AssetDatabase.LoadAssetAtPath<Material>("Assets/1.Assets/UnityStore Resources/Synty/PolygonGeneric/Materials/Generic_Triplanar_Grass_01.mat");
+        if (tri == null || TDToonConverter.ToonFor(tri, AssetDatabase.LoadAssetAtPath<Material>(TDToonConverter.TEMPLATE_PATH)) != tri)
+            f.Add("[TOON_TRIPLANAR_KEPT] Generic_Triplanar_Grass_01 gets a toon twin; it would render as one flat colour");
+    }
+
+    // The pack's ForwardLit multiplies the colour texture in at the end, so feeding it to the BRDF as well
+    // squared it and dark textures rendered near black. A pack reimport would bring that back.
+    private static void ToonAlbedoOnce(List<string> f)
+    {
+        var shader = Shader.Find(TDToonConverter.TOON_SHADER);
+        string src = shader == null ? "" : System.IO.File.ReadAllText(AssetDatabase.GetAssetPath(shader));
+        if (!src.Contains("ToonBRDFData(half3(1, 1, 1),"))
+            f.Add("[TOON_ALBEDO_ONCE] Toon.shader ForwardLit feeds baseColor to ToonBRDFData; albedo is applied twice");
+    }
+
+    // Units get a dark line around them; the board does not, so it stays calm under them.
+    private static void Outline(List<string> f)
+    {
+        int layer = LayerMask.NameToLayer(TDToonConverter.OUTLINE_LAYER);
+        if (layer < 0) f.Add($"[OUTLINE_PROFILE] layer {TDToonConverter.OUTLINE_LAYER} missing");
+        var profile = AssetDatabase.LoadAssetAtPath<VolumeProfile>("Assets/Settings/ToonOutlineProfile.asset");
+        if (profile == null || !profile.TryGet(out OutlineSettings o)) f.Add("[OUTLINE_PROFILE] ToonOutlineProfile has no OutlineSettings");
+        else if (!o.active || o.outlineType.value == OutlineType.NoOutlines || o.objectMask.value.value != 1 << layer)
+            f.Add($"[OUTLINE_PROFILE] active {o.active}, type {o.outlineType.value}, mask {o.objectMask.value.value}");
+
+        foreach (var p in TDToonConverter.UnitPrefabs())
+            foreach (var r in p.GetComponentsInChildren<Renderer>(true))
+                if ((r is MeshRenderer || r is SkinnedMeshRenderer) && !r.sharedMaterials.All(TDToonConverter.IsExempt) && r.gameObject.layer != layer)
+                    f.Add($"[OUTLINE_UNITS] {p.name}/{r.name} on layer {r.gameObject.layer}");
+        if (layer < 0) return;
+
+        // The gameplay camera ticks its layers one by one (407 = 0,1,2,4,7,8); a unit layer it leaves out hides every unit.
+        var cam = System.Text.RegularExpressions.Regex.Match(System.IO.File.ReadAllText("Assets/3.Scenes/DTGamePlay.unity"),
+            @"m_Name: Main Camera[\s\S]*?m_CullingMask:\s*serializedVersion: 2\s*m_Bits: (\d+)");
+        if (!cam.Success || (long.Parse(cam.Groups[1].Value) & (1L << layer)) == 0)
+            f.Add($"[OUTLINE_CAMERA] DTGamePlay Main Camera culling mask {(cam.Success ? cam.Groups[1].Value : "not found")} leaves out layer {layer}");
+
+        foreach (var p in TDToonConverter.MapPrefabs())
+            foreach (var r in p.GetComponentsInChildren<Renderer>(true))
+                if (r.gameObject.layer == layer) f.Add($"[OUTLINE_NOT_MAP] {p.name}/{r.name}");
+    }
+
     private static T LoadConfig<T>() where T : ScriptableObject
     {
         var guids = AssetDatabase.FindAssets("t:" + typeof(T).Name);
