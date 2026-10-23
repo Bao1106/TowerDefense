@@ -1157,7 +1157,7 @@ GameObject:
   m_Component:
   - component: {fileID: 171577560259534884}
   - component: {fileID: 8865556916963126542}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: mesh
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -7034,6 +7034,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: OHS11_Hammer
       objectReference: {fileID: 0}
+    - target: {fileID: 3902788558152209826, guid: 2e01e3e0f8c4ef74784af78e323fc0e4, type: 3}
+      propertyPath: m_Layer
+      value: 7
+      objectReference: {fileID: 0}
     - target: {fileID: 4423288173768953624, guid: 2e01e3e0f8c4ef74784af78e323fc0e4, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
@@ -7095,6 +7099,10 @@ PrefabInstance:
     - target: {fileID: 7043021208405687974, guid: 6bb9e44734da777488ebac02b7fbf97a, type: 3}
       propertyPath: m_Name
       value: Shield10
+      objectReference: {fileID: 0}
+    - target: {fileID: 7043021208405687974, guid: 6bb9e44734da777488ebac02b7fbf97a, type: 3}
+      propertyPath: m_Layer
+      value: 7
       objectReference: {fileID: 0}
     - target: {fileID: 7707355326909015068, guid: 6bb9e44734da777488ebac02b7fbf97a, type: 3}
       propertyPath: m_LocalPosition.x

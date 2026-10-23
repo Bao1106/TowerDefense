@@ -1520,7 +1520,7 @@ GameObject:
   m_Component:
   - component: {fileID: 641148978861390155}
   - component: {fileID: 7820696945069029907}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: BeholderMesh
   m_TagString: Untagged
   m_Icon: {fileID: 0}

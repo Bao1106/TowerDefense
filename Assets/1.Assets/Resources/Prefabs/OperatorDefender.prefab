@@ -558,7 +558,7 @@ GameObject:
   m_Component:
   - component: {fileID: 7326852215408087462}
   - component: {fileID: 7999590361615778751}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: mesh
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -5290,7 +5290,7 @@ GameObject:
   - component: {fileID: 3462038613100193209}
   - component: {fileID: 7151814362806755917}
   - component: {fileID: 1101897903089724979}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: OHS05_Sword
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -5438,7 +5438,7 @@ GameObject:
   - component: {fileID: 6586408768690700970}
   - component: {fileID: 325887583794275916}
   - component: {fileID: 269017146616998372}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: Shield10
   m_TagString: Untagged
   m_Icon: {fileID: 0}

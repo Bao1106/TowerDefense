@@ -2967,7 +2967,7 @@ GameObject:
   m_Component:
   - component: {fileID: 9144061432463605235}
   - component: {fileID: 8188644983135670788}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: mesh
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -7222,6 +7222,10 @@ PrefabInstance:
     - target: {fileID: 827500848075308831, guid: d74d166bac1266b45b0fec2f2c95fe9b, type: 3}
       propertyPath: m_Name
       value: OHS01_Stick
+      objectReference: {fileID: 0}
+    - target: {fileID: 827500848075308831, guid: d74d166bac1266b45b0fec2f2c95fe9b, type: 3}
+      propertyPath: m_Layer
+      value: 7
       objectReference: {fileID: 0}
     - target: {fileID: 1187582316465315530, guid: d74d166bac1266b45b0fec2f2c95fe9b, type: 3}
       propertyPath: m_Materials.Array.data[0]

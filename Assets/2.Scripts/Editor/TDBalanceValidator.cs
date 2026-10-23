@@ -1,8 +1,10 @@
 using System.Collections.Generic;
 using System.Linq;
 using TDEnums;
+using ToonShadersPro.URP;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 /// <summary>
 /// Assertions over the pure balance math that has no scene dependency.
@@ -123,6 +125,7 @@ public static class TDBalanceValidator
         ToonUnits(failures);
         ToonMap(failures);
         ToonAlbedoOnce(failures);
+        Outline(failures);
 
         Density(failures);
         Dominance(failures);
@@ -770,6 +773,33 @@ public static class TDBalanceValidator
         string src = shader == null ? "" : System.IO.File.ReadAllText(AssetDatabase.GetAssetPath(shader));
         if (!src.Contains("ToonBRDFData(half3(1, 1, 1),"))
             f.Add("[TOON_ALBEDO_ONCE] Toon.shader ForwardLit feeds baseColor to ToonBRDFData; albedo is applied twice");
+    }
+
+    // Units get a dark line around them; the board does not, so it stays calm under them.
+    private static void Outline(List<string> f)
+    {
+        int layer = LayerMask.NameToLayer(TDToonConverter.OUTLINE_LAYER);
+        if (layer < 0) f.Add($"[OUTLINE_PROFILE] layer {TDToonConverter.OUTLINE_LAYER} missing");
+        var profile = AssetDatabase.LoadAssetAtPath<VolumeProfile>("Assets/Settings/ToonOutlineProfile.asset");
+        if (profile == null || !profile.TryGet(out OutlineSettings o)) f.Add("[OUTLINE_PROFILE] ToonOutlineProfile has no OutlineSettings");
+        else if (!o.active || o.outlineType.value == OutlineType.NoOutlines || o.objectMask.value.value != 1 << layer)
+            f.Add($"[OUTLINE_PROFILE] active {o.active}, type {o.outlineType.value}, mask {o.objectMask.value.value}");
+
+        foreach (var p in TDToonConverter.UnitPrefabs())
+            foreach (var r in p.GetComponentsInChildren<Renderer>(true))
+                if ((r is MeshRenderer || r is SkinnedMeshRenderer) && !r.sharedMaterials.All(TDToonConverter.IsExempt) && r.gameObject.layer != layer)
+                    f.Add($"[OUTLINE_UNITS] {p.name}/{r.name} on layer {r.gameObject.layer}");
+        if (layer < 0) return;
+
+        // The gameplay camera ticks its layers one by one (407 = 0,1,2,4,7,8); a unit layer it leaves out hides every unit.
+        var cam = System.Text.RegularExpressions.Regex.Match(System.IO.File.ReadAllText("Assets/3.Scenes/DTGamePlay.unity"),
+            @"m_Name: Main Camera[\s\S]*?m_CullingMask:\s*serializedVersion: 2\s*m_Bits: (\d+)");
+        if (!cam.Success || (long.Parse(cam.Groups[1].Value) & (1L << layer)) == 0)
+            f.Add($"[OUTLINE_CAMERA] DTGamePlay Main Camera culling mask {(cam.Success ? cam.Groups[1].Value : "not found")} leaves out layer {layer}");
+
+        foreach (var p in TDToonConverter.MapPrefabs())
+            foreach (var r in p.GetComponentsInChildren<Renderer>(true))
+                if (r.gameObject.layer == layer) f.Add($"[OUTLINE_NOT_MAP] {p.name}/{r.name}");
     }
 
     private static T LoadConfig<T>() where T : ScriptableObject

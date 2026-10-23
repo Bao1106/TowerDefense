@@ -138,7 +138,7 @@ GameObject:
   m_Component:
   - component: {fileID: 7347749345883088783}
   - component: {fileID: 4116406377084411394}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: Swarm08
   m_TagString: Untagged
   m_Icon: {fileID: 0}

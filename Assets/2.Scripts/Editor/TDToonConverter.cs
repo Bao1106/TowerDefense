@@ -14,6 +14,7 @@ public static class TDToonConverter
     public const string TEMPLATE_PATH = "Assets/1.Assets/Materials/Toon/Toon_OperatorKnight.mat";
     public const string OUTPUT_DIR = "Assets/1.Assets/Materials/Toon";
     public const string TOON_SHADER = "Toon Shaders Pro/URP/Toon";
+    public const string OUTLINE_LAYER = "Outlined";
     private const string GAMEPLAY_SCENE = "Assets/3.Scenes/DTGamePlay.unity";
 
     // Gates glow on purpose, their label is text, and the selection ring is its own effect; the
@@ -91,6 +92,29 @@ public static class TDToonConverter
         return swapped;
     }
 
+    // The outline volume draws only this layer. A renderer whose every material is exempt (the selection
+    // ring) stays where it is, so it gets no outline.
+    public static int SetOutlineLayer(GameObject prefabAsset)
+    {
+        int layer = LayerMask.NameToLayer(OUTLINE_LAYER);
+        if (layer < 0) throw new System.InvalidOperationException($"layer {OUTLINE_LAYER} missing");
+        string path = AssetDatabase.GetAssetPath(prefabAsset);
+        var root = PrefabUtility.LoadPrefabContents(path);
+        int moved = 0;
+        try
+        {
+            foreach (var r in root.GetComponentsInChildren<Renderer>(true))
+            {
+                if (!(r is MeshRenderer || r is SkinnedMeshRenderer) || r.sharedMaterials.All(IsExempt) || r.gameObject.layer == layer) continue;
+                r.gameObject.layer = layer;
+                moved++;
+            }
+            if (moved > 0) PrefabUtility.SaveAsPrefabAsset(root, path);
+        }
+        finally { PrefabUtility.UnloadPrefabContents(root); }
+        return moved;
+    }
+
     // The game's own configs say what a match spawns; ammo is shared between turrets.
     public static List<GameObject> UnitPrefabs()
     {
@@ -155,8 +179,9 @@ public static class TDToonConverter
     {
         var template = AssetDatabase.LoadAssetAtPath<Material>(TEMPLATE_PATH);
         int n = UnitPrefabs().Sum(p => Apply(p, template));
+        int moved = UnitPrefabs().Sum(SetOutlineLayer);
         AssetDatabase.SaveAssets();
-        Debug.Log($"[TDToonConverter] {n} material slots switched to toon");
+        Debug.Log($"[TDToonConverter] {n} material slots switched to toon, {moved} renderers moved to {OUTLINE_LAYER}");
     }
 
     [MenuItem("Tools/TD/Apply Toon To Map")]

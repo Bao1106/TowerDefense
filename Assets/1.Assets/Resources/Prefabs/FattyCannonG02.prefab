@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 4779222424309044}
   - component: {fileID: 33878293007528876}
   - component: {fileID: 23364559723917138}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: CannonG_Plate00
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -4941,7 +4941,7 @@ GameObject:
   - component: {fileID: 4914773783399600}
   - component: {fileID: 33557720888194326}
   - component: {fileID: 23430875037819608}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: CannonG_Guard00
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -5024,7 +5024,7 @@ GameObject:
   - component: {fileID: 4597034265451690}
   - component: {fileID: 33575077343818718}
   - component: {fileID: 23884825674443308}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: CannonG_Barrel02
   m_TagString: Untagged
   m_Icon: {fileID: 0}

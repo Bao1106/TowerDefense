@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 4355913087392092}
   - component: {fileID: 33450266860076986}
   - component: {fileID: 23669589091123604}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: CatapultG_Arm02
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -160,7 +160,7 @@ GameObject:
   - component: {fileID: 4504989624352420}
   - component: {fileID: 33058865934939098}
   - component: {fileID: 23747123031848214}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: CatapultG_Plate00
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -313,7 +313,7 @@ GameObject:
   - component: {fileID: 4398873629568232}
   - component: {fileID: 33717641426301722}
   - component: {fileID: 23156611712489024}
-  m_Layer: 0
+  m_Layer: 7
   m_Name: CatapultG_Stand00
   m_TagString: Untagged
   m_Icon: {fileID: 0}
