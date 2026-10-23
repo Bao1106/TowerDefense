@@ -1016,8 +1016,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: bdb4de0e812c9d14ba7fd35a0412a2ed, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_HPBarView: {fileID: 8886451089495371379}
-  m_SelectionIndicator: {fileID: 8849463878242874374}
 --- !u!1 &3538196638592382840
 GameObject:
   m_ObjectHideFlags: 0
@@ -2646,7 +2644,7 @@ SkinnedMeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: fc1ad0f53d5cde446905dbf4e54f85eb, type: 2}
+  - {fileID: 2100000, guid: 09ca53dae88b66d42bbde1d757346378, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -6695,6 +6693,10 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 8461354958159962759}
     m_Modifications:
+    - target: {fileID: 5089698580886227736, guid: 443ccd8f0fd734b4987d0269cd1e0d89, type: 3}
+      propertyPath: m_Materials.Array.data[0]
+      value: 
+      objectReference: {fileID: 2100000, guid: a06a79412760cc54da9d8b03d7f1d4d4, type: 2}
     - target: {fileID: 6262555690051006583, guid: 443ccd8f0fd734b4987d0269cd1e0d89, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0
@@ -6851,17 +6853,6 @@ RectTransform:
   m_CorrespondingSourceObject: {fileID: 5880794381835082782, guid: ede60b16dc5489647b8fe0a2817eb496, type: 3}
   m_PrefabInstance: {fileID: 1715820889643355582}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &8886451089495371379 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 7826365740522546125, guid: ede60b16dc5489647b8fe0a2817eb496, type: 3}
-  m_PrefabInstance: {fileID: 1715820889643355582}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8cee2377382177b4abaa5ccb55745154, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!1001 &6826472389114416108
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -6914,6 +6905,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 9127285965799336533, guid: 949ce6572c25a5446b035cac76c74aa4, type: 3}
+      propertyPath: m_Materials.Array.data[0]
+      value: 
+      objectReference: {fileID: 2100000, guid: a06a79412760cc54da9d8b03d7f1d4d4, type: 2}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []

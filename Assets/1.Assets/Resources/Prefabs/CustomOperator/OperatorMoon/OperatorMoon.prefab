@@ -3009,7 +3009,7 @@ SkinnedMeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 758810fcef1d97f46b4a50a60a92dce2, type: 2}
+  - {fileID: 2100000, guid: 76d7de5809f39984581cd9f26e0d9a2b, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -7069,8 +7069,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: bdb4de0e812c9d14ba7fd35a0412a2ed, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_HPBarView: {fileID: 4604477633791583139}
-  m_SelectionIndicator: {fileID: 7286894939584633036}
 --- !u!1001 &6015316171472158830
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -7173,17 +7171,6 @@ RectTransform:
   m_CorrespondingSourceObject: {fileID: 5880794381835082782, guid: ede60b16dc5489647b8fe0a2817eb496, type: 3}
   m_PrefabInstance: {fileID: 6015316171472158830}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &4604477633791583139 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 7826365740522546125, guid: ede60b16dc5489647b8fe0a2817eb496, type: 3}
-  m_PrefabInstance: {fileID: 6015316171472158830}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8cee2377382177b4abaa5ccb55745154, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!1001 &8756811248688410168
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -7236,6 +7223,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: OHS01_Stick
       objectReference: {fileID: 0}
+    - target: {fileID: 1187582316465315530, guid: d74d166bac1266b45b0fec2f2c95fe9b, type: 3}
+      propertyPath: m_Materials.Array.data[0]
+      value: 
+      objectReference: {fileID: 2100000, guid: a06a79412760cc54da9d8b03d7f1d4d4, type: 2}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []

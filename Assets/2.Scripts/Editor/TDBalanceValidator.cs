@@ -120,6 +120,7 @@ public static class TDBalanceValidator
         MoraleWired(failures);
         HpBarOnTop(failures);
         EndSfxWired(failures);
+        ToonUnits(failures);
 
         Density(failures);
         Dominance(failures);
@@ -686,6 +687,64 @@ public static class TDBalanceValidator
 
     // Straight from the asset database: the configs' .api routes through a scene object and
     // is null outside play mode (same reason as TDMoraleValidator.LoadOperatorConfig).
+    // Polish A1: every model a match puts on screen shades with the one toon material set, so an
+    // operator added with its pack shader fails here instead of on camera.
+    private static void ToonUnits(List<string> f)
+    {
+        var units = TDToonConverter.UnitPrefabs();
+        if (units.Count < 22) f.Add($"[TOON_UNITS_SOURCE] UnitPrefabs() returned {units.Count}, want >= 22 (8 operators, 6 enemies, 5 turrets, 3 bullets)");
+        foreach (var p in units)
+            foreach (var line in TDToonConverter.NonToon(p))
+                f.Add($"[TOON_UNITS] {line}");
+
+        var template = AssetDatabase.LoadAssetAtPath<Material>(TDToonConverter.TEMPLATE_PATH);
+        if (template == null) { f.Add($"[TOON_TEMPLATE] no material at {TDToonConverter.TEMPLATE_PATH}"); return; }
+
+        // A cut-out leaf turned opaque is a black square, and a second run must reuse what the first made.
+        var probe = new Material(Shader.Find("Universal Render Pipeline/Lit")) { name = "TDToonProbe", hideFlags = HideFlags.HideAndDontSave };
+        probe.SetFloat("_AlphaClip", 1f);
+        probe.SetFloat("_Cutoff", 0.4f);
+        probe.EnableKeyword("_ALPHATEST_ON");
+        string made = $"{TDToonConverter.OUTPUT_DIR}/Toon_{probe.name}.mat";
+        try
+        {
+            var toon = TDToonConverter.ToonFor(probe, template);
+            if (toon == null || toon.shader.name != TDToonConverter.TOON_SHADER)
+            { f.Add($"[TOON_FOR] gave {(toon == null ? "null" : toon.shader.name)}, want {TDToonConverter.TOON_SHADER}"); return; }
+            if (toon.GetFloat("_AlphaClip") != 1f || !Mathf.Approximately(toon.GetFloat("_Cutoff"), 0.4f) || !toon.IsKeywordEnabled("_ALPHATEST_ON"))
+                f.Add($"[TOON_KEEPS_ALPHA_CLIP] clip {toon.GetFloat("_AlphaClip")}, cutoff {toon.GetFloat("_Cutoff")}, keyword {toon.IsKeywordEnabled("_ALPHATEST_ON")}, want 1 / 0.4 / on");
+            if (TDToonConverter.ToonFor(probe, template) != toon) f.Add("[TOON_IDEMPOTENT] a second ToonFor made another material");
+            if (TDToonConverter.ToonFor(toon, template) != toon) f.Add("[TOON_IDEMPOTENT] ToonFor of a toon material did not return it");
+        }
+        finally
+        {
+            AssetDatabase.DeleteAsset(made);
+            Object.DestroyImmediate(probe);
+        }
+
+        var enemy = LoadConfig<TDFlyweightEnemyDataSettings>()?.GetAllEnemies().FirstOrDefault()?.prefab;
+        if (enemy != null && TDToonConverter.Apply(enemy, template) != 0) f.Add($"[TOON_IDEMPOTENT] Apply changed {enemy.name}, which is already toon");
+
+        // Sidekick keeps its colours in _ColorMap; its _MainTex is the pack's starter map.
+        var sidekick = Shader.Find("Shader Graphs/Sidekick_ShaderGraph");
+        if (sidekick == null) { f.Add("[TOON_ALBEDO_ORDER] Sidekick shader not found"); return; }
+        var colour = new Texture2D(1, 1) { hideFlags = HideFlags.HideAndDontSave };
+        var main = new Texture2D(1, 1) { hideFlags = HideFlags.HideAndDontSave };
+        var mat = new Material(sidekick) { hideFlags = HideFlags.HideAndDontSave };
+        try
+        {
+            mat.SetTexture("_ColorMap", colour);
+            mat.SetTexture("_MainTex", main);
+            if (TDToonConverter.AlbedoOf(mat) != colour) f.Add("[TOON_ALBEDO_ORDER] AlbedoOf a Sidekick material did not pick _ColorMap");
+        }
+        finally
+        {
+            Object.DestroyImmediate(mat);
+            Object.DestroyImmediate(colour);
+            Object.DestroyImmediate(main);
+        }
+    }
+
     private static T LoadConfig<T>() where T : ScriptableObject
     {
         var guids = AssetDatabase.FindAssets("t:" + typeof(T).Name);
