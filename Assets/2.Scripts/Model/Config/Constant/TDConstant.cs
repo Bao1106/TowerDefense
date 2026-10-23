@@ -112,6 +112,8 @@ public static class TDConstant
     public const float CONFIG_TOWER_ZONE_TILE_HEIGHT = 0.12f;
     // Range highlight must sit above the tower zone top face (0.12) and path tiles (0.10) to avoid z-fighting
     public const float CONFIG_RANGE_HIGHLIGHT_Y = 0.3f;
+    // TowerZone and obstacle tiles are 0.5-tall blocks; an overlay on one sits just above its top
+    public const float CONFIG_BLOCK_OVERLAY_Y = 0.52f;
     public const float CONFIG_OPERATOR_PLACE_Y = 0.02f; // tower base placed 0.6u above ground (above TowerZone top face 0.06)
     public const float CONFIG_TOWER_PLACE_Y = 0.6f; // tower base placed 0.6u above ground (above TowerZone top face 0.06)
     public const string CONFIG_TOWER = "Tower Bullet Config";

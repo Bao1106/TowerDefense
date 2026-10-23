@@ -79,7 +79,10 @@ namespace ToonShadersPro.URP
     public enum PostProcessRenderPassEvent
     {
         BeforeURPPostProcessing,
-        AfterURPPostProcessing
+        AfterURPPostProcessing,
+        // TD: both stock options composite after transparents, painting unit lines over the world-space
+        // badges and HP bars in front of them. Appended so serialized 0/1 keep their meaning.
+        BeforeTransparents
     }
 
     // Allow each volume settings object to track the render pass event.
@@ -226,6 +229,11 @@ namespace ToonShadersPro.URP
             if (renderPassEvent == PostProcessRenderPassEvent.BeforeURPPostProcessing)
             {
                 return RenderPassEvent.BeforeRenderingPostProcessing;
+            }
+
+            if (renderPassEvent == PostProcessRenderPassEvent.BeforeTransparents)
+            {
+                return RenderPassEvent.BeforeRenderingTransparents;
             }
 
             return RenderPassEvent.AfterRenderingPostProcessing;

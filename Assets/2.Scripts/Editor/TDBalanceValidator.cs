@@ -129,6 +129,7 @@ public static class TDBalanceValidator
         BoardPalette(failures);
         BoardFloor(failures);
         HighlightColors(failures);
+        OverlaysClearBlocks(failures);
 
         Density(failures);
         Dominance(failures);
@@ -785,8 +786,14 @@ public static class TDBalanceValidator
         if (layer < 0) f.Add($"[OUTLINE_PROFILE] layer {TDToonConverter.OUTLINE_LAYER} missing");
         var profile = AssetDatabase.LoadAssetAtPath<VolumeProfile>("Assets/Settings/ToonOutlineProfile.asset");
         if (profile == null || !profile.TryGet(out OutlineSettings o)) f.Add("[OUTLINE_PROFILE] ToonOutlineProfile has no OutlineSettings");
-        else if (!o.active || o.outlineType.value == OutlineType.NoOutlines || o.objectMask.value.value != 1 << layer)
-            f.Add($"[OUTLINE_PROFILE] active {o.active}, type {o.outlineType.value}, mask {o.objectMask.value.value}");
+        else
+        {
+            if (!o.active || o.outlineType.value == OutlineType.NoOutlines || o.objectMask.value.value != 1 << layer)
+                f.Add($"[OUTLINE_PROFILE] active {o.active}, type {o.outlineType.value}, mask {o.objectMask.value.value}");
+            // Composited after transparents, a unit's line is painted over the world-space badge, label and HP bar in front of it.
+            if (o.renderPassEvent.value.Convert() > UnityEngine.Rendering.Universal.RenderPassEvent.BeforeRenderingTransparents)
+                f.Add($"[OUTLINE_UNDER_UI] outlines composite at {o.renderPassEvent.value.Convert()}, over the transparent badges in front of units");
+        }
 
         foreach (var p in TDToonConverter.UnitPrefabs())
             foreach (var r in p.GetComponentsInChildren<Renderer>(true))
@@ -814,7 +821,7 @@ public static class TDBalanceValidator
         (TDToonConverter.OUTPUT_DIR + "/Toon_Generic_Road.mat", new Color(0.777f, 0.920f, 1.000f), new Color(1.774f, 1.774f, 1.774f), false),
         (TDToonConverter.OUTPUT_DIR + "/Toon_Generic_Grass.mat", new Color(0.421f, 0.433f, 1.000f), new Color(2.136f, 2.136f, 2.136f), false),
         (TDToonConverter.OUTPUT_DIR + "/Toon_Generic_01_A.mat", new Color(0.712f, 0.799f, 0.799f), Color.white, false),
-        (TDToonConverter.OUTPUT_DIR + "/Toon_Floor.mat", new Color(0.295f, 0.372f, 0.429f), Color.white, false),
+        (TDToonConverter.OUTPUT_DIR + "/Toon_Floor.mat", new Color(0.372f, 0.456f, 0.499f), Color.white, false),
     };
     private static readonly Color k_BoardShadowTint = new Color(0.22f, 0.27f, 0.36f);
     private const string SIDEWALK_PREFAB = "Assets/1.Assets/UnityStore Resources/Synty/PolygonGeneric/Prefabs/Environment/SM_Gen_Env_Sidewalk_01.prefab";
@@ -850,7 +857,7 @@ public static class TDBalanceValidator
     // Spec §4: one green for every deploy tile, strong enough that a lit TowerZone under it still gains 40 green
     // (measurements/raw/2026-10-23-a2/highlight-calib.png), and the range orange measured from Arknights.
     private static readonly Color k_DeployGreen = new Color(0.369f, 1.000f, 0.495f, 0.95f);
-    private static readonly Color k_RangeOrange = new Color(0xCF / 255f, 0x71 / 255f, 0x27 / 255f, 0.6f);
+    private static readonly Color k_RangeOrange = new Color(0xCF / 255f, 0x71 / 255f, 0x27 / 255f, 0.85f);
 
     private static void HighlightColors(List<string> f)
     {
@@ -859,6 +866,49 @@ public static class TDBalanceValidator
             var m = AssetDatabase.LoadAssetAtPath<Material>($"Assets/1.Assets/Resources/Materials/{name}.mat");
             var c = m == null ? Color.clear : m.GetColor("_BaseColor");
             if (m == null || !Near(c, want) || Mathf.Abs(c.a - want.a) > 0.01f) f.Add($"[A2_HIGHLIGHT] {name} {c} want {want}");
+        }
+    }
+
+    // TowerZone and obstacle tiles are 0.5-tall blocks: an overlay laid flat at one height vanished into
+    // every block it crossed. The amp ring reads its heights from the grid, as the range tiles do.
+    private static void OverlaysClearBlocks(List<string> f)
+    {
+        const float BLOCK_TOP = 0.5f;
+        var prev = TDGridMainModel.api;
+        var owner = new GameObject("OverlayProbe") { hideFlags = HideFlags.HideAndDontSave };
+        try
+        {
+            TDGridMainModel.Initialize(new Vector3(40f, 0f, 40f), Vector3.zero);
+            var grid = TDGridMainModel.api;
+            // CreateGrid ends by completing a one-shot task; a second run in the same domain throws there,
+            // after the grid is built.
+            try { grid.CreateGrid(); } catch (System.InvalidOperationException) { }
+
+            owner.transform.position = grid.CellToWorld(new Vector2Int(10, 10));
+            var centre = owner.transform.position;
+            var obstacle = grid.WorldToCell(centre + new Vector3(TDAmpRingView.WORLD_RADIUS, 0f, 0f));
+            var zone = grid.WorldToCell(centre + new Vector3(0f, 0f, TDAmpRingView.WORLD_RADIUS));
+            var low = grid.WorldToCell(centre - new Vector3(TDAmpRingView.WORLD_RADIUS, 0f, 0f));
+            grid.RegisterRaisedCell(obstacle);
+            grid.RegisterTowerZoneCell(zone);
+
+            foreach (var (cell, raised) in new[] { (obstacle, true), (zone, true), (low, false) })
+            {
+                float y = grid.OverlayY(cell);
+                if (raised ? y <= BLOCK_TOP : Mathf.Abs(y - TDConstant.CONFIG_RANGE_HIGHLIGHT_Y) > 0.001f)
+                    f.Add($"[OVERLAY_ON_BLOCKS] range tile over {(raised ? "a block" : "a low cell")} {cell} at y {y:F2}");
+            }
+
+            var pts = TDAmpRingView.Attach(owner.transform).WorldPoints();
+            int n = TDAmpRingView.SEGMENTS;
+            foreach (var (i, raised) in new[] { (0, true), (n / 4, true), (n / 2, false) })
+                if (raised ? pts[i].y <= BLOCK_TOP : Mathf.Abs(pts[i].y - TDConstant.CONFIG_RANGE_HIGHLIGHT_Y) > 0.001f)
+                    f.Add($"[OVERLAY_ON_BLOCKS] amp ring point {i} over {(raised ? "a block" : "a low cell")} at y {pts[i].y:F2}");
+        }
+        finally
+        {
+            Object.DestroyImmediate(owner);
+            typeof(TDGridMainModel).GetProperty(nameof(TDGridMainModel.api)).GetSetMethod(true).Invoke(null, new object[] { prev });
         }
     }
 

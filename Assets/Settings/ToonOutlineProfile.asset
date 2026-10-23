@@ -15,7 +15,7 @@ MonoBehaviour:
   active: 1
   renderPassEvent:
     m_OverrideState: 1
-    m_Value: 1
+    m_Value: 2
   outlineType:
     m_OverrideState: 1
     m_Value: 2
