@@ -283,6 +283,10 @@ public class TDDeployController : MonoBehaviour
         // so it doesn't clash with the diamond outline during deployment.
         var ghostIndicator = m_Ghost.transform.Find(TDConstant.SELECTION_INDICATOR_NAME);
         if (ghostIndicator != null) ghostIndicator.gameObject.SetActive(false);
+        // The ghost is a preview, not a deploy: no burst under it, and no Start pose on every pickup.
+        var ghostRing = m_Ghost.transform.Find(TDConstant.DEPLOY_RING_NAME);
+        if (ghostRing != null) ghostRing.gameObject.SetActive(false);
+        m_Ghost.GetComponentInChildren<Animator>()?.Play(TDConstant.ANIM_STATE_IDLE);
 
         m_Ghost.transform.localScale = slot.towerType == TowerType.Operator
             ? new Vector3(1.5f, 1.5f, 1.5f) : Vector3.one;

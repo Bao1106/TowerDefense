@@ -135,6 +135,8 @@ public static class TDBalanceValidator
         MeleeLaunch(failures);
         OperatorAttackAnim(failures);
         MeleeHitFx(failures);
+        OperatorStates(failures);
+        OperatorFxChildren(failures);
 
         Density(failures);
         Dominance(failures);
@@ -1147,6 +1149,117 @@ public static class TDBalanceValidator
             float life = Mathf.Max(m.startDelay.constantMin, m.startDelay.constantMax) + m.duration
                        + Mathf.Max(m.startLifetime.constantMin, m.startLifetime.constantMax);
             if (life > rootLife + 1e-4f) f.Add($"[FX_MELEE_HIT_PREFAB] {ps.name} lives {life:F2}s, past the root's {rootLife:F2}s");
+        }
+    }
+
+    // Polish B §6: an operator steps onto the field, reels while collapsed and falls when they die,
+    // every clip from the set of the weapon in their hands.
+    private const float START_MAX_SECONDS = 0.9f;
+
+    private static void OperatorStates(List<string> f)
+    {
+        const UnityEditor.Animations.AnimatorConditionMode If = UnityEditor.Animations.AnimatorConditionMode.If;
+        const UnityEditor.Animations.AnimatorConditionMode IfNot = UnityEditor.Animations.AnimatorConditionMode.IfNot;
+        foreach (var name in k_OperatorControllers)
+        {
+            var ac = AssetDatabase.LoadAssetAtPath<UnityEditor.Animations.AnimatorController>($"Assets/1.Assets/Resources/AnimatorControllers/Operator{name}.controller");
+            if (ac == null) { f.Add($"[ANIM_OP_STATES] Operator{name}: controller not found"); continue; }
+            var sm = ac.layers[0].stateMachine;
+            UnityEditor.Animations.AnimatorState State(string n) => sm.states.Select(s => s.state).FirstOrDefault(s => s.name == n);
+            AnimationClip Clip(UnityEditor.Animations.AnimatorState s) => s == null ? null : s.motion as AnimationClip;
+            var idle = State("Idle");
+            var start = State("Start");
+            var die = State("Die");
+            var dizzy = State("Dizzy");
+
+            var sc = Clip(start);
+            if (start == null || sm.defaultState != start || sc == null || !sc.name.StartsWith("LevelUp"))
+                f.Add($"[ANIM_OP_STATES] {ac.name}: default {(sm.defaultState == null ? "none" : sm.defaultState.name)}, want Start playing LevelUp_*");
+            else
+            {
+                if (sc.length / start.speed > START_MAX_SECONDS + 1e-4f)
+                    f.Add($"[ANIM_OP_STATES] {ac.name}: Start runs {sc.length / start.speed:F2}s, want ≤ {START_MAX_SECONDS}s");
+                var o = start.transitions;
+                if (o.Length != 1 || idle == null || o[0].destinationState != idle || !o[0].hasExitTime || o[0].exitTime != 1f
+                    || !o[0].hasFixedDuration || o[0].duration != NEW_BLEND)
+                    f.Add($"[ANIM_OP_STATES] {ac.name}: Start must leave once, to Idle, at exit 1 with a fixed {NEW_BLEND}s blend");
+            }
+
+            var pDie = ac.parameters.FirstOrDefault(x => x.name == TDConstant.ANIM_TRIGGER_DIE);
+            var anyDie = die == null ? null : sm.anyStateTransitions.FirstOrDefault(t => t.destinationState == die);
+            if (pDie == null || pDie.type != AnimatorControllerParameterType.Trigger || anyDie == null || anyDie.canTransitionToSelf
+                || !anyDie.conditions.Any(c => c.mode == If && c.parameter == TDConstant.ANIM_TRIGGER_DIE))
+                f.Add($"[ANIM_OP_STATES] {ac.name}: AnyState→Die must fire on a Die trigger, never into itself");
+            // One-shot on top of the plan: Die01Stay_* also starts with Die01, but it is the lying-down loop.
+            var dc = Clip(die);
+            if (dc == null || !dc.name.StartsWith("Die01") || dc.isLooping || dc.length > TDConstant.OPERATOR_DIE_DURATION)
+                f.Add($"[ANIM_OP_STATES] {ac.name}: Die plays {(dc == null ? "none" : dc.name)}, want a one-shot Die01_* ≤ {TDConstant.OPERATOR_DIE_DURATION}s");
+            if (die != null && die.transitions.Length > 0)
+                f.Add($"[ANIM_OP_STATES] {ac.name}: Die has {die.transitions.Length} way(s) out, want none");
+
+            var pCol = ac.parameters.FirstOrDefault(x => x.name == TDConstant.ANIM_PARAM_COLLAPSED);
+            var anyDizzy = dizzy == null ? null : sm.anyStateTransitions.FirstOrDefault(t => t.destinationState == dizzy);
+            if (pCol == null || pCol.type != AnimatorControllerParameterType.Bool || anyDizzy == null || anyDizzy.canTransitionToSelf
+                || !anyDizzy.conditions.Any(c => c.mode == If && c.parameter == TDConstant.ANIM_PARAM_COLLAPSED))
+                f.Add($"[ANIM_OP_STATES] {ac.name}: AnyState→Dizzy must fire while bool {TDConstant.ANIM_PARAM_COLLAPSED} is set, never into itself");
+            var zc = Clip(dizzy);
+            if (zc == null || !zc.name.StartsWith("Dizzy") || !zc.isLooping)
+                f.Add($"[ANIM_OP_STATES] {ac.name}: Dizzy plays {(zc == null ? "none" : zc.name)}, want a looping Dizzy_*");
+            var back = dizzy == null || idle == null ? null : dizzy.transitions.FirstOrDefault(t => t.destinationState == idle);
+            if (back == null || back.hasExitTime || !back.conditions.Any(c => c.mode == IfNot && c.parameter == TDConstant.ANIM_PARAM_COLLAPSED))
+                f.Add($"[ANIM_OP_STATES] {ac.name}: Dizzy→Idle must fire when {TDConstant.ANIM_PARAM_COLLAPSED} clears, no exit time");
+
+            // Every state from the weapon set the swing comes from, or the hands wave an empty grip.
+            var atk = Clip(State("Attack"));
+            if (atk == null) { f.Add($"[ANIM_OP_WEAPON] {ac.name}: Attack has no clip"); continue; }
+            string dir = System.IO.Path.GetDirectoryName(AssetDatabase.GetAssetPath(atk));
+            foreach (var n in new[] { "Idle", "Attack", "Start", "Die", "Dizzy" })
+            {
+                var m = Clip(State(n));
+                if (m == null || System.IO.Path.GetDirectoryName(AssetDatabase.GetAssetPath(m)) != dir)
+                    f.Add($"[ANIM_OP_WEAPON] {ac.name}: {n} plays {(m == null ? "none" : m.name)}, want a clip from {dir}");
+            }
+        }
+    }
+
+    private const string DEPLOY_RING_FX = "Assets/1.Assets/Resources/Prefabs/VFX/DeployRing.prefab";
+    private const string STUN_FX = "Assets/1.Assets/Resources/Prefabs/VFX/StunFX.prefab";
+
+    private static void OperatorFxChildren(List<string> f)
+    {
+        var ring = AssetDatabase.LoadAssetAtPath<GameObject>(DEPLOY_RING_FX);
+        var stun = AssetDatabase.LoadAssetAtPath<GameObject>(STUN_FX);
+        // A prefab asset sits in no scene, so activeInHierarchy is false everywhere: walk activeSelf up.
+        bool Shown(Renderer r, Transform root)
+        {
+            if (!r.enabled) return false;
+            for (var t = r.transform; t != null; t = t == root ? null : t.parent)
+                if (!t.gameObject.activeSelf) return false;
+            return true;
+        }
+
+        foreach (var op in LoadConfig<TDFlyweightOperatorDataSettings>()?.GetAllOperators() ?? new List<OperatorData>())
+        {
+            var pf = op.operatorPrefab;
+            if (pf == null) { f.Add($"[FX_OPERATOR_PREFABS] {op.operatorName}: no prefab"); continue; }
+            var kids = pf.transform.Cast<Transform>().ToList();
+
+            var rings = kids.Where(t => t.name == TDConstant.DEPLOY_RING_NAME).ToList();
+            var rps = rings.Count == 1 ? rings[0].GetComponent<ParticleSystem>() : null;
+            if (rps == null || ring == null || PrefabUtility.GetCorrespondingObjectFromSource(rings[0].gameObject) != ring
+                || !rps.main.playOnAwake || rps.main.loop || rps.main.stopAction != ParticleSystemStopAction.Disable)
+                f.Add($"[FX_OPERATOR_PREFABS] {pf.name}: {rings.Count} {TDConstant.DEPLOY_RING_NAME}, want one DeployRing.prefab that plays once on awake and disables itself");
+
+            var stuns = kids.Where(t => t.name == TDConstant.STUN_FX_NAME).ToList();
+            if (stuns.Count != 1 || stun == null || PrefabUtility.GetCorrespondingObjectFromSource(stuns[0].gameObject) != stun
+                || stuns[0].gameObject.activeSelf || stuns[0].GetComponentsInChildren<ParticleSystem>(true).Any(p => !p.main.loop))
+                f.Add($"[FX_OPERATOR_PREFABS] {pf.name}: {stuns.Count} {TDConstant.STUN_FX_NAME}, want one StunFX.prefab, off, every system looping");
+
+            foreach (var hand in pf.GetComponentsInChildren<Transform>(true).Where(t => t.name == "weapon_l" || t.name == "weapon_r"))
+            {
+                var shown = hand.GetComponentsInChildren<Renderer>(true).Where(r => Shown(r, pf.transform)).Select(r => r.name).ToList();
+                if (shown.Count > 1) f.Add($"[OP_WEAPON_MESH] {pf.name}: {hand.name} shows {string.Join(", ", shown)}, want at most one");
+            }
         }
     }
 

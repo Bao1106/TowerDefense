@@ -12,10 +12,12 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
 {
     private static readonly int HASH_ATTACK = Animator.StringToHash("Attack");
     private static readonly int HASH_ATTACK_SPEED = Animator.StringToHash(TDConstant.ANIM_PARAM_ATTACK_SPEED);
+    private static readonly int HASH_COLLAPSED = Animator.StringToHash(TDConstant.ANIM_PARAM_COLLAPSED);
 
     private Animator m_Animator;
     private TDHPBarView m_HPBarView;
     private Transform m_SelectionIndicator;
+    private GameObject m_StunFx; // stars over the head while collapsed
 
     private IOperatorBehavior m_Behavior;
     private OperatorData m_Data; // cached at Init - avoids List.Find every frame
@@ -63,6 +65,7 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         m_Animator = GetComponentInChildren<Animator>();
         m_HPBarView = GetComponentInChildren<TDHPBarView>(includeInactive: true);
         m_SelectionIndicator = transform.Find(TDConstant.SELECTION_INDICATOR_NAME);
+        m_StunFx = transform.Find(TDConstant.STUN_FX_NAME)?.gameObject;
 
         // The slot already carries the roster row. Looking it back up from an archetype enum is
         // what made Ace and Layla deploy as Striker.
@@ -307,6 +310,8 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         ((IPlacedUnit)this).OnRemove();
         TDGameEventBus.OperatorDied(m_MyCell);
         m_HPBarView?.Hide();
+        m_StunFx?.SetActive(false); // Update has stopped (OnRemove), so nothing else turns it off
+        m_MoraleIcon?.gameObject.SetActive(false);
 
         // A death costs lives (Tầng 3): leaving someone collapsed, or not rotating them out in
         // time, is paid for in the loss condition. Last on purpose: if this takes the final life,
@@ -322,6 +327,8 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
             return;
         }
 
+        // Dying collapsed: AnyState→Dizzy would pull the fall straight back into reeling.
+        m_Animator.SetBool(HASH_COLLAPSED, false);
         m_Animator.SetTrigger(TDConstant.ANIM_TRIGGER_DIE);
         Destroy(gameObject, TDConstant.OPERATOR_DIE_DURATION);
     }
@@ -379,6 +386,10 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         // SP only accrues on the field, and not while collapsed: an operator who cannot hold or
         // swing is in no state to be banking the resource that rescues someone else.
         if (!IsCollapsed) Sp?.Tick(Time.deltaTime);
+
+        // Mirrored every frame, like the block marker: stress, rescue and recovery all flip it.
+        m_Animator?.SetBool(HASH_COLLAPSED, IsCollapsed);
+        m_StunFx?.SetActive(IsCollapsed);
 
         // Collapsed operators stop swinging (§06). After TickMorale, so they keep accruing and
         // keep recovering — standing there useless is the state, not being switched off.

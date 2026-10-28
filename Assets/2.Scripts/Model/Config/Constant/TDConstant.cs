@@ -363,6 +363,11 @@ public static class TDConstant
     public const float CONFIG_IMPACT_HEIGHT = 0.8f; // melee hit VFX at chest height; enemies stand 1.2–1.9
     public const string ANIM_PARAM_ATTACK_SPEED = "AttackSpeed";
     public const string ANIM_ATTACK_CLIP_PREFIX = "Attack";
+    // Operator deploy / collapse / death (polish B §6)
+    public const string ANIM_PARAM_COLLAPSED = "Collapsed";
+    public const string ANIM_STATE_IDLE = "Idle";   // the deploy ghost skips Start
+    public const string DEPLOY_RING_NAME = "DeployRing";
+    public const string STUN_FX_NAME = "StunFX";
     // Attack VFX (TDAttackVFX)
     public const float VFX_MOVE_SPEED = 15f;
     public const float VFX_ARRIVE_THRESHOLD = 0.25f;
