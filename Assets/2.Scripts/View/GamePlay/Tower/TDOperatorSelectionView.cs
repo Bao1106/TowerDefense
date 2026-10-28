@@ -469,7 +469,7 @@ public class TDOperatorSelectionView : MonoBehaviour
             if (i < cells.Count)
             {
                 Vector3 world = TDGridMainModel.api.CellToWorld(cells[i]);
-                m_RangeHighlightTiles[i].transform.position = new Vector3(world.x, TDConstant.CONFIG_RANGE_HIGHLIGHT_Y, world.z);
+                m_RangeHighlightTiles[i].transform.position = new Vector3(world.x, TDGridMainModel.api.OverlayY(cells[i]), world.z);
                 m_RangeHighlightTiles[i].SetActive(true);
             }
             else m_RangeHighlightTiles[i].SetActive(false);

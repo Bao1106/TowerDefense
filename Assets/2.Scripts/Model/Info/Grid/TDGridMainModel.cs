@@ -21,6 +21,7 @@ public class TDGridMainModel : IGridMainModel
     private bool[,] m_OccupiedCell;
     private float m_OffsetX, m_OffsetZ;
     private readonly HashSet<Vector2Int> m_TowerZoneCells = new HashSet<Vector2Int>();
+    private readonly HashSet<Vector2Int> m_RaisedCells = new HashSet<Vector2Int>();
 
     public int width { get; private set; }
     public int height { get; private set; }
@@ -121,4 +122,13 @@ public class TDGridMainModel : IGridMainModel
 
     public void RegisterTowerZoneCell(Vector2Int cell) => m_TowerZoneCells.Add(cell);
     public bool IsInTowerZone(Vector2Int cell) => m_TowerZoneCells.Contains(cell);
+
+    // Obstacle tiles; TowerZone cells are raised too, and already known.
+    public void RegisterRaisedCell(Vector2Int cell) => m_RaisedCells.Add(cell);
+
+    /// <summary>Height for anything drawn flat over `cell` (range tiles, the amp ring), clear of the block on it.</summary>
+    public float OverlayY(Vector2Int cell)
+        => m_RaisedCells.Contains(cell) || m_TowerZoneCells.Contains(cell)
+            ? TDConstant.CONFIG_BLOCK_OVERLAY_Y
+            : TDConstant.CONFIG_RANGE_HIGHLIGHT_Y;
 }

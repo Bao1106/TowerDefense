@@ -126,6 +126,11 @@ public static class TDBalanceValidator
         ToonMap(failures);
         ToonAlbedoOnce(failures);
         Outline(failures);
+        BoardPalette(failures);
+        BoardFloor(failures);
+        HighlightColors(failures);
+        OverlaysClearBlocks(failures);
+        VictoryRating(failures);
 
         Density(failures);
         Dominance(failures);
@@ -782,8 +787,14 @@ public static class TDBalanceValidator
         if (layer < 0) f.Add($"[OUTLINE_PROFILE] layer {TDToonConverter.OUTLINE_LAYER} missing");
         var profile = AssetDatabase.LoadAssetAtPath<VolumeProfile>("Assets/Settings/ToonOutlineProfile.asset");
         if (profile == null || !profile.TryGet(out OutlineSettings o)) f.Add("[OUTLINE_PROFILE] ToonOutlineProfile has no OutlineSettings");
-        else if (!o.active || o.outlineType.value == OutlineType.NoOutlines || o.objectMask.value.value != 1 << layer)
-            f.Add($"[OUTLINE_PROFILE] active {o.active}, type {o.outlineType.value}, mask {o.objectMask.value.value}");
+        else
+        {
+            if (!o.active || o.outlineType.value == OutlineType.NoOutlines || o.objectMask.value.value != 1 << layer)
+                f.Add($"[OUTLINE_PROFILE] active {o.active}, type {o.outlineType.value}, mask {o.objectMask.value.value}");
+            // Composited after transparents, a unit's line is painted over the world-space badge, label and HP bar in front of it.
+            if (o.renderPassEvent.value.Convert() > UnityEngine.Rendering.Universal.RenderPassEvent.BeforeRenderingTransparents)
+                f.Add($"[OUTLINE_UNDER_UI] outlines composite at {o.renderPassEvent.value.Convert()}, over the transparent badges in front of units");
+        }
 
         foreach (var p in TDToonConverter.UnitPrefabs())
             foreach (var r in p.GetComponentsInChildren<Renderer>(true))
@@ -800,6 +811,139 @@ public static class TDBalanceValidator
         foreach (var p in TDToonConverter.MapPrefabs())
             foreach (var r in p.GetComponentsInChildren<Renderer>(true))
                 if (r.gameObject.layer == layer) f.Add($"[OUTLINE_NOT_MAP] {p.name}/{r.name}");
+    }
+
+    // Spec §3: the material values that put each board role on its on-screen target under DTGamePlay's light
+    // (calibrated 2026-10-23, measurements/raw/2026-10-23-a2/calib-final.png). Road and grass need more gain
+    // than a base colour can carry, so the rest rides on the HDR light tint.
+    private static readonly (string path, Color baseColor, Color lightTint, bool flat)[] k_BoardPalette =
+    {
+        (TDToonConverter.OUTPUT_DIR + "/Toon_TowerZone.mat", new Color(0.379f, 0.469f, 0.472f), Color.white, true),
+        (TDToonConverter.OUTPUT_DIR + "/Toon_Generic_Road.mat", new Color(0.777f, 0.920f, 1.000f), new Color(1.774f, 1.774f, 1.774f), false),
+        (TDToonConverter.OUTPUT_DIR + "/Toon_Generic_Grass.mat", new Color(0.421f, 0.433f, 1.000f), new Color(2.136f, 2.136f, 2.136f), false),
+        (TDToonConverter.OUTPUT_DIR + "/Toon_Generic_01_A.mat", new Color(0.712f, 0.799f, 0.799f), Color.white, false),
+        (TDToonConverter.OUTPUT_DIR + "/Toon_Floor.mat", new Color(0.372f, 0.456f, 0.499f), Color.white, false),
+    };
+    private static readonly Color k_BoardShadowTint = new Color(0.22f, 0.27f, 0.36f);
+    private const string SIDEWALK_PREFAB = "Assets/1.Assets/UnityStore Resources/Synty/PolygonGeneric/Prefabs/Environment/SM_Gen_Env_Sidewalk_01.prefab";
+
+    private static bool Near(Color a, Color b) => Mathf.Abs(a.r - b.r) <= 0.01f && Mathf.Abs(a.g - b.g) <= 0.01f && Mathf.Abs(a.b - b.b) <= 0.01f;
+
+    private static void BoardPalette(List<string> f)
+    {
+        foreach (var (path, baseColor, lightTint, flat) in k_BoardPalette)
+        {
+            var m = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (m == null) { f.Add($"[A2_PALETTE] {System.IO.Path.GetFileName(path)} missing"); continue; }
+            if (!Near(m.GetColor("_BaseColor"), baseColor)) f.Add($"[A2_PALETTE] {m.name} base {m.GetColor("_BaseColor")} want {baseColor}");
+            if (!Near(m.GetColor("_LightTint"), lightTint)) f.Add($"[A2_PALETTE] {m.name} light {m.GetColor("_LightTint")} want {lightTint}");
+            if (!Near(m.GetColor("_ShadowTint"), k_BoardShadowTint)) f.Add($"[A2_PALETTE] {m.name} shadow {m.GetColor("_ShadowTint")} want {k_BoardShadowTint}");
+            var map = m.GetTexture("_BaseMap");
+            if (flat != (map == null)) f.Add($"[A2_PALETTE] {m.name} flat {flat} but base map {(map == null ? "none" : map.name)}");
+        }
+    }
+
+    // The floor between tiles is CityGround's sidewalk tiles. They shared the road twin, so road and floor
+    // could not take different colours; the floor gets its own.
+    private static void BoardFloor(List<string> f)
+    {
+        if (!AssetDatabase.GetDependencies("Assets/3.Scenes/DTGamePlay.unity", false).Contains(SIDEWALK_PREFAB))
+            f.Add("[A2_FLOOR] DTGamePlay floor is no longer SM_Gen_Env_Sidewalk_01");
+        var sidewalk = AssetDatabase.LoadAssetAtPath<GameObject>(SIDEWALK_PREFAB);
+        var mats = sidewalk == null ? new Material[0] : sidewalk.GetComponentsInChildren<Renderer>(true).SelectMany(r => r.sharedMaterials).ToArray();
+        if (!mats.Any(m => m != null && m.name == "Toon_Floor")) f.Add("[A2_FLOOR] SM_Gen_Env_Sidewalk_01 does not use Toon_Floor");
+        if (mats.Any(m => m != null && m.name == "Toon_Generic_Road")) f.Add("[A2_FLOOR] SM_Gen_Env_Sidewalk_01 still uses Toon_Generic_Road");
+    }
+
+    // Spec §4: one green for every deploy tile, strong enough that a lit TowerZone under it still gains 40 green
+    // (measurements/raw/2026-10-23-a2/highlight-calib.png), and the range orange measured from Arknights.
+    private static readonly Color k_DeployGreen = new Color(0.369f, 1.000f, 0.495f, 0.95f);
+    private static readonly Color k_RangeOrange = new Color(0xCF / 255f, 0x71 / 255f, 0x27 / 255f, 0.85f);
+
+    private static void HighlightColors(List<string> f)
+    {
+        foreach (var (name, want) in new[] { ("TowerHighlight", k_DeployGreen), ("RangeHighlight", k_RangeOrange) })
+        {
+            var m = AssetDatabase.LoadAssetAtPath<Material>($"Assets/1.Assets/Resources/Materials/{name}.mat");
+            var c = m == null ? Color.clear : m.GetColor("_BaseColor");
+            if (m == null || !Near(c, want) || Mathf.Abs(c.a - want.a) > 0.01f) f.Add($"[A2_HIGHLIGHT] {name} {c} want {want}");
+        }
+    }
+
+    // The line under the stars was typed into the scene as "17/20" and nothing filled it, so a 19-life win
+    // read 17/20 right above "Lives Remaining 19 / 20".
+    private static void VictoryRating(List<string> f)
+    {
+        var root = new GameObject("VictoryProbe") { hideFlags = HideFlags.HideAndDontSave };
+        try
+        {
+            Transform Child(Transform parent, string path)
+            {
+                foreach (var name in path.Split('/'))
+                {
+                    var next = parent.Find(name);
+                    if (next == null) { next = new GameObject(name, typeof(RectTransform)).transform; next.SetParent(parent, false); }
+                    parent = next;
+                }
+                return parent;
+            }
+            foreach (var star in new[] { "IconStar", "IconStar (1)", "IconStar (2)" })
+                Child(root.transform, "PopupWindow/Middle/StarRow/" + star).gameObject.AddComponent<UnityEngine.UI.Image>();
+            var label = Child(root.transform, "PopupWindow/Middle/Divider/TxtNotices").gameObject.AddComponent<TMPro.TextMeshProUGUI>();
+            label.text = "Rating based on lives remaining · 17/20";
+
+            var view = root.AddComponent<TDVictoryPanelView>();
+            const System.Reflection.BindingFlags I = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            typeof(TDVictoryPanelView).GetMethod("Awake", I).Invoke(view, null);
+            typeof(TDVictoryPanelView).GetMethod("FillStats", I).Invoke(view, new object[] { "TEST", 10, 10, 19, 0, false });
+
+            string want = $"19/{TDConstant.CONFIG_PLAYER_STARTING_LIVES}";
+            if (!label.text.Contains(want)) f.Add($"[VICTORY_RATING] rating line reads \"{label.text}\" after a 19-life win, want it to carry {want}");
+        }
+        finally { Object.DestroyImmediate(root); }
+    }
+
+    // TowerZone and obstacle tiles are 0.5-tall blocks: an overlay laid flat at one height vanished into
+    // every block it crossed. The amp ring reads its heights from the grid, as the range tiles do.
+    private static void OverlaysClearBlocks(List<string> f)
+    {
+        const float BLOCK_TOP = 0.5f;
+        var prev = TDGridMainModel.api;
+        var owner = new GameObject("OverlayProbe") { hideFlags = HideFlags.HideAndDontSave };
+        try
+        {
+            TDGridMainModel.Initialize(new Vector3(40f, 0f, 40f), Vector3.zero);
+            var grid = TDGridMainModel.api;
+            // CreateGrid ends by completing a one-shot task; a second run in the same domain throws there,
+            // after the grid is built.
+            try { grid.CreateGrid(); } catch (System.InvalidOperationException) { }
+
+            owner.transform.position = grid.CellToWorld(new Vector2Int(10, 10));
+            var centre = owner.transform.position;
+            var obstacle = grid.WorldToCell(centre + new Vector3(TDAmpRingView.WORLD_RADIUS, 0f, 0f));
+            var zone = grid.WorldToCell(centre + new Vector3(0f, 0f, TDAmpRingView.WORLD_RADIUS));
+            var low = grid.WorldToCell(centre - new Vector3(TDAmpRingView.WORLD_RADIUS, 0f, 0f));
+            grid.RegisterRaisedCell(obstacle);
+            grid.RegisterTowerZoneCell(zone);
+
+            foreach (var (cell, raised) in new[] { (obstacle, true), (zone, true), (low, false) })
+            {
+                float y = grid.OverlayY(cell);
+                if (raised ? y <= BLOCK_TOP : Mathf.Abs(y - TDConstant.CONFIG_RANGE_HIGHLIGHT_Y) > 0.001f)
+                    f.Add($"[OVERLAY_ON_BLOCKS] range tile over {(raised ? "a block" : "a low cell")} {cell} at y {y:F2}");
+            }
+
+            var pts = TDAmpRingView.Attach(owner.transform).WorldPoints();
+            int n = TDAmpRingView.SEGMENTS;
+            foreach (var (i, raised) in new[] { (0, true), (n / 4, true), (n / 2, false) })
+                if (raised ? pts[i].y <= BLOCK_TOP : Mathf.Abs(pts[i].y - TDConstant.CONFIG_RANGE_HIGHLIGHT_Y) > 0.001f)
+                    f.Add($"[OVERLAY_ON_BLOCKS] amp ring point {i} over {(raised ? "a block" : "a low cell")} at y {pts[i].y:F2}");
+        }
+        finally
+        {
+            Object.DestroyImmediate(owner);
+            typeof(TDGridMainModel).GetProperty(nameof(TDGridMainModel.api)).GetSetMethod(true).Invoke(null, new object[] { prev });
+        }
     }
 
     private static T LoadConfig<T>() where T : ScriptableObject

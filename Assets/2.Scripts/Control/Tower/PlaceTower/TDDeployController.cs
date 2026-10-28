@@ -473,7 +473,7 @@ public class TDDeployController : MonoBehaviour
             if (i < cells.Count)
             {
                 Vector3 world = TDGridMainModel.api.CellToWorld(cells[i]);
-                m_RangeHighlightTiles[i].transform.position = new Vector3(world.x, TDConstant.CONFIG_RANGE_HIGHLIGHT_Y, world.z);
+                m_RangeHighlightTiles[i].transform.position = new Vector3(world.x, TDGridMainModel.api.OverlayY(cells[i]), world.z);
                 m_RangeHighlightTiles[i].SetActive(true);
             }
             else m_RangeHighlightTiles[i].SetActive(false);
@@ -497,7 +497,7 @@ public class TDDeployController : MonoBehaviour
             var adjustedPos = new Vector3(pos.x, 0.06f, pos.z);
             GameObject tile = m_TowerHighlightPrefab != null
                 ? Instantiate(m_TowerHighlightPrefab, adjustedPos, Quaternion.identity)
-                : CreateHighlightTile(pos);
+                : CreateHighlightTile(pos, 0.51f);
             m_HighlightTiles.Add(tile);
         }
     }
@@ -509,26 +509,15 @@ public class TDDeployController : MonoBehaviour
         foreach (var cell in TDOperatorRegistry.api.GetValidOperatorCells())
         {
             if (TDOperatorRegistry.api.HasOperatorAt(cell)) continue;
-            m_HighlightTiles.Add(CreateOperatorHighlightTile(TDGridMainModel.api.CellToWorld(cell)));
+            m_HighlightTiles.Add(CreateHighlightTile(TDGridMainModel.api.CellToWorld(cell), 0.15f));
         }
     }
 
-    private GameObject CreateOperatorHighlightTile(Vector3 worldPos)
+    // Path cells and TowerZone tops light the same green; y sits the quad just above each.
+    private GameObject CreateHighlightTile(Vector3 worldPos, float y)
     {
         var go = GameObject.CreatePrimitive(PrimitiveType.Quad);
-        go.transform.position = new Vector3(worldPos.x, 0.15f, worldPos.z);
-        go.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
-        float size = TDGridMainModel.api.cellSize * 0.88f;
-        go.transform.localScale = new Vector3(size, size, 1f);
-        Object.Destroy(go.GetComponent<MeshCollider>());
-        go.GetComponent<MeshRenderer>().sharedMaterial = TDStageMaterialCache.OperatorHighlight;
-        return go;
-    }
-
-    private GameObject CreateHighlightTile(Vector3 worldPos)
-    {
-        var go = GameObject.CreatePrimitive(PrimitiveType.Quad);
-        go.transform.position = new Vector3(worldPos.x, 0.51f, worldPos.z);
+        go.transform.position = new Vector3(worldPos.x, y, worldPos.z);
         go.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
         float size = TDGridMainModel.api.cellSize * 0.88f;
         go.transform.localScale = new Vector3(size, size, 1f);

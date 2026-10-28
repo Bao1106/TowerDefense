@@ -288,6 +288,7 @@ public class TDEnemyPathMainView : MonoBehaviour
         {
             Vector3 w = TDGridMainModel.api.CellToWorld(cell);
             Object.Instantiate(tilePrefabForObstacle, new Vector3(w.x, 0f, w.z), Quaternion.identity, transform);
+            TDGridMainModel.api.RegisterRaisedCell(cell);
         }
 
         // Phase 2: tower zone tiles — ONLY on the rationed slots, not on every wall cell.

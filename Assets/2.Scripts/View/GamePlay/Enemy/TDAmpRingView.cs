@@ -65,11 +65,14 @@ public class TDAmpRingView : MonoBehaviour
         if (m_Owner == null) return;
 
         var centre = m_Owner.position;
+        var grid = TDGridMainModel.api;
         for (int i = 0; i < SEGMENTS; i++)
         {
             float a = 2f * Mathf.PI * i / SEGMENTS;
-            m_Points[i] = new Vector3(centre.x + WORLD_RADIUS * Mathf.Cos(a), TDConstant.CONFIG_RANGE_HIGHLIGHT_Y,
-                                      centre.z + WORLD_RADIUS * Mathf.Sin(a));
+            var p = new Vector3(centre.x + WORLD_RADIUS * Mathf.Cos(a), 0f, centre.z + WORLD_RADIUS * Mathf.Sin(a));
+            // Each point climbs onto the block under it; a ring at one height ducked into every block it crossed.
+            p.y = grid != null ? grid.OverlayY(grid.WorldToCell(p)) : TDConstant.CONFIG_RANGE_HIGHLIGHT_Y;
+            m_Points[i] = p;
         }
 
         m_Lining.SetPositions(m_Points);
