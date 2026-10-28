@@ -15,7 +15,7 @@ MonoBehaviour:
   m_Effects:
   - key: 0
     onlySfx: 0
-    vfxPrefab: {fileID: 9169863999176627214, guid: b17328959ab1d3e4d9f166676eb056f7, type: 3}
+    vfxPrefab: {fileID: 9169863999176627214, guid: 88af27f37a990224cb79c859b6a67c09, type: 3}
     vfxPrefab2: {fileID: 0}
     impactVfxPrefab: {fileID: 0}
     sfxClip: {fileID: 8300000, guid: b5a036baf6f4e2b46b904a8a64fee29b, type: 3}
@@ -26,7 +26,7 @@ MonoBehaviour:
     shakeDuration: 0.25
   - key: 1
     onlySfx: 0
-    vfxPrefab: {fileID: 8307689965681055727, guid: d9e4aaa9aa1796d46941ec6a1253dd7e, type: 3}
+    vfxPrefab: {fileID: 9169863999176627214, guid: 88af27f37a990224cb79c859b6a67c09, type: 3}
     vfxPrefab2: {fileID: 0}
     impactVfxPrefab: {fileID: 0}
     sfxClip: {fileID: 8300000, guid: 0357662b9caaa06429b2aec0570de988, type: 3}
@@ -37,7 +37,7 @@ MonoBehaviour:
     shakeDuration: 0.25
   - key: 2
     onlySfx: 0
-    vfxPrefab: {fileID: 9169863999176627214, guid: b17328959ab1d3e4d9f166676eb056f7, type: 3}
+    vfxPrefab: {fileID: 9169863999176627214, guid: 88af27f37a990224cb79c859b6a67c09, type: 3}
     vfxPrefab2: {fileID: 0}
     impactVfxPrefab: {fileID: 0}
     sfxClip: {fileID: 8300000, guid: 5ae6cb8852e223a4eaead8bad1f43a0e, type: 3}
@@ -124,8 +124,8 @@ MonoBehaviour:
     shakeStrength: 0.3
     shakeDuration: 0.25
   - key: 10
-    onlySfx: 1
-    vfxPrefab: {fileID: 0}
+    onlySfx: 0
+    vfxPrefab: {fileID: 9169863999176627214, guid: 88af27f37a990224cb79c859b6a67c09, type: 3}
     vfxPrefab2: {fileID: 0}
     impactVfxPrefab: {fileID: 0}
     sfxClip: {fileID: 8300000, guid: 58da46adab0c1d94e9350adf5cbb739c, type: 3}

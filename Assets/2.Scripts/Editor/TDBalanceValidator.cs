@@ -137,6 +137,7 @@ public static class TDBalanceValidator
         MeleeHitFx(failures);
         OperatorStates(failures);
         OperatorFxChildren(failures);
+        DarkPoof(failures);
 
         Density(failures);
         Dominance(failures);
@@ -517,13 +518,14 @@ public static class TDBalanceValidator
         var all = LoadConfig<TDEffectConfig>()?.GetAll();
         if (all == null) { f.Add("[END_SFX_WIRED] no Effect Config asset"); return; }
 
-        foreach (var (key, priority) in new[] { (GameEventKey.LifeLost, false), (GameEventKey.Victory, true), (GameEventKey.GameOver, true) })
+        // Polish B §7 gave LifeLost its dark smoke, so it is no longer sound-only (onlySfx only hides the VFX fields).
+        foreach (var (key, priority, onlySfx) in new[] { (GameEventKey.LifeLost, false, false), (GameEventKey.Victory, true, true), (GameEventKey.GameOver, true, true) })
         {
             var defs = all.Where(d => d.key == key).ToList();
             if (defs.Count != 1) { f.Add($"[END_SFX_WIRED] {key}: {defs.Count} entries, want 1"); continue; }
             var d0 = defs[0];
-            if (d0.sfxClip == null || !d0.onlySfx || d0.sfxPriority != priority)
-                f.Add($"[END_SFX_WIRED] {key}: clip {(d0.sfxClip == null ? "missing" : d0.sfxClip.name)}, onlySfx {d0.onlySfx}, priority {d0.sfxPriority} (want {priority})");
+            if (d0.sfxClip == null || d0.onlySfx != onlySfx || d0.sfxPriority != priority)
+                f.Add($"[END_SFX_WIRED] {key}: clip {(d0.sfxClip == null ? "missing" : d0.sfxClip.name)}, onlySfx {d0.onlySfx} (want {onlySfx}), priority {d0.sfxPriority} (want {priority})");
         }
     }
 
@@ -1261,6 +1263,39 @@ public static class TDBalanceValidator
                 if (shown.Count > 1) f.Add($"[OP_WEAPON_MESH] {pf.name}: {hand.name} shows {string.Join(", ", shown)}, want at most one");
             }
         }
+    }
+
+    // Polish B §7: common enemies die, and leaks go through the gate, in dark smoke. The white poof read
+    // as a pickup on the board; the boss keeps its blast.
+    private const string DARK_POOF_FX = "Assets/1.Assets/Resources/Prefabs/VFX/Poof_dark.prefab";
+
+    private static void DarkPoof(List<string> f)
+    {
+        var fx = AssetDatabase.LoadAssetAtPath<GameObject>(DARK_POOF_FX);
+        var all = LoadConfig<TDEffectConfig>()?.GetAll();
+        if (all == null) f.Add("[FX_DARK_POOF] no Effect Config asset");
+        else foreach (var (key, want) in new[] { (GameEventKey.EnemyDied_Normal, "Poof_dark"), (GameEventKey.EnemyDied_Fast, "Poof_dark"),
+                     (GameEventKey.EnemyDied_Tank, "Poof_dark"), (GameEventKey.LifeLost, "Poof_dark"), (GameEventKey.EnemyDied_Boss, "Fire_explosion_earth") })
+        {
+            var defs = all.Where(d => d.key == key).ToList();
+            if (defs.Count != 1) { f.Add($"[FX_DARK_POOF] {key}: {defs.Count} entries, want 1"); continue; }
+            var v = defs[0].vfxPrefab;
+            if (v == null || v.name != want || (want == "Poof_dark" && v != fx))
+                f.Add($"[FX_DARK_POOF] {key}: vfx {(v == null ? "none" : v.name)}, want {want}");
+        }
+
+        if (fx == null) { f.Add($"[FX_DARK_POOF_COLOR] missing {DARK_POOF_FX}"); return; }
+        // The longest-lived system is the cloud left hanging over the spot, so that is the one that must read dark.
+        var cloud = fx.GetComponentsInChildren<ParticleSystem>(true)
+            .OrderByDescending(p => Mathf.Max(p.main.startLifetime.constantMin, p.main.startLifetime.constantMax)).FirstOrDefault();
+        if (cloud == null) { f.Add("[FX_DARK_POOF_COLOR] no particle system"); return; }
+        var sc = cloud.main.startColor;
+        float Luma(Color c) => 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b; // Rec.709
+        float luma = sc.mode == ParticleSystemGradientMode.TwoColors ? Mathf.Max(Luma(sc.colorMin), Luma(sc.colorMax)) : Luma(sc.color);
+        if (sc.mode != ParticleSystemGradientMode.Color && sc.mode != ParticleSystemGradientMode.TwoColors)
+            f.Add($"[FX_DARK_POOF_COLOR] {cloud.name}: start color mode {sc.mode}, want a plain colour");
+        else if (luma > 0.3f)
+            f.Add($"[FX_DARK_POOF_COLOR] {cloud.name}: start colour luma {luma:F2}, want ≤ 0.3");
     }
 
     private static T LoadConfig<T>() where T : ScriptableObject
