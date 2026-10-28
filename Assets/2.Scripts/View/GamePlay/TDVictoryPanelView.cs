@@ -20,6 +20,7 @@ public class TDVictoryPanelView : MonoBehaviour
     private TextMeshProUGUI m_StatEnemies;
     private TextMeshProUGUI m_StatLives;
     private TextMeshProUGUI m_StatGold;
+    private TextMeshProUGUI m_Rating; // the line under the stars; the scene ships it reading "17/20"
 
     // Stars — 3 Image components inside StarRow
     private readonly List<Image> m_Stars = new();
@@ -55,6 +56,7 @@ public class TDVictoryPanelView : MonoBehaviour
         m_StatEnemies = transform.Find("PopupWindow/Middle/Info/EnemiesDefeated/TxtValue")?.GetComponent<TextMeshProUGUI>();
         m_StatLives = transform.Find("PopupWindow/Middle/Info/LivesRemaining/TxtValue") ?.GetComponent<TextMeshProUGUI>();
         m_StatGold = transform.Find("PopupWindow/Middle/Info/GoldRemaining/TxtValue") ?.GetComponent<TextMeshProUGUI>();
+        m_Rating = transform.Find("PopupWindow/Middle/Divider/TxtNotices") ?.GetComponent<TextMeshProUGUI>();
 
         // Cache star Images
         m_Stars.Clear();
@@ -110,6 +112,7 @@ public class TDVictoryPanelView : MonoBehaviour
         if (m_StatEnemies != null) m_StatEnemies.text = $"{killed} / {total}";
         if (m_StatLives != null) m_StatLives.text = $"{lives} / {TDConstant.CONFIG_PLAYER_STARTING_LIVES}";
         if (m_StatGold != null) m_StatGold.text = gold.ToString();
+        if (m_Rating != null) m_Rating.text = $"Rating based on lives remaining · {lives}/{TDConstant.CONFIG_PLAYER_STARTING_LIVES}";
     }
 
     // Sets the initial state of stars before animation:

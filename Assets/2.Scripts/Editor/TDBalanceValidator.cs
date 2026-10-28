@@ -130,6 +130,7 @@ public static class TDBalanceValidator
         BoardFloor(failures);
         HighlightColors(failures);
         OverlaysClearBlocks(failures);
+        VictoryRating(failures);
 
         Density(failures);
         Dominance(failures);
@@ -867,6 +868,39 @@ public static class TDBalanceValidator
             var c = m == null ? Color.clear : m.GetColor("_BaseColor");
             if (m == null || !Near(c, want) || Mathf.Abs(c.a - want.a) > 0.01f) f.Add($"[A2_HIGHLIGHT] {name} {c} want {want}");
         }
+    }
+
+    // The line under the stars was typed into the scene as "17/20" and nothing filled it, so a 19-life win
+    // read 17/20 right above "Lives Remaining 19 / 20".
+    private static void VictoryRating(List<string> f)
+    {
+        var root = new GameObject("VictoryProbe") { hideFlags = HideFlags.HideAndDontSave };
+        try
+        {
+            Transform Child(Transform parent, string path)
+            {
+                foreach (var name in path.Split('/'))
+                {
+                    var next = parent.Find(name);
+                    if (next == null) { next = new GameObject(name, typeof(RectTransform)).transform; next.SetParent(parent, false); }
+                    parent = next;
+                }
+                return parent;
+            }
+            foreach (var star in new[] { "IconStar", "IconStar (1)", "IconStar (2)" })
+                Child(root.transform, "PopupWindow/Middle/StarRow/" + star).gameObject.AddComponent<UnityEngine.UI.Image>();
+            var label = Child(root.transform, "PopupWindow/Middle/Divider/TxtNotices").gameObject.AddComponent<TMPro.TextMeshProUGUI>();
+            label.text = "Rating based on lives remaining · 17/20";
+
+            var view = root.AddComponent<TDVictoryPanelView>();
+            const System.Reflection.BindingFlags I = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            typeof(TDVictoryPanelView).GetMethod("Awake", I).Invoke(view, null);
+            typeof(TDVictoryPanelView).GetMethod("FillStats", I).Invoke(view, new object[] { "TEST", 10, 10, 19, 0, false });
+
+            string want = $"19/{TDConstant.CONFIG_PLAYER_STARTING_LIVES}";
+            if (!label.text.Contains(want)) f.Add($"[VICTORY_RATING] rating line reads \"{label.text}\" after a 19-life win, want it to carry {want}");
+        }
+        finally { Object.DestroyImmediate(root); }
     }
 
     // TowerZone and obstacle tiles are 0.5-tall blocks: an overlay laid flat at one height vanished into
