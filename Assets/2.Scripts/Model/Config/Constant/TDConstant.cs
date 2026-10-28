@@ -356,6 +356,13 @@ public static class TDConstant
     public const string ANIM_TRIGGER_WALK = "Walk";
     public const string ANIM_TRIGGER_ATTACK = "Attack";
     public const string ANIM_TRIGGER_DIE = "Die";
+    // Operator swing (polish B §4): damage lands on the clip's OnAttackHit, and the clip speeds up
+    // to fit an interval shorter than itself, never slows down.
+    public const float ATTACK_ANIM_MIN_SPEED = 1f;
+    public const float ATTACK_BLEND_OUT = 0.1f;     // Attack → Idle blend; the swing ends this early
+    public const float CONFIG_IMPACT_HEIGHT = 0.8f; // melee hit VFX at chest height; enemies stand 1.2–1.9
+    public const string ANIM_PARAM_ATTACK_SPEED = "AttackSpeed";
+    public const string ANIM_ATTACK_CLIP_PREFIX = "Attack";
     // Attack VFX (TDAttackVFX)
     public const float VFX_MOVE_SPEED = 15f;
     public const float VFX_ARRIVE_THRESHOLD = 0.25f;

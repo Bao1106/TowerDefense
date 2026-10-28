@@ -11,6 +11,7 @@ using UnityEngine;
 public class TDOperatorView : MonoBehaviour, IPlacedUnit
 {
     private static readonly int HASH_ATTACK = Animator.StringToHash("Attack");
+    private static readonly int HASH_ATTACK_SPEED = Animator.StringToHash(TDConstant.ANIM_PARAM_ATTACK_SPEED);
 
     private Animator m_Animator;
     private TDHPBarView m_HPBarView;
@@ -70,6 +71,11 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         Cost = slotInfo.cost;
         m_MyCell = TDGridMainModel.api.WorldToCell(transform.position);
         m_LastAttackTime = -999f;
+
+        // A swing that outlasts the interval holds the next trigger back, and the contact frame
+        // drifts off the damage beat.
+        var attackClip = FindAttackClip(m_Animator != null ? m_Animator.runtimeAnimatorController : null);
+        if (attackClip != null) m_Animator.SetFloat(HASH_ATTACK_SPEED, AttackAnimSpeed(attackClip.length, AttackInterval));
 
         m_SelectionIndicator?.gameObject.SetActive(false);
 
@@ -331,9 +337,29 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         if (deathSpike > 0f) TDOperatorRegistry.api?.BroadcastSpike(m_MyCell, deathSpike, wasBreak: false);
     }
 
+    private float AttackInterval => 1f / (m_Data?.attackSpeed ?? 1f);
+
+    /// Arknights: a swing longer than the interval speeds up to fit it, blend out included; a shorter
+    /// one plays at its own speed and the operator idles until the next.
+    public static float AttackAnimSpeed(float clipLength, float interval)
+    {
+        float window = interval - TDConstant.ATTACK_BLEND_OUT;
+        if (window <= 0f) return clipLength / interval; // nothing fits an interval this short; stay finite
+        return Mathf.Max(TDConstant.ATTACK_ANIM_MIN_SPEED, clipLength / window);
+    }
+
+    public static AnimationClip FindAttackClip(RuntimeAnimatorController c)
+    {
+        if (c == null) return null;
+        foreach (var clip in c.animationClips) // allocates: Init only
+            if (clip != null && clip.name.StartsWith(TDConstant.ANIM_ATTACK_CLIP_PREFIX, System.StringComparison.Ordinal)) return clip;
+        return null;
+    }
+
     // ── Animation event callback ──────────────────────────────────────────────
 
-    // Called from the "OnAttackHit" AnimationEvent in the attack clip for Ranger/Mage operators
+    // Called from the "OnAttackHit" AnimationEvent in every operator's attack clip: melee hits land
+    // on the contact frame, ranged shots on the release.
     public void OnAttackHit()
     {
         if (!m_Initialized || m_Behavior == null) return;
@@ -358,8 +384,7 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         // keep recovering — standing there useless is the state, not being switched off.
         if (IsCollapsed) return;
 
-        float attackInterval = 1f / (m_Data?.attackSpeed ?? 1f);
-        if (Time.time - m_LastAttackTime < attackInterval) return;
+        if (Time.time - m_LastAttackTime < AttackInterval) return;
 
         if (m_Behavior.TryAttack(m_MyCell, transform.position, m_Data))
         {

@@ -132,6 +132,8 @@ public static class TDBalanceValidator
         OverlaysClearBlocks(failures);
         VictoryRating(failures);
         EnemyWalk(failures);
+        MeleeLaunch(failures);
+        OperatorAttackAnim(failures);
 
         Density(failures);
         Dominance(failures);
@@ -965,6 +967,138 @@ public static class TDBalanceValidator
                     if (s.state.name == "Attack" && to != "Idle") f.Add($"[ANIM_ENEMY_WALK] {name}: Attack exits to {to}, want Idle");
                 }
         }
+    }
+
+    // Melee damage landed in TryAttack, the first frame of the swing. It lands on the clip's contact
+    // event now, as a ranged shot does, and skips a target the pool has handed out again since.
+    private static void MeleeLaunch(List<string> f)
+    {
+        var savedRegistry = TDOperatorRegistry.api;
+        var impacts = new List<Vector3>();
+        int attacks = 0;
+        System.Action<Vector3, OperatorType> onImpact = (p, _) => impacts.Add(p), onAttack = (p, _) => attacks++;
+        var ga = new GameObject("MeleeLaunchA") { hideFlags = HideFlags.HideAndDontSave };
+        var gb = new GameObject("MeleeLaunchB") { hideFlags = HideFlags.HideAndDontSave };
+        try
+        {
+            TDOperatorRegistry.api = new TDOperatorRegistry();
+            TDGameEventBus.OnOperatorImpacted += onImpact;
+            TDGameEventBus.OnOperatorAttacked += onAttack;
+            gb.transform.position = Vector3.right;
+            var a = ga.AddComponent<TDEnemyView>();
+            var b = gb.AddComponent<TDEnemyView>();
+            bool ok = true;
+            foreach (var (e, id) in new[] { (a, 1), (b, 2) })
+                ok &= TDMoraleValidator.SetField(f, e, "m_HPBarView", null)
+                    & TDMoraleValidator.SetField(f, e, "m_EnemyHealth", 100f)
+                    & TDMoraleValidator.SetField(f, e, "m_MaxHealth", 100f)
+                    & TDMoraleValidator.SetField(f, e, "m_SpawnId", id);
+            if (!ok) return;
+
+            var cell = Vector2Int.zero;
+            TDOperatorRegistry.api.OnEnemyBlocked(cell, a);
+            TDOperatorRegistry.api.OnEnemyBlocked(cell, b);
+            var melee = new PathCellOperatorBehavior();
+            var data = new OperatorData { damage = 10f, attackType = AttackType.Multiple };
+            float Hp(TDEnemyView e) => TDMoraleValidator.GetField<float>(e, "m_EnemyHealth");
+
+            melee.TryAttack(cell, Vector3.zero, data);
+            if (Hp(a) != 100f || Hp(b) != 100f) f.Add($"[MELEE_LAUNCH] TryAttack dealt damage (hp {Hp(a)}/{Hp(b)})");
+            if (attacks != 0 || impacts.Count != 0) f.Add($"[MELEE_LAUNCH] TryAttack raised events (attacked x{attacks}, impacts x{impacts.Count})");
+
+            melee.ExecuteHit(cell, Vector3.zero, data);
+            if (Hp(a) != 90f || Hp(b) != 90f) f.Add($"[MELEE_LAUNCH] hit frame: hp {Hp(a)}/{Hp(b)}, want 90/90");
+            if (attacks != 1) f.Add($"[MELEE_LAUNCH] attacked x{attacks}, want 1");
+            var up = Vector3.up * TDConstant.CONFIG_IMPACT_HEIGHT;
+            if (impacts.Count != 2 || impacts[0] != a.transform.position + up || impacts[1] != b.transform.position + up)
+                f.Add($"[MELEE_LAUNCH] impacts {string.Join(" ", impacts)}, want a/b + {TDConstant.CONFIG_IMPACT_HEIGHT} up");
+
+            melee.ExecuteHit(cell, Vector3.zero, data);
+            if (Hp(a) != 90f || Hp(b) != 90f) f.Add($"[MELEE_LAUNCH] a second event hit again (hp {Hp(a)}/{Hp(b)})");
+
+            melee.TryAttack(cell, Vector3.zero, data);
+            TDMoraleValidator.SetField(f, b, "m_SpawnId", 3);
+            melee.ExecuteHit(cell, Vector3.zero, data);
+            if (Hp(a) != 80f || Hp(b) != 90f) f.Add($"[MELEE_LAUNCH] reused spawn: hp {Hp(a)}/{Hp(b)}, want 80/90");
+        }
+        finally
+        {
+            TDGameEventBus.OnOperatorImpacted -= onImpact;
+            TDGameEventBus.OnOperatorAttacked -= onAttack;
+            TDOperatorRegistry.api = savedRegistry;
+            Object.DestroyImmediate(ga);
+            Object.DestroyImmediate(gb);
+        }
+    }
+
+    private static readonly string[] k_OperatorControllers = { "Knight", "Defender", "Striker", "Ace", "Ginger", "Moon" };
+    private const float NEW_BLEND = 0.1f; // every blend this polish adds
+
+    // Damage lands on the clip's contact frame, so the swing has to fit the attack interval. Arknights
+    // speeds the swing up when the interval is shorter than the clip, and never slows it down.
+    private static void OperatorAttackAnim(List<string> f)
+    {
+        foreach (var name in k_OperatorControllers)
+        {
+            var ac = AssetDatabase.LoadAssetAtPath<UnityEditor.Animations.AnimatorController>($"Assets/1.Assets/Resources/AnimatorControllers/Operator{name}.controller");
+            if (ac == null) { f.Add($"[ANIM_OP_ATTACK] Operator{name}: controller not found"); continue; }
+            var sm = ac.layers[0].stateMachine;
+            var attack = sm.states.Select(s => s.state).FirstOrDefault(s => s.name == "Attack");
+            var idle = sm.states.Select(s => s.state).FirstOrDefault(s => s.name == "Idle");
+            if (attack == null || idle == null) { f.Add($"[ANIM_OP_ATTACK] {ac.name}: no Attack or Idle state"); continue; }
+
+            var p = ac.parameters.FirstOrDefault(x => x.name == TDConstant.ANIM_PARAM_ATTACK_SPEED);
+            if (p == null || p.type != AnimatorControllerParameterType.Float || p.defaultFloat != 1f)
+                f.Add($"[ANIM_OP_ATTACK] {ac.name}: no float {TDConstant.ANIM_PARAM_ATTACK_SPEED} defaulting to 1");
+            if (attack.speed != 1f || !attack.speedParameterActive || attack.speedParameter != TDConstant.ANIM_PARAM_ATTACK_SPEED)
+                f.Add($"[ANIM_OP_ATTACK] {ac.name}: Attack speed {attack.speed} x {(attack.speedParameterActive ? attack.speedParameter : "none")}, want 1 x {TDConstant.ANIM_PARAM_ATTACK_SPEED}");
+            var outs = attack.transitions;
+            if (outs.Length != 1 || outs[0].destinationState != idle || !outs[0].hasExitTime || outs[0].exitTime != 1f
+                || !outs[0].hasFixedDuration || outs[0].duration != TDConstant.ATTACK_BLEND_OUT)
+                f.Add($"[ANIM_OP_ATTACK] {ac.name}: Attack must leave once, to Idle, at exit 1 with a fixed {TDConstant.ATTACK_BLEND_OUT}s blend");
+            var into = idle.transitions.FirstOrDefault(t => t.destinationState == attack);
+            if (into == null || into.hasExitTime || !into.hasFixedDuration || into.duration != NEW_BLEND
+                || !into.conditions.Any(c => c.mode == UnityEditor.Animations.AnimatorConditionMode.If && c.parameter == TDConstant.ANIM_TRIGGER_ATTACK))
+                f.Add($"[ANIM_OP_ATTACK] {ac.name}: Idle→Attack must fire on the Attack trigger, no exit time, fixed {NEW_BLEND}s blend");
+            if (sm.anyStateTransitions.Any(t => t.destinationState == attack))
+                f.Add($"[ANIM_OP_ATTACK] {ac.name}: AnyState→Attack cuts a swing short");
+
+            var clip = attack.motion as AnimationClip;
+            if (clip == null) { f.Add($"[ANIM_OP_HIT_EVENT] {ac.name}: Attack has no clip"); continue; }
+            var hits = AnimationUtility.GetAnimationEvents(clip).Where(e => e.functionName == "OnAttackHit").ToList();
+            if (hits.Count != 1 || hits[0].time <= 0f || hits[0].time >= clip.length)
+                f.Add($"[ANIM_OP_HIT_EVENT] {clip.name}: {hits.Count} OnAttackHit at [{string.Join(",", hits.Select(e => e.time.ToString("F3")))}], want one inside 0..{clip.length:F3}");
+        }
+
+        bool sawKnight = false;
+        foreach (var op in LoadConfig<TDFlyweightOperatorDataSettings>()?.GetAllOperators() ?? new List<OperatorData>())
+        {
+            var ac = op.operatorPrefab == null ? null
+                : op.operatorPrefab.GetComponentInChildren<Animator>(true)?.runtimeAnimatorController as UnityEditor.Animations.AnimatorController;
+            var clip = ac?.layers[0].stateMachine.states.Select(s => s.state).FirstOrDefault(s => s.name == "Attack")?.motion as AnimationClip;
+            if (clip == null) { f.Add($"[ANIM_OP_SPEED] {op.operatorName}: no Attack clip"); continue; }
+            if (TDOperatorView.FindAttackClip(ac) != clip) f.Add($"[ANIM_OP_SPEED] {op.operatorName}: FindAttackClip is not {clip.name}");
+
+            float interval = 1f / op.attackSpeed, L = clip.length, s = TDOperatorView.AttackAnimSpeed(L, interval);
+            if (L / s + TDConstant.ATTACK_BLEND_OUT > interval + 1e-4f)
+                f.Add($"[ANIM_OP_SPEED] {op.operatorName}: {L:F3}s at x{s:F3} + {TDConstant.ATTACK_BLEND_OUT}s blend overruns the {interval:F3}s interval");
+            if (L + TDConstant.ATTACK_BLEND_OUT <= interval && s != 1f)
+                f.Add($"[ANIM_OP_SPEED] {op.operatorName}: the clip already fits, speed x{s:F3} want x1");
+            if (op.operatorName == "Knight")
+            {
+                sawKnight = true;
+                if (Mathf.Abs(s - 1.333f) >= 0.01f) f.Add($"[ANIM_OP_SPEED] Knight: x{s:F3}, want x1.333");
+            }
+            // Attack keeps playing through the blend out, into its next loop: an event inside that
+            // stretch would land a second hit.
+            var hit = AnimationUtility.GetAnimationEvents(clip).FirstOrDefault(e => e.functionName == "OnAttackHit");
+            if (hit != null && hit.time <= TDConstant.ATTACK_BLEND_OUT * s)
+                f.Add($"[ANIM_OP_SPEED] {op.operatorName}: hit at {hit.time:F3}s replays inside the blend out ({TDConstant.ATTACK_BLEND_OUT * s:F3}s of clip)");
+        }
+        if (!sawKnight) f.Add("[ANIM_OP_SPEED] no operator named Knight in the roster");
+
+        float tiny = TDOperatorView.AttackAnimSpeed(0.5f, 0.05f);
+        if (float.IsNaN(tiny) || float.IsInfinity(tiny) || tiny <= 0f) f.Add($"[ANIM_OP_SPEED] a 0.05s interval gives speed {tiny}");
     }
 
     private static T LoadConfig<T>() where T : ScriptableObject
