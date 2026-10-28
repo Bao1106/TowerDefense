@@ -131,6 +131,13 @@ public static class TDBalanceValidator
         HighlightColors(failures);
         OverlaysClearBlocks(failures);
         VictoryRating(failures);
+        EnemyWalk(failures);
+        MeleeLaunch(failures);
+        OperatorAttackAnim(failures);
+        MeleeHitFx(failures);
+        OperatorStates(failures);
+        OperatorFxChildren(failures);
+        DarkPoof(failures);
 
         Density(failures);
         Dominance(failures);
@@ -511,13 +518,14 @@ public static class TDBalanceValidator
         var all = LoadConfig<TDEffectConfig>()?.GetAll();
         if (all == null) { f.Add("[END_SFX_WIRED] no Effect Config asset"); return; }
 
-        foreach (var (key, priority) in new[] { (GameEventKey.LifeLost, false), (GameEventKey.Victory, true), (GameEventKey.GameOver, true) })
+        // Polish B §7 gave LifeLost its dark smoke, so it is no longer sound-only (onlySfx only hides the VFX fields).
+        foreach (var (key, priority, onlySfx) in new[] { (GameEventKey.LifeLost, false, false), (GameEventKey.Victory, true, true), (GameEventKey.GameOver, true, true) })
         {
             var defs = all.Where(d => d.key == key).ToList();
             if (defs.Count != 1) { f.Add($"[END_SFX_WIRED] {key}: {defs.Count} entries, want 1"); continue; }
             var d0 = defs[0];
-            if (d0.sfxClip == null || !d0.onlySfx || d0.sfxPriority != priority)
-                f.Add($"[END_SFX_WIRED] {key}: clip {(d0.sfxClip == null ? "missing" : d0.sfxClip.name)}, onlySfx {d0.onlySfx}, priority {d0.sfxPriority} (want {priority})");
+            if (d0.sfxClip == null || d0.onlySfx != onlySfx || d0.sfxPriority != priority)
+                f.Add($"[END_SFX_WIRED] {key}: clip {(d0.sfxClip == null ? "missing" : d0.sfxClip.name)}, onlySfx {d0.onlySfx} (want {onlySfx}), priority {d0.sfxPriority} (want {priority})");
         }
     }
 
@@ -944,6 +952,351 @@ public static class TDBalanceValidator
             Object.DestroyImmediate(owner);
             typeof(TDGridMainModel).GetProperty(nameof(TDGridMainModel.api)).GetSetMethod(true).Invoke(null, new object[] { prev });
         }
+    }
+
+    // Walk → Idle fired once after spawn with no condition, so enemies slid the rest of the path in their
+    // idle pose. A blocked enemy stands in Idle between swings, not in Walk.
+    private static void EnemyWalk(List<string> f)
+    {
+        foreach (var name in new[] { "SwarmFast-Game", "TurtleTank-Game" })
+        {
+            var ac = AssetDatabase.LoadAssetAtPath<UnityEditor.Animations.AnimatorController>($"Assets/1.Assets/Resources/AnimatorControllers/{name}.controller");
+            if (ac == null) { f.Add($"[ANIM_ENEMY_WALK] {name}: controller not found"); continue; }
+            if (!ac.parameters.Any(p => p.type == AnimatorControllerParameterType.Trigger && p.name == TDConstant.ANIM_TRIGGER_WALK))
+                f.Add($"[ANIM_ENEMY_WALK] {name}: no Walk trigger");
+            foreach (var s in ac.layers[0].stateMachine.states)
+                foreach (var t in s.state.transitions)
+                {
+                    string to = t.destinationState != null ? t.destinationState.name : "exit";
+                    if (s.state.name == "Walk" && t.conditions.Length == 0) f.Add($"[ANIM_ENEMY_WALK] {name}: Walk→{to} has no condition");
+                    if (s.state.name == "Attack" && to != "Idle") f.Add($"[ANIM_ENEMY_WALK] {name}: Attack exits to {to}, want Idle");
+                }
+        }
+    }
+
+    // Melee damage landed in TryAttack, the first frame of the swing. It lands on the clip's contact
+    // event now, as a ranged shot does, and skips a target the pool has handed out again since.
+    private static void MeleeLaunch(List<string> f)
+    {
+        var savedRegistry = TDOperatorRegistry.api;
+        var impacts = new List<Vector3>();
+        int attacks = 0;
+        System.Action<Vector3, OperatorType> onImpact = (p, _) => impacts.Add(p), onAttack = (p, _) => attacks++;
+        var ga = new GameObject("MeleeLaunchA") { hideFlags = HideFlags.HideAndDontSave };
+        var gb = new GameObject("MeleeLaunchB") { hideFlags = HideFlags.HideAndDontSave };
+        try
+        {
+            TDOperatorRegistry.api = new TDOperatorRegistry();
+            TDGameEventBus.OnOperatorImpacted += onImpact;
+            TDGameEventBus.OnOperatorAttacked += onAttack;
+            gb.transform.position = Vector3.right;
+            var a = ga.AddComponent<TDEnemyView>();
+            var b = gb.AddComponent<TDEnemyView>();
+            bool ok = true;
+            foreach (var (e, id) in new[] { (a, 1), (b, 2) })
+                ok &= TDMoraleValidator.SetField(f, e, "m_HPBarView", null)
+                    & TDMoraleValidator.SetField(f, e, "m_EnemyHealth", 100f)
+                    & TDMoraleValidator.SetField(f, e, "m_MaxHealth", 100f)
+                    & TDMoraleValidator.SetField(f, e, "m_SpawnId", id);
+            if (!ok) return;
+
+            var cell = Vector2Int.zero;
+            TDOperatorRegistry.api.OnEnemyBlocked(cell, a);
+            TDOperatorRegistry.api.OnEnemyBlocked(cell, b);
+            var melee = new PathCellOperatorBehavior();
+            var data = new OperatorData { damage = 10f, attackType = AttackType.Multiple };
+            float Hp(TDEnemyView e) => TDMoraleValidator.GetField<float>(e, "m_EnemyHealth");
+
+            melee.TryAttack(cell, Vector3.zero, data);
+            if (Hp(a) != 100f || Hp(b) != 100f) f.Add($"[MELEE_LAUNCH] TryAttack dealt damage (hp {Hp(a)}/{Hp(b)})");
+            if (attacks != 0 || impacts.Count != 0) f.Add($"[MELEE_LAUNCH] TryAttack raised events (attacked x{attacks}, impacts x{impacts.Count})");
+
+            melee.ExecuteHit(cell, Vector3.zero, data);
+            if (Hp(a) != 90f || Hp(b) != 90f) f.Add($"[MELEE_LAUNCH] hit frame: hp {Hp(a)}/{Hp(b)}, want 90/90");
+            if (attacks != 1) f.Add($"[MELEE_LAUNCH] attacked x{attacks}, want 1");
+            var up = Vector3.up * TDConstant.CONFIG_IMPACT_HEIGHT;
+            if (impacts.Count != 2 || impacts[0] != a.transform.position + up || impacts[1] != b.transform.position + up)
+                f.Add($"[MELEE_LAUNCH] impacts {string.Join(" ", impacts)}, want a/b + {TDConstant.CONFIG_IMPACT_HEIGHT} up");
+
+            melee.ExecuteHit(cell, Vector3.zero, data);
+            if (Hp(a) != 90f || Hp(b) != 90f) f.Add($"[MELEE_LAUNCH] a second event hit again (hp {Hp(a)}/{Hp(b)})");
+
+            melee.TryAttack(cell, Vector3.zero, data);
+            TDMoraleValidator.SetField(f, b, "m_SpawnId", 3);
+            melee.ExecuteHit(cell, Vector3.zero, data);
+            if (Hp(a) != 80f || Hp(b) != 90f) f.Add($"[MELEE_LAUNCH] reused spawn: hp {Hp(a)}/{Hp(b)}, want 80/90");
+        }
+        finally
+        {
+            TDGameEventBus.OnOperatorImpacted -= onImpact;
+            TDGameEventBus.OnOperatorAttacked -= onAttack;
+            TDOperatorRegistry.api = savedRegistry;
+            Object.DestroyImmediate(ga);
+            Object.DestroyImmediate(gb);
+        }
+    }
+
+    private static readonly string[] k_OperatorControllers = { "Knight", "Defender", "Striker", "Ace", "Ginger", "Moon" };
+    private const float NEW_BLEND = 0.1f; // every blend this polish adds
+
+    // Damage lands on the clip's contact frame, so the swing has to fit the attack interval. Arknights
+    // speeds the swing up when the interval is shorter than the clip, and never slows it down.
+    private static void OperatorAttackAnim(List<string> f)
+    {
+        foreach (var name in k_OperatorControllers)
+        {
+            var ac = AssetDatabase.LoadAssetAtPath<UnityEditor.Animations.AnimatorController>($"Assets/1.Assets/Resources/AnimatorControllers/Operator{name}.controller");
+            if (ac == null) { f.Add($"[ANIM_OP_ATTACK] Operator{name}: controller not found"); continue; }
+            var sm = ac.layers[0].stateMachine;
+            var attack = sm.states.Select(s => s.state).FirstOrDefault(s => s.name == "Attack");
+            var idle = sm.states.Select(s => s.state).FirstOrDefault(s => s.name == "Idle");
+            if (attack == null || idle == null) { f.Add($"[ANIM_OP_ATTACK] {ac.name}: no Attack or Idle state"); continue; }
+
+            var p = ac.parameters.FirstOrDefault(x => x.name == TDConstant.ANIM_PARAM_ATTACK_SPEED);
+            if (p == null || p.type != AnimatorControllerParameterType.Float || p.defaultFloat != 1f)
+                f.Add($"[ANIM_OP_ATTACK] {ac.name}: no float {TDConstant.ANIM_PARAM_ATTACK_SPEED} defaulting to 1");
+            if (attack.speed != 1f || !attack.speedParameterActive || attack.speedParameter != TDConstant.ANIM_PARAM_ATTACK_SPEED)
+                f.Add($"[ANIM_OP_ATTACK] {ac.name}: Attack speed {attack.speed} x {(attack.speedParameterActive ? attack.speedParameter : "none")}, want 1 x {TDConstant.ANIM_PARAM_ATTACK_SPEED}");
+            var outs = attack.transitions;
+            if (outs.Length != 1 || outs[0].destinationState != idle || !outs[0].hasExitTime || outs[0].exitTime != 1f
+                || !outs[0].hasFixedDuration || outs[0].duration != TDConstant.ATTACK_BLEND_OUT)
+                f.Add($"[ANIM_OP_ATTACK] {ac.name}: Attack must leave once, to Idle, at exit 1 with a fixed {TDConstant.ATTACK_BLEND_OUT}s blend");
+            var into = idle.transitions.FirstOrDefault(t => t.destinationState == attack);
+            if (into == null || into.hasExitTime || !into.hasFixedDuration || into.duration != NEW_BLEND
+                || !into.conditions.Any(c => c.mode == UnityEditor.Animations.AnimatorConditionMode.If && c.parameter == TDConstant.ANIM_TRIGGER_ATTACK))
+                f.Add($"[ANIM_OP_ATTACK] {ac.name}: Idle→Attack must fire on the Attack trigger, no exit time, fixed {NEW_BLEND}s blend");
+            if (sm.anyStateTransitions.Any(t => t.destinationState == attack))
+                f.Add($"[ANIM_OP_ATTACK] {ac.name}: AnyState→Attack cuts a swing short");
+
+            var clip = attack.motion as AnimationClip;
+            if (clip == null) { f.Add($"[ANIM_OP_HIT_EVENT] {ac.name}: Attack has no clip"); continue; }
+            var hits = AnimationUtility.GetAnimationEvents(clip).Where(e => e.functionName == "OnAttackHit").ToList();
+            if (hits.Count != 1 || hits[0].time <= 0f || hits[0].time >= clip.length)
+                f.Add($"[ANIM_OP_HIT_EVENT] {clip.name}: {hits.Count} OnAttackHit at [{string.Join(",", hits.Select(e => e.time.ToString("F3")))}], want one inside 0..{clip.length:F3}");
+        }
+
+        bool sawKnight = false;
+        foreach (var op in LoadConfig<TDFlyweightOperatorDataSettings>()?.GetAllOperators() ?? new List<OperatorData>())
+        {
+            var ac = op.operatorPrefab == null ? null
+                : op.operatorPrefab.GetComponentInChildren<Animator>(true)?.runtimeAnimatorController as UnityEditor.Animations.AnimatorController;
+            var clip = ac?.layers[0].stateMachine.states.Select(s => s.state).FirstOrDefault(s => s.name == "Attack")?.motion as AnimationClip;
+            if (clip == null) { f.Add($"[ANIM_OP_SPEED] {op.operatorName}: no Attack clip"); continue; }
+            if (TDOperatorView.FindAttackClip(ac) != clip) f.Add($"[ANIM_OP_SPEED] {op.operatorName}: FindAttackClip is not {clip.name}");
+
+            float interval = 1f / op.attackSpeed, L = clip.length, s = TDOperatorView.AttackAnimSpeed(L, interval);
+            if (L / s + TDConstant.ATTACK_BLEND_OUT > interval + 1e-4f)
+                f.Add($"[ANIM_OP_SPEED] {op.operatorName}: {L:F3}s at x{s:F3} + {TDConstant.ATTACK_BLEND_OUT}s blend overruns the {interval:F3}s interval");
+            if (L + TDConstant.ATTACK_BLEND_OUT <= interval && s != 1f)
+                f.Add($"[ANIM_OP_SPEED] {op.operatorName}: the clip already fits, speed x{s:F3} want x1");
+            if (op.operatorName == "Knight")
+            {
+                sawKnight = true;
+                if (Mathf.Abs(s - 1.333f) >= 0.01f) f.Add($"[ANIM_OP_SPEED] Knight: x{s:F3}, want x1.333");
+            }
+            // Attack keeps playing through the blend out, into its next loop: an event inside that
+            // stretch would land a second hit.
+            var hit = AnimationUtility.GetAnimationEvents(clip).FirstOrDefault(e => e.functionName == "OnAttackHit");
+            if (hit != null && hit.time <= TDConstant.ATTACK_BLEND_OUT * s)
+                f.Add($"[ANIM_OP_SPEED] {op.operatorName}: hit at {hit.time:F3}s replays inside the blend out ({TDConstant.ATTACK_BLEND_OUT * s:F3}s of clip)");
+        }
+        if (!sawKnight) f.Add("[ANIM_OP_SPEED] no operator named Knight in the roster");
+
+        float tiny = TDOperatorView.AttackAnimSpeed(0.5f, 0.05f);
+        if (float.IsNaN(tiny) || float.IsInfinity(tiny) || tiny <= 0f) f.Add($"[ANIM_OP_SPEED] a 0.05s interval gives speed {tiny}");
+    }
+
+    // Polish B §5: a melee hit flashes on the enemy it lands on. The swing's VFX used to spawn at the
+    // attacker's feet, where it read as the operator taking the blow.
+    private const string MELEE_HIT_FX = "Assets/1.Assets/Resources/Prefabs/VFX/Hit_melee.prefab";
+
+    private static void MeleeHitFx(List<string> f)
+    {
+        var fx = AssetDatabase.LoadAssetAtPath<GameObject>(MELEE_HIT_FX);
+        string N(GameObject go) => go == null ? "none" : go.name;
+
+        var all = LoadConfig<TDEffectConfig>()?.GetAll();
+        if (all == null) f.Add("[FX_MELEE_HIT] no Effect Config asset");
+        else foreach (var key in new[] { GameEventKey.OperatorAttacked_Knight, GameEventKey.OperatorAttacked_Defender, GameEventKey.OperatorAttacked_Striker })
+        {
+            var defs = all.Where(d => d.key == key).ToList();
+            if (defs.Count != 1) { f.Add($"[FX_MELEE_HIT] {key}: {defs.Count} entries, want 1"); continue; }
+            if (defs[0].vfxPrefab != null || fx == null || defs[0].impactVfxPrefab != fx)
+                f.Add($"[FX_MELEE_HIT] {key}: vfx {N(defs[0].vfxPrefab)}, impact {N(defs[0].impactVfxPrefab)} (want none, Hit_melee)");
+        }
+
+        if (fx == null) { f.Add($"[FX_MELEE_HIT_PREFAB] missing {MELEE_HIT_FX}"); return; }
+        var root = fx.GetComponent<ParticleSystem>();
+        if (root == null) { f.Add("[FX_MELEE_HIT_PREFAB] root has no ParticleSystem"); return; }
+        if (root.emission.enabled || root.main.loop)
+            f.Add($"[FX_MELEE_HIT_PREFAB] root emission {root.emission.enabled}, loop {root.main.loop} (want both off)");
+
+        var sources = new HashSet<string>();
+        foreach (Transform child in fx.transform)
+        {
+            var src = PrefabUtility.GetCorrespondingObjectFromSource(child.gameObject);
+            if (src != null) sources.Add(src.name);
+        }
+        foreach (var want in new[] { "Flash_star", "Slash_stone_once", "Hit_stone" })
+            if (!sources.Contains(want)) f.Add($"[FX_MELEE_HIT_PREFAB] no child instance of {want}");
+
+        // TDEffectManager hands the instance back to the pool after the root's duration + lifetime,
+        // so a child that outlives it gets cut off mid-play.
+        float rootLife = root.main.duration + root.main.startLifetime.constantMax;
+        foreach (var ps in fx.GetComponentsInChildren<ParticleSystem>(true))
+        {
+            if (ps == root) continue;
+            // Max of both: Lana's dust sets its random range backwards (1.2 to 0.7).
+            var m = ps.main;
+            float life = Mathf.Max(m.startDelay.constantMin, m.startDelay.constantMax) + m.duration
+                       + Mathf.Max(m.startLifetime.constantMin, m.startLifetime.constantMax);
+            if (life > rootLife + 1e-4f) f.Add($"[FX_MELEE_HIT_PREFAB] {ps.name} lives {life:F2}s, past the root's {rootLife:F2}s");
+        }
+    }
+
+    // Polish B §6: an operator steps onto the field, reels while collapsed and falls when they die,
+    // every clip from the set of the weapon in their hands.
+    private const float START_MAX_SECONDS = 0.9f;
+
+    private static void OperatorStates(List<string> f)
+    {
+        const UnityEditor.Animations.AnimatorConditionMode If = UnityEditor.Animations.AnimatorConditionMode.If;
+        const UnityEditor.Animations.AnimatorConditionMode IfNot = UnityEditor.Animations.AnimatorConditionMode.IfNot;
+        foreach (var name in k_OperatorControllers)
+        {
+            var ac = AssetDatabase.LoadAssetAtPath<UnityEditor.Animations.AnimatorController>($"Assets/1.Assets/Resources/AnimatorControllers/Operator{name}.controller");
+            if (ac == null) { f.Add($"[ANIM_OP_STATES] Operator{name}: controller not found"); continue; }
+            var sm = ac.layers[0].stateMachine;
+            UnityEditor.Animations.AnimatorState State(string n) => sm.states.Select(s => s.state).FirstOrDefault(s => s.name == n);
+            AnimationClip Clip(UnityEditor.Animations.AnimatorState s) => s == null ? null : s.motion as AnimationClip;
+            var idle = State("Idle");
+            var start = State("Start");
+            var die = State("Die");
+            var dizzy = State("Dizzy");
+
+            // A grounded flourish, not LevelUp's jump and mid-air flip (user's pick at the Task 6 check).
+            var sc = Clip(start);
+            if (start == null || sm.defaultState != start || sc == null || !sc.name.StartsWith("Challenging"))
+                f.Add($"[ANIM_OP_STATES] {ac.name}: default {(sm.defaultState == null ? "none" : sm.defaultState.name)}, want Start playing Challenging_*");
+            else
+            {
+                if (sc.length / start.speed > START_MAX_SECONDS + 1e-4f)
+                    f.Add($"[ANIM_OP_STATES] {ac.name}: Start runs {sc.length / start.speed:F2}s, want ≤ {START_MAX_SECONDS}s");
+                var o = start.transitions;
+                if (o.Length != 1 || idle == null || o[0].destinationState != idle || !o[0].hasExitTime || o[0].exitTime != 1f
+                    || !o[0].hasFixedDuration || o[0].duration != NEW_BLEND)
+                    f.Add($"[ANIM_OP_STATES] {ac.name}: Start must leave once, to Idle, at exit 1 with a fixed {NEW_BLEND}s blend");
+            }
+
+            var pDie = ac.parameters.FirstOrDefault(x => x.name == TDConstant.ANIM_TRIGGER_DIE);
+            var anyDie = die == null ? null : sm.anyStateTransitions.FirstOrDefault(t => t.destinationState == die);
+            if (pDie == null || pDie.type != AnimatorControllerParameterType.Trigger || anyDie == null || anyDie.canTransitionToSelf
+                || !anyDie.conditions.Any(c => c.mode == If && c.parameter == TDConstant.ANIM_TRIGGER_DIE))
+                f.Add($"[ANIM_OP_STATES] {ac.name}: AnyState→Die must fire on a Die trigger, never into itself");
+            // One-shot on top of the plan: Die01Stay_* also starts with Die01, but it is the lying-down loop.
+            var dc = Clip(die);
+            if (dc == null || !dc.name.StartsWith("Die01") || dc.isLooping || dc.length > TDConstant.OPERATOR_DIE_DURATION)
+                f.Add($"[ANIM_OP_STATES] {ac.name}: Die plays {(dc == null ? "none" : dc.name)}, want a one-shot Die01_* ≤ {TDConstant.OPERATOR_DIE_DURATION}s");
+            if (die != null && die.transitions.Length > 0)
+                f.Add($"[ANIM_OP_STATES] {ac.name}: Die has {die.transitions.Length} way(s) out, want none");
+
+            var pCol = ac.parameters.FirstOrDefault(x => x.name == TDConstant.ANIM_PARAM_COLLAPSED);
+            var anyDizzy = dizzy == null ? null : sm.anyStateTransitions.FirstOrDefault(t => t.destinationState == dizzy);
+            if (pCol == null || pCol.type != AnimatorControllerParameterType.Bool || anyDizzy == null || anyDizzy.canTransitionToSelf
+                || !anyDizzy.conditions.Any(c => c.mode == If && c.parameter == TDConstant.ANIM_PARAM_COLLAPSED))
+                f.Add($"[ANIM_OP_STATES] {ac.name}: AnyState→Dizzy must fire while bool {TDConstant.ANIM_PARAM_COLLAPSED} is set, never into itself");
+            var zc = Clip(dizzy);
+            if (zc == null || !zc.name.StartsWith("Dizzy") || !zc.isLooping)
+                f.Add($"[ANIM_OP_STATES] {ac.name}: Dizzy plays {(zc == null ? "none" : zc.name)}, want a looping Dizzy_*");
+            var back = dizzy == null || idle == null ? null : dizzy.transitions.FirstOrDefault(t => t.destinationState == idle);
+            if (back == null || back.hasExitTime || !back.conditions.Any(c => c.mode == IfNot && c.parameter == TDConstant.ANIM_PARAM_COLLAPSED))
+                f.Add($"[ANIM_OP_STATES] {ac.name}: Dizzy→Idle must fire when {TDConstant.ANIM_PARAM_COLLAPSED} clears, no exit time");
+
+            // Every state from the weapon set the swing comes from, or the hands wave an empty grip.
+            var atk = Clip(State("Attack"));
+            if (atk == null) { f.Add($"[ANIM_OP_WEAPON] {ac.name}: Attack has no clip"); continue; }
+            string dir = System.IO.Path.GetDirectoryName(AssetDatabase.GetAssetPath(atk));
+            foreach (var n in new[] { "Idle", "Attack", "Start", "Die", "Dizzy" })
+            {
+                var m = Clip(State(n));
+                if (m == null || System.IO.Path.GetDirectoryName(AssetDatabase.GetAssetPath(m)) != dir)
+                    f.Add($"[ANIM_OP_WEAPON] {ac.name}: {n} plays {(m == null ? "none" : m.name)}, want a clip from {dir}");
+            }
+        }
+    }
+
+    private const string DEPLOY_RING_FX = "Assets/1.Assets/Resources/Prefabs/VFX/DeployRing.prefab";
+    private const string STUN_FX = "Assets/1.Assets/Resources/Prefabs/VFX/StunFX.prefab";
+
+    private static void OperatorFxChildren(List<string> f)
+    {
+        var ring = AssetDatabase.LoadAssetAtPath<GameObject>(DEPLOY_RING_FX);
+        var stun = AssetDatabase.LoadAssetAtPath<GameObject>(STUN_FX);
+        // A prefab asset sits in no scene, so activeInHierarchy is false everywhere: walk activeSelf up.
+        bool Shown(Renderer r, Transform root)
+        {
+            if (!r.enabled) return false;
+            for (var t = r.transform; t != null; t = t == root ? null : t.parent)
+                if (!t.gameObject.activeSelf) return false;
+            return true;
+        }
+
+        foreach (var op in LoadConfig<TDFlyweightOperatorDataSettings>()?.GetAllOperators() ?? new List<OperatorData>())
+        {
+            var pf = op.operatorPrefab;
+            if (pf == null) { f.Add($"[FX_OPERATOR_PREFABS] {op.operatorName}: no prefab"); continue; }
+            var kids = pf.transform.Cast<Transform>().ToList();
+
+            var rings = kids.Where(t => t.name == TDConstant.DEPLOY_RING_NAME).ToList();
+            var rps = rings.Count == 1 ? rings[0].GetComponent<ParticleSystem>() : null;
+            if (rps == null || ring == null || PrefabUtility.GetCorrespondingObjectFromSource(rings[0].gameObject) != ring
+                || !rps.main.playOnAwake || rps.main.loop || rps.main.stopAction != ParticleSystemStopAction.Disable)
+                f.Add($"[FX_OPERATOR_PREFABS] {pf.name}: {rings.Count} {TDConstant.DEPLOY_RING_NAME}, want one DeployRing.prefab that plays once on awake and disables itself");
+
+            var stuns = kids.Where(t => t.name == TDConstant.STUN_FX_NAME).ToList();
+            if (stuns.Count != 1 || stun == null || PrefabUtility.GetCorrespondingObjectFromSource(stuns[0].gameObject) != stun
+                || stuns[0].gameObject.activeSelf || stuns[0].GetComponentsInChildren<ParticleSystem>(true).Any(p => !p.main.loop))
+                f.Add($"[FX_OPERATOR_PREFABS] {pf.name}: {stuns.Count} {TDConstant.STUN_FX_NAME}, want one StunFX.prefab, off, every system looping");
+
+            foreach (var hand in pf.GetComponentsInChildren<Transform>(true).Where(t => t.name == "weapon_l" || t.name == "weapon_r"))
+            {
+                var shown = hand.GetComponentsInChildren<Renderer>(true).Where(r => Shown(r, pf.transform)).Select(r => r.name).ToList();
+                if (shown.Count > 1) f.Add($"[OP_WEAPON_MESH] {pf.name}: {hand.name} shows {string.Join(", ", shown)}, want at most one");
+            }
+        }
+    }
+
+    // Polish B §7: common enemies die, and leaks go through the gate, in dark smoke. The white poof read
+    // as a pickup on the board; the boss keeps its blast.
+    private const string DARK_POOF_FX = "Assets/1.Assets/Resources/Prefabs/VFX/Poof_dark.prefab";
+
+    private static void DarkPoof(List<string> f)
+    {
+        var fx = AssetDatabase.LoadAssetAtPath<GameObject>(DARK_POOF_FX);
+        var all = LoadConfig<TDEffectConfig>()?.GetAll();
+        if (all == null) f.Add("[FX_DARK_POOF] no Effect Config asset");
+        else foreach (var (key, want) in new[] { (GameEventKey.EnemyDied_Normal, "Poof_dark"), (GameEventKey.EnemyDied_Fast, "Poof_dark"),
+                     (GameEventKey.EnemyDied_Tank, "Poof_dark"), (GameEventKey.LifeLost, "Poof_dark"), (GameEventKey.EnemyDied_Boss, "Fire_explosion_earth") })
+        {
+            var defs = all.Where(d => d.key == key).ToList();
+            if (defs.Count != 1) { f.Add($"[FX_DARK_POOF] {key}: {defs.Count} entries, want 1"); continue; }
+            var v = defs[0].vfxPrefab;
+            if (v == null || v.name != want || (want == "Poof_dark" && v != fx))
+                f.Add($"[FX_DARK_POOF] {key}: vfx {(v == null ? "none" : v.name)}, want {want}");
+        }
+
+        if (fx == null) { f.Add($"[FX_DARK_POOF_COLOR] missing {DARK_POOF_FX}"); return; }
+        // The longest-lived system is the cloud left hanging over the spot, so that is the one that must read dark.
+        var cloud = fx.GetComponentsInChildren<ParticleSystem>(true)
+            .OrderByDescending(p => Mathf.Max(p.main.startLifetime.constantMin, p.main.startLifetime.constantMax)).FirstOrDefault();
+        if (cloud == null) { f.Add("[FX_DARK_POOF_COLOR] no particle system"); return; }
+        var sc = cloud.main.startColor;
+        float Luma(Color c) => 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b; // Rec.709
+        float luma = sc.mode == ParticleSystemGradientMode.TwoColors ? Mathf.Max(Luma(sc.colorMin), Luma(sc.colorMax)) : Luma(sc.color);
+        if (sc.mode != ParticleSystemGradientMode.Color && sc.mode != ParticleSystemGradientMode.TwoColors)
+            f.Add($"[FX_DARK_POOF_COLOR] {cloud.name}: start color mode {sc.mode}, want a plain colour");
+        else if (luma > 0.3f)
+            f.Add($"[FX_DARK_POOF_COLOR] {cloud.name}: start colour luma {luma:F2}, want ≤ 0.3");
     }
 
     private static T LoadConfig<T>() where T : ScriptableObject

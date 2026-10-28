@@ -111,8 +111,6 @@ public class TDEnemyView : MonoBehaviour
         m_HPBarView?.UpdateHP(m_EnemyHealth, m_MaxHealth);
         if (m_EnemyHealth <= 0)
             Die();
-        else
-            TriggerSafe(TDConstant.ANIM_TRIGGER_GET_HIT);
     }
 
     // Releases the blocking slot if this enemy is currently being blocked by a melee operator
@@ -131,6 +129,7 @@ public class TDEnemyView : MonoBehaviour
         m_IsBlocked = false;
         m_BlockerCell = Vector2Int.zero;
         m_CurrentPathIndex++; // skip the cell where the operator just died and continue moving
+        TriggerSafe(TDConstant.ANIM_TRIGGER_WALK); // Attack exits to Idle, so walking on needs its own cue
     }
 
     private void Die()
@@ -195,7 +194,7 @@ public class TDEnemyView : MonoBehaviour
 
     private void TriggerSafe(string triggerName)
     {
-        if (m_Animator == null) return;
+        if (!m_Animator.HasTrigger(triggerName)) return;
         m_Animator.SetTrigger(triggerName);
     }
 

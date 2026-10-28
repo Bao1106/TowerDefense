@@ -66,6 +66,12 @@ public class PathCellOperatorBehavior : IOperatorBehavior
 
     // ── Attack ────────────────────────────────────────────────────────────────
 
+    // A swing picks its targets here and lands on the clip's OnAttackHit (ExecuteHit), as a ranged
+    // shot does. Spawn ids, not object identity: a target that dies mid-swing can come back from
+    // the pool as a new enemy before the contact frame.
+    private readonly List<TDEnemyView> m_PendingTargets = new();
+    private readonly List<int> m_PendingSpawnIds = new();
+
     public bool TryAttack(Vector2Int cell, Vector3 worldPos, OperatorData data)
     {
         if (TDOperatorRegistry.api == null) return false;
@@ -75,11 +81,14 @@ public class PathCellOperatorBehavior : IOperatorBehavior
                                     data?.attackType ?? AttackType.Single);
         if (targets.Count == 0) return false;
 
+        // A newer swing replaces one still waiting for its contact frame.
+        m_PendingTargets.Clear();
+        m_PendingSpawnIds.Clear();
         foreach (var target in targets)
-            target.TakeDamage(data?.damage ?? 0f);
-
-        TDGameEventBus.OperatorAttacked(worldPos, data?.operatorType ?? OperatorType.Knight);
-        TDGameEventBus.OperatorImpacted(worldPos, data?.operatorType ?? OperatorType.Knight);
+        {
+            m_PendingTargets.Add(target);
+            m_PendingSpawnIds.Add(target.SpawnId);
+        }
         return true;
     }
 
@@ -130,7 +139,25 @@ public class PathCellOperatorBehavior : IOperatorBehavior
         return nearest;
     }
 
-    public void ExecuteHit(Vector2Int cell, Vector3 worldPos, OperatorData data) { }
+    // Called from the OnAttackHit animation event on TDOperatorView
+    public void ExecuteHit(Vector2Int cell, Vector3 worldPos, OperatorData data)
+    {
+        var type = data?.operatorType ?? OperatorType.Knight;
+        bool landed = false;
+        for (int i = 0; i < m_PendingTargets.Count; i++)
+        {
+            var target = m_PendingTargets[i];
+            if (target == null || target.SpawnId != m_PendingSpawnIds[i]) continue;
+            // Read before the blow: a kill hands the enemy back to the pool.
+            Vector3 impactPos = target.transform.position + Vector3.up * TDConstant.CONFIG_IMPACT_HEIGHT;
+            target.TakeDamage(data?.damage ?? 0f);
+            TDGameEventBus.OperatorImpacted(impactPos, type);
+            landed = true;
+        }
+        if (landed) TDGameEventBus.OperatorAttacked(worldPos, type);
+        m_PendingTargets.Clear();
+        m_PendingSpawnIds.Clear();
+    }
 
     public bool IsEngaged(Vector2Int cell)
         => (TDOperatorRegistry.api != null && TDOperatorRegistry.api.GetBlockedEnemies(cell).Count > 0)
