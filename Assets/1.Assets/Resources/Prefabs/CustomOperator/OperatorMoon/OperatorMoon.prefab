@@ -7085,7 +7085,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1703367692747339378, guid: 6abd00e44d608fd4dbf2c512f1a5a7da, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 1.9
+      value: 2.8
       objectReference: {fileID: 0}
     - target: {fileID: 1703367692747339378, guid: 6abd00e44d608fd4dbf2c512f1a5a7da, type: 3}
       propertyPath: m_LocalPosition.z
@@ -7250,6 +7250,18 @@ PrefabInstance:
     - target: {fileID: 2033358281796941150, guid: 9ea4bc631a03b724aa6212adc8e66946, type: 3}
       propertyPath: m_Name
       value: DeployRing
+      objectReference: {fileID: 0}
+    - target: {fileID: 2033358281797257176, guid: 9ea4bc631a03b724aa6212adc8e66946, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 0.42
+      objectReference: {fileID: 0}
+    - target: {fileID: 2033358281797257176, guid: 9ea4bc631a03b724aa6212adc8e66946, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 0.42
+      objectReference: {fileID: 0}
+    - target: {fileID: 2033358281797257176, guid: 9ea4bc631a03b724aa6212adc8e66946, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 0.42
       objectReference: {fileID: 0}
     - target: {fileID: 2033358281797257176, guid: 9ea4bc631a03b724aa6212adc8e66946, type: 3}
       propertyPath: m_LocalPosition.x

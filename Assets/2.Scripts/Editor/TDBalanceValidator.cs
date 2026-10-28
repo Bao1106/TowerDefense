@@ -1174,9 +1174,10 @@ public static class TDBalanceValidator
             var die = State("Die");
             var dizzy = State("Dizzy");
 
+            // A grounded flourish, not LevelUp's jump and mid-air flip (user's pick at the Task 6 check).
             var sc = Clip(start);
-            if (start == null || sm.defaultState != start || sc == null || !sc.name.StartsWith("LevelUp"))
-                f.Add($"[ANIM_OP_STATES] {ac.name}: default {(sm.defaultState == null ? "none" : sm.defaultState.name)}, want Start playing LevelUp_*");
+            if (start == null || sm.defaultState != start || sc == null || !sc.name.StartsWith("Challenging"))
+                f.Add($"[ANIM_OP_STATES] {ac.name}: default {(sm.defaultState == null ? "none" : sm.defaultState.name)}, want Start playing Challenging_*");
             else
             {
                 if (sc.length / start.speed > START_MAX_SECONDS + 1e-4f)
