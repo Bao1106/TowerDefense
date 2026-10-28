@@ -355,7 +355,6 @@ public static class TDConstant
     // Enemy animator triggers (TDEnemyView)
     public const string ANIM_TRIGGER_WALK = "Walk";
     public const string ANIM_TRIGGER_ATTACK = "Attack";
-    public const string ANIM_TRIGGER_GET_HIT = "GetHit";
     public const string ANIM_TRIGGER_DIE = "Die";
     // Attack VFX (TDAttackVFX)
     public const float VFX_MOVE_SPEED = 15f;

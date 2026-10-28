@@ -131,6 +131,7 @@ public static class TDBalanceValidator
         HighlightColors(failures);
         OverlaysClearBlocks(failures);
         VictoryRating(failures);
+        EnemyWalk(failures);
 
         Density(failures);
         Dominance(failures);
@@ -943,6 +944,26 @@ public static class TDBalanceValidator
         {
             Object.DestroyImmediate(owner);
             typeof(TDGridMainModel).GetProperty(nameof(TDGridMainModel.api)).GetSetMethod(true).Invoke(null, new object[] { prev });
+        }
+    }
+
+    // Walk → Idle fired once after spawn with no condition, so enemies slid the rest of the path in their
+    // idle pose. A blocked enemy stands in Idle between swings, not in Walk.
+    private static void EnemyWalk(List<string> f)
+    {
+        foreach (var name in new[] { "SwarmFast-Game", "TurtleTank-Game" })
+        {
+            var ac = AssetDatabase.LoadAssetAtPath<UnityEditor.Animations.AnimatorController>($"Assets/1.Assets/Resources/AnimatorControllers/{name}.controller");
+            if (ac == null) { f.Add($"[ANIM_ENEMY_WALK] {name}: controller not found"); continue; }
+            if (!ac.parameters.Any(p => p.type == AnimatorControllerParameterType.Trigger && p.name == TDConstant.ANIM_TRIGGER_WALK))
+                f.Add($"[ANIM_ENEMY_WALK] {name}: no Walk trigger");
+            foreach (var s in ac.layers[0].stateMachine.states)
+                foreach (var t in s.state.transitions)
+                {
+                    string to = t.destinationState != null ? t.destinationState.name : "exit";
+                    if (s.state.name == "Walk" && t.conditions.Length == 0) f.Add($"[ANIM_ENEMY_WALK] {name}: Walk→{to} has no condition");
+                    if (s.state.name == "Attack" && to != "Idle") f.Add($"[ANIM_ENEMY_WALK] {name}: Attack exits to {to}, want Idle");
+                }
         }
     }
 

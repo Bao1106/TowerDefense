@@ -310,7 +310,7 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         TDPlayerLifeControl.api?.LoseLives(TDConstant.LIVES_PER_OPERATOR_DEATH, transform.position);
 
         // No Die trigger on this prefab's controller → nothing to wait for.
-        if (!HasAnimatorTrigger(TDConstant.ANIM_TRIGGER_DIE))
+        if (!m_Animator.HasTrigger(TDConstant.ANIM_TRIGGER_DIE))
         {
             Destroy(gameObject);
             return;
@@ -329,18 +329,6 @@ public class TDOperatorView : MonoBehaviour, IPlacedUnit
         if (Morale != null && Morale.ConsumeBreak()) AnnounceBreak();
         float deathSpike = Morale?.DeathSpike ?? TDConstant.STRESS_ALLY_DEATH_SPIKE;
         if (deathSpike > 0f) TDOperatorRegistry.api?.BroadcastSpike(m_MyCell, deathSpike, wasBreak: false);
-    }
-
-    private bool HasAnimatorTrigger(string triggerName)
-    {
-        if (m_Animator == null || m_Animator.runtimeAnimatorController == null) return false;
-        var parameters = m_Animator.parameters; // allocates, but this runs once per death
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            if (parameters[i].type == AnimatorControllerParameterType.Trigger
-                && parameters[i].name == triggerName) return true;
-        }
-        return false;
     }
 
     // ── Animation event callback ──────────────────────────────────────────────
