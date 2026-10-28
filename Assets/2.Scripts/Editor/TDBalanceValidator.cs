@@ -134,6 +134,7 @@ public static class TDBalanceValidator
         EnemyWalk(failures);
         MeleeLaunch(failures);
         OperatorAttackAnim(failures);
+        MeleeHitFx(failures);
 
         Density(failures);
         Dominance(failures);
@@ -1099,6 +1100,54 @@ public static class TDBalanceValidator
 
         float tiny = TDOperatorView.AttackAnimSpeed(0.5f, 0.05f);
         if (float.IsNaN(tiny) || float.IsInfinity(tiny) || tiny <= 0f) f.Add($"[ANIM_OP_SPEED] a 0.05s interval gives speed {tiny}");
+    }
+
+    // Polish B §5: a melee hit flashes on the enemy it lands on. The swing's VFX used to spawn at the
+    // attacker's feet, where it read as the operator taking the blow.
+    private const string MELEE_HIT_FX = "Assets/1.Assets/Resources/Prefabs/VFX/Hit_melee.prefab";
+
+    private static void MeleeHitFx(List<string> f)
+    {
+        var fx = AssetDatabase.LoadAssetAtPath<GameObject>(MELEE_HIT_FX);
+        string N(GameObject go) => go == null ? "none" : go.name;
+
+        var all = LoadConfig<TDEffectConfig>()?.GetAll();
+        if (all == null) f.Add("[FX_MELEE_HIT] no Effect Config asset");
+        else foreach (var key in new[] { GameEventKey.OperatorAttacked_Knight, GameEventKey.OperatorAttacked_Defender, GameEventKey.OperatorAttacked_Striker })
+        {
+            var defs = all.Where(d => d.key == key).ToList();
+            if (defs.Count != 1) { f.Add($"[FX_MELEE_HIT] {key}: {defs.Count} entries, want 1"); continue; }
+            if (defs[0].vfxPrefab != null || fx == null || defs[0].impactVfxPrefab != fx)
+                f.Add($"[FX_MELEE_HIT] {key}: vfx {N(defs[0].vfxPrefab)}, impact {N(defs[0].impactVfxPrefab)} (want none, Hit_melee)");
+        }
+
+        if (fx == null) { f.Add($"[FX_MELEE_HIT_PREFAB] missing {MELEE_HIT_FX}"); return; }
+        var root = fx.GetComponent<ParticleSystem>();
+        if (root == null) { f.Add("[FX_MELEE_HIT_PREFAB] root has no ParticleSystem"); return; }
+        if (root.emission.enabled || root.main.loop)
+            f.Add($"[FX_MELEE_HIT_PREFAB] root emission {root.emission.enabled}, loop {root.main.loop} (want both off)");
+
+        var sources = new HashSet<string>();
+        foreach (Transform child in fx.transform)
+        {
+            var src = PrefabUtility.GetCorrespondingObjectFromSource(child.gameObject);
+            if (src != null) sources.Add(src.name);
+        }
+        foreach (var want in new[] { "Flash_star", "Slash_stone_once", "Hit_stone" })
+            if (!sources.Contains(want)) f.Add($"[FX_MELEE_HIT_PREFAB] no child instance of {want}");
+
+        // TDEffectManager hands the instance back to the pool after the root's duration + lifetime,
+        // so a child that outlives it gets cut off mid-play.
+        float rootLife = root.main.duration + root.main.startLifetime.constantMax;
+        foreach (var ps in fx.GetComponentsInChildren<ParticleSystem>(true))
+        {
+            if (ps == root) continue;
+            // Max of both: Lana's dust sets its random range backwards (1.2 to 0.7).
+            var m = ps.main;
+            float life = Mathf.Max(m.startDelay.constantMin, m.startDelay.constantMax) + m.duration
+                       + Mathf.Max(m.startLifetime.constantMin, m.startLifetime.constantMax);
+            if (life > rootLife + 1e-4f) f.Add($"[FX_MELEE_HIT_PREFAB] {ps.name} lives {life:F2}s, past the root's {rootLife:F2}s");
+        }
     }
 
     private static T LoadConfig<T>() where T : ScriptableObject

@@ -59,9 +59,9 @@ MonoBehaviour:
     shakeDuration: 0.25
   - key: 4
     onlySfx: 0
-    vfxPrefab: {fileID: 3894563636541966133, guid: afb61413738b4d84486bc935de4a4240, type: 3}
+    vfxPrefab: {fileID: 0}
     vfxPrefab2: {fileID: 0}
-    impactVfxPrefab: {fileID: 0}
+    impactVfxPrefab: {fileID: 243440458939208450, guid: 0010d18004d3846478ea904b7acc508b, type: 3}
     sfxClip: {fileID: 8300000, guid: d9553bea23efec6429f903595c4b4067, type: 3}
     sfxVolume: 0.6
     sfxPriority: 0
@@ -70,9 +70,9 @@ MonoBehaviour:
     shakeDuration: 0.25
   - key: 5
     onlySfx: 0
-    vfxPrefab: {fileID: 3894563636541966133, guid: afb61413738b4d84486bc935de4a4240, type: 3}
+    vfxPrefab: {fileID: 0}
     vfxPrefab2: {fileID: 0}
-    impactVfxPrefab: {fileID: 0}
+    impactVfxPrefab: {fileID: 243440458939208450, guid: 0010d18004d3846478ea904b7acc508b, type: 3}
     sfxClip: {fileID: 8300000, guid: 40ef23bb03d6a544f9ad883d704d793a, type: 3}
     sfxVolume: 0.6
     sfxPriority: 0
@@ -81,9 +81,9 @@ MonoBehaviour:
     shakeDuration: 0.25
   - key: 6
     onlySfx: 0
-    vfxPrefab: {fileID: 3894563636541966133, guid: afb61413738b4d84486bc935de4a4240, type: 3}
+    vfxPrefab: {fileID: 0}
     vfxPrefab2: {fileID: 0}
-    impactVfxPrefab: {fileID: 0}
+    impactVfxPrefab: {fileID: 243440458939208450, guid: 0010d18004d3846478ea904b7acc508b, type: 3}
     sfxClip: {fileID: 8300000, guid: d6e6eaada50d458458ad5cb6ad7be1a6, type: 3}
     sfxVolume: 0.6
     sfxPriority: 0
